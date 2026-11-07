@@ -1,0 +1,373 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing basic account metadata",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "email"]
+    },
+    "ChallengeGoal": {
+      "title": "ChallengeGoal",
+      "description": "User savings challenge goal with dynamic squares and deposits",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "icon": { "type": "string" },
+        "currency": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "startAmount": { "type": "number" },
+        "totalTarget": { "type": "number" },
+        "totalSquares": { "type": "number" },
+        "completedSquares": { "type": "array" },
+        "history": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "totalTarget"]
+    },
+    "FiftyTwoWeekChallenge": {
+      "title": "FiftyTwoWeekChallenge",
+      "description": "Progressive 52-week savings challenge",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "initialAmount": { "type": "number" },
+        "increment": { "type": "number" },
+        "startDate": { "type": "string" },
+        "completedWeeks": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "initialAmount", "startDate"]
+    },
+    "SavingGoal": {
+      "title": "SavingGoal",
+      "description": "Private user savings goal (metas de ahorro como moto, viaje, etc.)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadline": { "type": "string" },
+        "icon": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "targetAmount", "currentAmount"]
+    },
+    "SavingTransaction": {
+      "title": "SavingTransaction",
+      "description": "Deposit or withdrawal movement for a specific saving goal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "savingId": { "type": "string" },
+        "savingName": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "expenseId": { "type": "string" },
+        "incomeId": { "type": "string" }
+      },
+      "required": ["id", "userId", "savingId", "type", "amount", "date"]
+    },
+    "BillItem": {
+      "title": "BillItem",
+      "description": "Monthly recurring or one-time bill/invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "dueDay": { "type": "number" },
+        "recurrence": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "amount"]
+    },
+    "IncomeItem": {
+      "title": "IncomeItem",
+      "description": "Monthly recurring or one-time income item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "expectedDate": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "amount"]
+    },
+    "ExpenseItem": {
+      "title": "ExpenseItem",
+      "description": "Ad-hoc daily expense item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "amount", "date"]
+    },
+    "MonthlyStatusRecord": {
+      "title": "MonthlyStatusRecord",
+      "description": "Completion record for recurring bills or incomes in a given month",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemType": { "type": "string" },
+        "month": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "itemId", "itemType", "month", "isCompleted"]
+    },
+    "CategoryItem": {
+      "title": "CategoryItem",
+      "description": "Custom transaction category created by user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "type"]
+    },
+    "FinanceSettings": {
+      "title": "FinanceSettings",
+      "description": "User balance configuration and monthly initial balances",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "currentBalance": { "type": "number" },
+        "initialBalance": { "type": "number" },
+        "monthlyInitialBalances": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User preferences and achievements",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "currency": { "type": "string" },
+        "darkMode": { "type": "boolean" },
+        "soundEnabled": { "type": "boolean" },
+        "unlockedAchievements": { "type": "array" }
+      },
+      "required": ["userId"]
+    },
+    "UserDirectoryEntry": {
+      "title": "UserDirectoryEntry",
+      "description": "Public directory for user email lookup and invitations",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "SharedConnection": {
+      "title": "SharedConnection",
+      "description": "Bilateral shared account relationship between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "members": { "type": "array" },
+        "memberProfiles": { "type": "object" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "members", "status"]
+    },
+    "SharedInvitation": {
+      "title": "SharedInvitation",
+      "description": "Invitation to share bills and expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "fromUserEmail": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "toUserEmail": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "fromUserId", "toUserId", "status"]
+    },
+    "SharedBill": {
+      "title": "SharedBill",
+      "description": "Single shared record for a bill or expense split between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "members": { "type": "array" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "dueDay": { "type": "number" },
+        "month": { "type": "string" },
+        "category": { "type": "string" },
+        "splitMethod": { "type": "string" },
+        "percentages": { "type": "object" },
+        "shares": { "type": "object" },
+        "status": { "type": "string" },
+        "paymentResponsibility": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "members", "title", "amount", "shares", "status"]
+    },
+    "SharedTransferRecord": {
+      "title": "SharedTransferRecord",
+      "description": "Statement record of money transferred between shared account partners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "toUserName": { "type": "string" },
+        "amount": { "type": "number" },
+        "billIds": { "type": "array" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fromUserId", "toUserId", "amount", "status"]
+    },
+    "SharedNotification": {
+      "title": "SharedNotification",
+      "description": "Internal notifications for shared account events and invites",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "title", "isRead"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private profile for authenticated user"
+    },
+    "/users/{userId}/goals/{goalId}": {
+      "schema": { "$ref": "#/entities/ChallengeGoal" },
+      "description": "Private challenge goals for authenticated user"
+    },
+    "/users/{userId}/fifty_two_week_challenges/{challengeId}": {
+      "schema": { "$ref": "#/entities/FiftyTwoWeekChallenge" },
+      "description": "Private 52-week savings challenge goals"
+    },
+    "/users/{userId}/savings/{savingId}": {
+      "schema": { "$ref": "#/entities/SavingGoal" },
+      "description": "Private savings goals for authenticated user"
+    },
+    "/users/{userId}/saving_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/SavingTransaction" },
+      "description": "Private deposit and withdrawal movements for user savings"
+    },
+    "/users/{userId}/bills/{billId}": {
+      "schema": { "$ref": "#/entities/BillItem" },
+      "description": "Private recurring and one-time bills"
+    },
+    "/users/{userId}/incomes/{incomeId}": {
+      "schema": { "$ref": "#/entities/IncomeItem" },
+      "description": "Private incomes"
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/ExpenseItem" },
+      "description": "Private expenses"
+    },
+    "/users/{userId}/monthly_status/{statusId}": {
+      "schema": { "$ref": "#/entities/MonthlyStatusRecord" },
+      "description": "Private monthly completion status for bills and incomes"
+    },
+    "/users/{userId}/categories/{catId}": {
+      "schema": { "$ref": "#/entities/CategoryItem" },
+      "description": "Private custom transaction categories"
+    },
+    "/users/{userId}/finance_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/FinanceSettings" },
+      "description": "Private user balance configuration"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "Private settings and achievements for authenticated user"
+    },
+    "/user_directory/{userId}": {
+      "schema": { "$ref": "#/entities/UserDirectoryEntry" },
+      "description": "Directory entry for registered user (listing blocked)"
+    },
+    "/user_directory_lookup/{emailHash}": {
+      "schema": { "$ref": "#/entities/UserDirectoryEntry" },
+      "description": "Exact email lookup document for invitations (listing blocked)"
+    },
+    "/shared_connections/{connectionId}": {
+      "schema": { "$ref": "#/entities/SharedConnection" },
+      "description": "Connections between shared finance partners"
+    },
+    "/shared_invitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/SharedInvitation" },
+      "description": "Invitations sent between users"
+    },
+    "/shared_bills/{billId}": {
+      "schema": { "$ref": "#/entities/SharedBill" },
+      "description": "Single shared bill document accessed by authorized members"
+    },
+    "/shared_transfers/{transferId}": {
+      "schema": { "$ref": "#/entities/SharedTransferRecord" },
+      "description": "Statement records for transfers between users"
+    },
+    "/shared_notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/SharedNotification" },
+      "description": "Internal notifications for user"
+    }
+  }
+}

@@ -1,0 +1,299 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    height: 100%;
+    background-color: #F4F8F6 !important;
+    color: #1F2937;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+    height: 100%;
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+    background-color: #F4F8F6 !important;
+    color: #1F2937;
+  }
+
+  #root {
+    min-height: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background-color: #F4F8F6 !important;
+  }
+
+  .font-mono-numbers {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Prevent 300ms delay and unintended double-tap zoom across touch devices */
+  button,
+  input,
+  select,
+  textarea,
+  a {
+    touch-action: manipulation;
+  }
+
+  /* Auto-scroll clearance when keyboard opens on mobile devices */
+  input,
+  select,
+  textarea {
+    scroll-margin-top: 4.5rem;
+    scroll-margin-bottom: 4.5rem;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Global iOS/Mobile Auto-Zoom Prevention */
+@media screen and (max-width: 850px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch-friendly modal and drawer scrolling with global Safe Area protection for iOS/PWA */
+div[role="dialog"] {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: max(0.625rem, env(safe-area-inset-top, 0px)) !important;
+  padding-bottom: max(0.625rem, env(safe-area-inset-bottom, 0px)) !important;
+  padding-left: max(0.625rem, env(safe-area-inset-left, 0px)) !important;
+  padding-right: max(0.625rem, env(safe-area-inset-right, 0px)) !important;
+}
+
+/* iOS Safe Area Helper Utilities */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Light Glassmorphism Global Utility System */
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.80);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.05);
+    color: #1F2937;
+  }
+
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.90);
+    box-shadow: 0 15px 35px rgba(16, 185, 129, 0.06);
+    color: #1F2937;
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.80);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+    color: #1F2937;
+  }
+
+  .glass-modal {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 25px 60px rgba(16, 185, 129, 0.12);
+    color: #1F2937;
+  }
+
+  .glass-navigation {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    color: #1F2937;
+  }
+
+  .glass-drawer {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-right: 1px solid rgba(255, 255, 255, 0.90);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.04);
+    color: #1F2937;
+  }
+
+  .glass-drawer-no-blur {
+    background: rgba(255, 255, 255, 0.95);
+    border-right: 1px solid rgba(255, 255, 255, 0.90);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.04);
+    color: #1F2937;
+  }
+
+  .glass-dropdown {
+    background: rgba(255, 255, 255, 0.90);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.90);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    color: #1F2937;
+  }
+
+  .glass-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.30);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .solid-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.35);
+  }
+
+  .solid-container {
+    background: #FFFFFF !important;
+    border: 1px solid #E5E7EB;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    color: #1F2937;
+  }
+
+  .glass-dark {
+    background: rgba(209, 250, 235, 0.65) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(16, 185, 129, 0.20) !important;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.08) !important;
+    color: #064E3B !important;
+  }
+
+  .glass-emerald {
+    background: rgba(209, 250, 235, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(16, 185, 129, 0.20);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.08);
+  }
+
+  /* Global safeguard: eliminate all dark transparent backgrounds in favor of mint glass */
+  .dark [class*="bg-slate-900"],
+  .dark [class*="bg-slate-950"],
+  .dark [class*="bg-slate-800"],
+  .dark [class*="bg-black"],
+  .dark [class*="bg-zinc-900"],
+  .dark [class*="bg-gray-900"] {
+    background-color: rgba(209, 250, 235, 0.60) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .mesh-gradient {
+    background-color: #F4F8F6;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(52, 211, 153, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.10) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.10) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  .premium-shadow {
+    box-shadow: 
+      0 10px 25px -3px rgba(16, 185, 129, 0.08),
+      0 4px 6px -4px rgba(0, 0, 0, 0.03),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  }
+
+  .premium-shadow-emerald {
+    box-shadow: 
+      0 20px 25px -5px rgba(16, 185, 129, 0.15),
+      0 8px 10px -6px rgba(16, 185, 129, 0.1);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .financial-calendar-day-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: rgba(209, 250, 235, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .settings-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(15, 23, 42, 0.35);
+  }
+
+  .settings-panel-solid {
+    background-color: #0F172A !important;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
+    color: #F8FAFC;
+    opacity: 1 !important;
+  }
+
+  .settings-confirm-solid {
+    background-color: #0F172A !important;
+    border: 1px solid rgba(244, 63, 94, 0.35);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+    color: #F8FAFC;
+    opacity: 1 !important;
+  }
+}

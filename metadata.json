@@ -1,0 +1,6 @@
+{
+  "name": "SisFinz - Controle Financeiro & Metas",
+  "description": "SisFinz: Seu aplicativo completo de controle financeiro, faturas, receitas, despesas e metas de economia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
