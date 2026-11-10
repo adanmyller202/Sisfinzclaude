@@ -773,6 +773,7 @@ export default function App() {
                 ) : currentView === 'report' ? (
                   <FullReportView
                     currency={activeCurrency}
+                    currentAccountBalance={currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
