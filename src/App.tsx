@@ -688,7 +688,7 @@ export default function App() {
 
   // 4. Authenticated & verified user
   return (
-    <div className="min-h-dvh flex flex-col bg-[#F4F8F6] text-slate-900 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient">
+    <div className={`min-h-dvh flex flex-col bg-[#F4F8F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient`}>
       {/* Top Navbar */}
       <Navbar
         onOpenMenu={() => setIsNavDrawerOpen(true)}
@@ -773,7 +773,7 @@ export default function App() {
                 ) : currentView === 'report' ? (
                   <FullReportView
                     currency={activeCurrency}
-                    currentAccountBalance={currentBalance}
+                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
@@ -932,7 +932,6 @@ export default function App() {
                     initialIncomeFilter={financeNavParams?.incomeFilter}
                     initialMonth={financeNavParams?.month}
                     initialTransaction={financeNavParams?.selectedTransaction}
-                    onInitialTransactionOpened={handleInitialCalendarTransactionOpened}
                     onReturnToFinance={() => setCurrentView('finance')}
                     activePartners={sharedAccounts.activePartners}
                     onShareWithPartner={async (params) => {
