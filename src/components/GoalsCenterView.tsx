@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types';
 import { useSavings } from '../hooks/useSavings';
 import { useFinanceControl } from '../hooks/useFinanceControl';
-import { getTranslations } from '../utils/i18n';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
@@ -13,9 +12,6 @@ import {
   PiggyBank,
   Award,
   Plus,
-  ArrowRight,
-  TrendingUp,
-  Sparkles,
   
 } from 'lucide-react';
 
@@ -45,30 +41,12 @@ interface GoalsCenterViewProps {
 }
 
 export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
-  goals,
-  activeGoal,
-  activeGoalSquares,
   currency,
   language = 'pt',
-  savedAmount,
-  targetAmount,
-  remainingAmount,
-  financialProgressPercent,
-  completedSquaresCount,
-  totalSquaresCount,
-  squaresProgressPercent,
-  onSwitchGoal,
-  onOpenNewGoalModal,
-  onOpenEditGoalModal,
-  onOpenAvulsoModal,
-  onDeleteGoal,
-  onSquareClick,
-  selectedSquareId,
   fiftyTwoChallenge,
   onAddExpense,
   onDeleteExpense,
 }) => {
-  const t = getTranslations(language);
   const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
 
   const {
