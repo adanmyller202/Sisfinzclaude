@@ -157,6 +157,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </div>
         </div>
 
+        {/* Temporary GitHub-to-AI-Studio sync test */}
+        {mode === 'login' && (
+          <div className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-black tracking-widest text-emerald-800">
+            teste
+          </div>
+        )}
+
         {/* Tab Switcher */}
         {mode !== 'forgot_password' && (
           <div className="flex p-1 bg-slate-100/70 backdrop-blur-md rounded-2xl border border-slate-200/60">
