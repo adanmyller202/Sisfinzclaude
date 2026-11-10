@@ -3,6 +3,9 @@ import { AppSettings, CurrencyCode, LanguageCode, BillItem, IncomeItem, ExpenseI
 import { CURRENCIES } from '../utils/currency';
 import { LANGUAGES, getTranslations } from '../utils/i18n';
 import { MonthlyReportSection } from './MonthlyReportSection';
+import { CategoryManager } from './CategoryManager';
+import { DisplayCategory } from '../hooks/useCategories';
+import { CategoryScope, CustomCategory } from '../types';
 import {
   Settings,
   X,
@@ -21,6 +24,7 @@ import {
   Layout,
   Palette,
   ShieldAlert,
+  Tag,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -37,6 +41,11 @@ interface SettingsModalProps {
   expenses?: ExpenseItem[];
   currency?: CurrencyCode;
   language?: LanguageCode;
+  categories?: DisplayCategory[];
+  onAddCategory?: (name: string, scope: CategoryScope, color?: string) => Promise<CustomCategory>;
+  onUpdateCategory?: (id: string, partial: { name?: string; scope?: CategoryScope; color?: string }) => Promise<void>;
+  onDeleteCategory?: (id: string) => Promise<void>;
+  onResetPredefinedCategories?: () => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -52,6 +61,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   expenses = [],
   currency,
   language,
+  categories = [],
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  onResetPredefinedCategories,
 }) => {
   const [localLang, setLocalLang] = useState<LanguageCode>(language || settings.language || 'pt');
 
@@ -149,34 +163,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="settings-panel-solid w-full sm:max-w-xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90dvh] rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden sm:my-auto flex flex-col relative z-10 pt-safe pb-safe"
+            className="settings-panel-solid w-full sm:max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[92dvh] rounded-none sm:rounded-[2rem] shadow-2xl overflow-hidden sm:my-auto flex flex-col relative z-10 pt-safe pb-safe touch-pan-y"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 relative bg-[#0F172A] z-20">
+            <div className="px-6 py-5 border-b border-emerald-100 flex items-center justify-between shrink-0 relative bg-[#ECFDF5] z-20">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/5 text-white flex items-center justify-center border border-white/10">
+                <div className="w-10 h-10 rounded-2xl bg-white text-emerald-700 flex items-center justify-center border border-emerald-100 shadow-sm">
                   <Settings className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white tracking-tight">
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">
                     {t.settingsTitle}
                   </h3>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-0.5">
+                  <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mt-0.5">
                     {t.settingsSubtitle}
                   </p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                className="p-2 rounded-xl text-slate-500 hover:text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-8 overflow-y-auto overscroll-contain flex-1 min-h-0 custom-scrollbar">
+            <div className="p-5 sm:p-6 space-y-8 overflow-y-auto overscroll-y-contain flex-1 min-h-0 custom-scrollbar touch-pan-y" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
               {importStatus && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -275,13 +289,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
 
-                <div className="p-4 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-between group">
+                <div className="p-4 rounded-3xl bg-[#F0FDF7] border border-emerald-100 flex items-center justify-between group">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-emerald-400 transition-colors">
+                    <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-emerald-700 group-hover:text-emerald-800 transition-colors border border-emerald-100">
                       {settings.soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
                     </div>
                     <div>
-                      <div className="text-sm font-black text-white">Efeitos Sonoros</div>
+                      <div className="text-sm font-black text-slate-900">Efeitos Sonoros</div>
                       <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Confirmações e Toques</div>
                     </div>
                   </div>
@@ -293,6 +307,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Categories */}
+              {onAddCategory && onUpdateCategory && onDeleteCategory && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-800 px-1">
+                    <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                    Categorias
+                  </div>
+                  <CategoryManager
+                    language={localLang}
+                    allCategories={categories}
+                    onAddCategory={onAddCategory}
+                    onUpdateCategory={onUpdateCategory}
+                    onDeleteCategory={onDeleteCategory}
+                    onResetPredefined={onResetPredefinedCategories}
+                  />
+                </section>
+              )}
 
               {/* Data & Analytics */}
               <div className="space-y-4">
@@ -369,7 +401,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="settings-confirm-solid w-full max-w-md p-8 rounded-[3rem] text-center relative z-10"
+              className="settings-confirm-solid w-full max-w-md p-8 rounded-[2rem] text-center relative z-10"
             >
               <div className="w-20 h-20 rounded-[2.5rem] bg-rose-500/20 border border-rose-500/30 flex items-center justify-center mx-auto mb-6">
                 <AlertTriangle className="w-10 h-10 text-rose-500 animate-pulse" />
