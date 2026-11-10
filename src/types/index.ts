@@ -436,6 +436,7 @@ export interface FiftyTwoWeekChallenge {
   id: string;
   userId: string;
   title: string;
+  currency?: CurrencyCode; // Currency chosen for this weekly savings plan
   initialAmount: number; // e.g. 1000
   startDate: string; // YYYY-MM-DD
   totalTarget: number; // initialAmount * sum of week numbers
