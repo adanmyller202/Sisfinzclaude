@@ -692,7 +692,7 @@ export default function App() {
 
   // 4. Authenticated & verified user
   return (
-    <div className={`min-h-dvh flex flex-col bg-[#F4F8F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient`}>
+    <div className={`w-full min-w-0 max-w-full min-h-dvh flex flex-col overflow-x-clip bg-[#F4F8F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient`}>
       {/* Top Navbar */}
       <Navbar
         onOpenMenu={() => setIsNavDrawerOpen(true)}
@@ -719,7 +719,7 @@ export default function App() {
           </p>
         </div>
       ) : (
-        <div className="flex-1 flex max-w-7xl w-full mx-auto">
+        <div className="flex-1 flex min-w-0 max-w-7xl w-full mx-auto overflow-x-clip">
           {/* Content Viewport: Clean, wide, space-saving layout */}
           <main className="flex-1 min-w-0 p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-hidden pb-28 relative">
             <AnimatePresence mode="wait">
