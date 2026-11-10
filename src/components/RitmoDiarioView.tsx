@@ -199,7 +199,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
         const share = userId ? shared.shares?.[userId] : undefined;
         if (!share || share.status !== 'pending' || shared.status === 'paid') return;
         const due = override?.dueDate || (month === shared.month ? shared.dueDate : getEffectiveDateForMonth(month, shared.dueDay || 1));
-        if (due <= resolvedPaydayStr) list.push({ id: 'shared:' + shared.id + ':' + month, name: shared.title + ' (sua parte)', amount: Number(override?.shares?.[userId]?.amount ?? share.amount) || 0, due, kind: 'shared' });
+        if (due <= resolvedPaydayStr) list.push({ id: 'shared:' + shared.id + ':' + month, name: shared.title + ' (sua parte)', amount: Number((userId ? override?.shares?.[userId]?.amount : undefined) ?? share.amount) || 0, due, kind: 'shared' });
       });
     });
     return list.sort((x, y) => x.due.localeCompare(y.due));
