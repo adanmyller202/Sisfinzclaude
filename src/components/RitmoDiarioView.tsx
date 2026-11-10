@@ -316,7 +316,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shadow-xs"><ShieldAlert className="w-6 h-6" /></div>
             <div>
               <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-1">Reserva de Segurança</h3>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest opacity-80">Contas pendentes até {resolvedPaydayStr.split('-').reverse().join('/')}</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest opacity-80">Contas pendentes somente do mês atual</p>
             </div>
           </div>
           <div className="text-2xl font-black text-rose-600 font-mono">-{formatCurrency(pendingSum, currency)}</div>
