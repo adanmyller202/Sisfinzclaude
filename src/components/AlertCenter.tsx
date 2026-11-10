@@ -22,7 +22,7 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
     const result: AlertItem[] = [];
     const money = (v: number) => formatCurrency(v, currency);
     const regularIncome = incomes.filter(i => !i.isSharedGenerated && !i.isReimbursement && !i.isRefund);
-    const safetyLimit = safetyReserveAmount > 0 ? safetyReserveAmount : regularIncome.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 0.10;
+    const safetyLimit = safetyReserveAmount > 0 ? safetyReserveAmount : regularIncome.filter(i => i.expectedDate.slice(0, 7) === month).reduce((s, i) => s + (Number(i.amount) || 0), 0) * 0.10;
     if (safetyLimit > 0 && currentBalance < safetyLimit) result.push({ id: 'low-balance', title: 'Saldo abaixo do limite de segurança', description: 'Seu saldo atual é ' + money(currentBalance) + ', abaixo do limite de ' + money(safetyLimit) + '.', severity: 'danger', icon: <Wallet className="w-5 h-5" />, actionLabel: 'Ver Ritmo Diário', action: onOpenDailyPace });
 
     const pendingBills = monthBills.filter(i => (i.status === 'pending' || i.status === 'overdue') && i.effectiveDueDate.slice(0, 7) === month);
@@ -36,7 +36,7 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
     monthBills.filter(i => i.effectiveDueDate === tomorrow && i.status !== 'paid').slice(0, 3).forEach(i => result.push({ id: 'due-' + i.bill.id + '-' + i.month, title: 'Uma conta vence amanhã', description: i.bill.name + ': ' + money(i.bill.amount) + '.', severity: 'warning', icon: <CalendarClock className="w-5 h-5" />, actionLabel: 'Abrir conta', action: () => onOpenBill(i.bill.id, i.month) }));
 
     if (forecastBalance < 0) result.push({ id: 'forecast-negative', title: 'Sua previsão de fim do mês piorou', description: 'A projeção atual indica saldo negativo de ' + money(forecastBalance) + '. Revise seus compromissos.', severity: 'danger', icon: <AlertTriangle className="w-5 h-5" />, actionLabel: 'Revisar planejamento', action: onOpenDailyPace });
-    else if (forecastBalance < currentBalance) result.push({ id: 'forecast-drop', title: 'Sua previsão de fim do mês está abaixo do saldo atual', description: 'Depois das entradas e contas previstas, a estimativa é ' + money(forecastBalance) + '.', severity: 'info', icon: <TrendingDown className="w-5 h-5" />, actionLabel: 'Ver planejamento', action: onOpenDailyPace });
+    else if (forecastBalance < currentBalance) result.push({ id: 'forecast-drop', title: 'Sua previsão de fim do mês está menor que o saldo atual', description: 'Depois das entradas e contas previstas, a estimativa é ' + money(forecastBalance) + '.', severity: 'info', icon: <TrendingDown className="w-5 h-5" />, actionLabel: 'Ver planejamento', action: onOpenDailyPace });
 
     statusRecords.filter(r => r.itemType === 'income' && r.month === month && r.isCompleted && r.completedAt?.slice(0, 10) === today).map(r => incomes.find(i => i.id === r.itemId)).filter((i): i is IncomeItem => Boolean(i)).slice(0, 2).forEach(i => result.push({ id: 'received-' + i.id, title: 'Você recebeu um valor!', description: i.name + ': ' + money(i.amount) + '. Que tal atualizar suas metas?', severity: 'success', icon: <Target className="w-5 h-5" />, actionLabel: 'Ver minhas metas', action: onOpenGoals }));
 
