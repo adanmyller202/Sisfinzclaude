@@ -438,7 +438,8 @@ export interface FiftyTwoWeekChallenge {
   title: string;
   initialAmount: number; // e.g. 1000
   startDate: string; // YYYY-MM-DD
-  totalTarget: number; // initialAmount * 1378
+  totalTarget: number; // initialAmount * sum of week numbers
+  totalWeeks?: number; // User-defined duration; legacy challenges default to 52
   completedWeeks: number[]; // Array of week numbers, e.g. [1, 2, 3]
   weekExpenses?: Record<number, string>; // { [weekNumber]: expenseId }
   createdAt: string;
