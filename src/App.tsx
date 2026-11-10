@@ -17,6 +17,7 @@ import { GoalModal } from './components/GoalModal';
 import { EditGoalModal } from './components/EditGoalModal';
 import { AvulsoDepositModal } from './components/AvulsoDepositModal';
 import { SettingsModal } from './components/SettingsModal';
+import { CategoryManager } from './components/CategoryManager';
 import { ProfileModal } from './components/ProfileModal';
 import { MoneChatModal } from './components/MoneChatModal';
 import { MoneMascot } from './components/MoneMascot';
@@ -94,7 +95,7 @@ export default function App() {
   const currentLang = settings.language || 'pt';
   const t = getTranslations(currentLang);
 
-  const { getCategoriesFor, addCategory } = useCategories();
+  const { getCategoriesFor, addCategory, allDisplayCategories, updateCategory, deleteCategory, resetPredefinedCategories } = useCategories();
   const sharedAccounts = useSharedAccounts();
   const fiftyTwoChallenge = useFiftyTwoWeekChallenge();
   const { accounts, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem, transferBetweenAccounts } = useAccounts();
@@ -1099,6 +1100,11 @@ export default function App() {
         expenses={expenses}
         currency={activeCurrency}
         language={currentLang}
+        categories={allDisplayCategories}
+        onAddCategory={addCategory}
+        onUpdateCategory={updateCategory}
+        onDeleteCategory={deleteCategory}
+        onResetPredefinedCategories={resetPredefinedCategories}
       />
 
       {/* Profile Modal (Perfil) */}
