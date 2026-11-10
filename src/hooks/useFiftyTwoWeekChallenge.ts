@@ -276,6 +276,21 @@ export function useFiftyTwoWeekChallenge() {
     [userId, challenges]
   );
 
+  const markChallengeRedeemed = useCallback(
+    async (challengeId: string, incomeId: string, accountId: string): Promise<void> => {
+      if (!userId) throw new Error('Usuário não autenticado.');
+      const target = challenges.find((c) => c.id === challengeId);
+      if (!target) throw new Error('Plano não encontrado.');
+      if (target.redeemedAt || target.redemptionIncomeId) throw new Error('Esta meta já foi resgatada.');
+      if (target.status !== 'completed' || target.completedWeeks.length < Math.max(1, Math.floor(target.totalWeeks || 52))) throw new Error('Conclua todas as etapas antes de resgatar o valor.');
+      const updated = { ...target, redeemedAt: new Date().toISOString(), redemptionIncomeId: incomeId, redemptionAccountId: accountId, updatedAt: new Date().toISOString() };
+      setChallenges((prev) => prev.map((c) => c.id === challengeId ? updated : c));
+      const docRef = doc(db, 'users', userId, 'fifty_two_week_challenges', challengeId);
+      await setDoc(docRef, sanitizeForFirestore({ redeemedAt: updated.redeemedAt, redemptionIncomeId: incomeId, redemptionAccountId: accountId, updatedAt: updated.updatedAt }), { merge: true });
+    },
+    [userId, challenges]
+  );
+
   // Delete a challenge
   const deleteChallenge = useCallback(
     async (challengeId: string): Promise<void> => {
@@ -305,6 +320,7 @@ export function useFiftyTwoWeekChallenge() {
     completeWeek,
     undoWeek,
     updateStorageLocation,
+    markChallengeRedeemed,
     deleteChallenge,
   };
 }
