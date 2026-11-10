@@ -123,6 +123,7 @@ export default function App() {
     deleteBillOccurrence,
     toggleBillPaid,
     addIncome,
+    addIncomeAsReceived,
     updateIncome,
     deleteIncome,
     toggleIncomeReceived,
