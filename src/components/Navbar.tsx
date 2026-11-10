@@ -44,9 +44,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 glass-navigation border-b transition-colors shadow-2xs print:hidden pt-safe">
-      <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-6 h-14 flex items-center justify-between gap-3">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-5 lg:px-6 h-14 flex items-center justify-between gap-1.5 sm:gap-3 min-w-0 overflow-hidden">
         {/* Left Side: 3-Bars Hamburger Button + SisFinz Logo + Brand Name + Sync Status Badge */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-1 min-w-0 overflow-hidden">
           {/* Hamburger 3-Bars Button */}
           <button
             type="button"
@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Logo & Brand Name */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 min-w-0">
             <div className="w-8 h-8 rounded-xl overflow-hidden shadow-xs border border-slate-200/80 shrink-0">
               <img
                 src="/assets/aistudio/image_89b2520a.jpeg"
@@ -75,7 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 SisFinz
               </span>
               {userName && (
-                <span className="text-[11px] leading-tight text-slate-600 truncate max-w-[9rem] sm:max-w-xs font-medium">
+                <span className="text-[11px] leading-tight text-slate-600 truncate max-w-[5.5rem] xs:max-w-[7rem] sm:max-w-xs font-medium">
                   {t.welcomeGreeting}, {userName}
                 </span>
               )}
@@ -107,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Finzy Virtual Pet (Independent AI Mascot) */}
-          <SisFinzPet size={56} />
+          <SisFinzPet size={38} className="shrink-0 max-w-full" />
         </div>
       </div>
     </header>
