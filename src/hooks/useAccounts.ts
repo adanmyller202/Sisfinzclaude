@@ -125,7 +125,9 @@ export function useAccounts() {
       (snapshot) => {
         const list: AccountItem[] = [];
         snapshot.forEach((docSnap) => {
-          list.push(docSnap.data() as AccountItem);
+          // Legacy account documents may not contain their own id field. Always use the Firestore document ID as the stable account ID.
+          const data = docSnap.data() as Partial<AccountItem>;
+          list.push({ ...data, id: data.id || docSnap.id } as AccountItem);
         });
         // Sort accounts by type/name
         list.sort((a, b) => a.name.localeCompare(b.name));
