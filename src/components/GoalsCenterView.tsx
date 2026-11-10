@@ -69,7 +69,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
 
   const tabs = [
     { id: 'savings', label: 'Cofrinhos', icon: PiggyBank, desc: 'Metas Livres' },
-    { id: 'challenge52', label: '52 Semanas', icon: Award, desc: 'Poupança Progressiva' },
+    { id: 'challenge52', label: 'Plano Semanal', icon: Award, desc: 'Economize no seu ritmo' },
   ] as const;
 
   const containerVariants: any = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
@@ -92,7 +92,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mt-2">Arquitetura de Sonhos e Patrimônio</p>
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-400 max-w-xl leading-relaxed">Organize seus cofrinhos e acompanhe sua poupança progressiva de 52 semanas.</p>
+            <p className="text-sm font-medium text-slate-400 max-w-xl leading-relaxed">Organize seus cofrinhos e crie planos de economia com a duração que desejar.</p>
           </div>
 
 {activeTab === 'savings' && (
