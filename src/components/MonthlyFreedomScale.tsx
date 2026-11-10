@@ -46,6 +46,8 @@ interface MonthlyFreedomScaleProps {
   currency: CurrencyCode;
   language?: LanguageCode;
   startMonth?: string; // YYYY-MM
+  currentBalance?: number;
+  forecastBalance?: number;
   className?: string;
   onReturnToFinance?: () => void;
 }
@@ -221,6 +223,8 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
   currency,
   language = 'pt',
   startMonth,
+  currentBalance = 0,
+  forecastBalance,
   className = '',
   onReturnToFinance,
 }) => {
@@ -326,7 +330,12 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
         }
       }
 
-      const netMoney = sumIncomes - (gastosPagados + gastosPendientes);
+      // Keep the current month's free-money figure aligned with the shared
+      // account-based month-end forecast used by the Finance and Planning screens.
+      const isCurrentMonth = targetMonth === getCurrentMonthStr();
+      const netMoney = isCurrentMonth && forecastBalance !== undefined
+        ? forecastBalance
+        : sumIncomes - (gastosPagados + gastosPendientes);
       const isDeficit = netMoney < 0;
       const baseScale = Math.max(sumIncomes, gastosPagados + gastosPendientes, 1);
 
@@ -345,7 +354,7 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
         insightText: generateMonthlyInsight(gastosPagados, gastosPendientes, isDeficit ? 0 : netMoney, sumIncomes, isDeficit, isDeficit ? Math.abs(netMoney) : 0, currency, language),
       };
     };
-  }, [incomes, bills, sharedBills, expenses, checkIsBillPaid, checkIsSharedBillPaid, userId, currency, language]);
+  }, [incomes, bills, sharedBills, expenses, checkIsBillPaid, checkIsSharedBillPaid, userId, currency, language, forecastBalance, currentBalance]);
 
   const monthsData = useMemo<MonthFreedomData[]>(() => {
     const list: MonthFreedomData[] = [];
