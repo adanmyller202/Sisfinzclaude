@@ -134,26 +134,32 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
     return false;
   }, [statusMap]);
 
-  const resolvedPaydayStr = useMemo(() => {
-    const todayDate = new Date(`${todayStr}T00:00:00`);
-    const validIncomes = incomes.filter(inc => !((inc as any).isTransfer || (inc as any).category === 'transfer'));
-    if (validIncomes.length === 0) {
-      const fallback = new Date(todayDate);
-      fallback.setDate(fallback.getDate() + 15);
-      return fallback.toISOString().split('T')[0];
+  // Próxima ocorrência futura de receita de maior valor (empate: data mais próxima).
+  const paydayInfo = useMemo(() => {
+    const today = new Date(todayStr + 'T00:00:00');
+    const monthNow = todayStr.substring(0, 7);
+    const candidates: Array<{ date: string; amount: number; name: string }> = [];
+    incomes.filter(inc => !((inc as any).isTransfer || (inc as any).category === 'transfer' || inc.isSharedGenerated || inc.isReimbursement || inc.isRefund)).forEach(inc => {
+      for (let offset = 0; offset <= 2; offset++) {
+        const month = shiftMonthStr(monthNow, offset);
+        if (!doesItemOccurInMonth(inc.startMonth, month, inc.recurrence, inc.recurrenceMonthsCount)) continue;
+        if (inc.excludedMonths?.includes(month) || inc.exceptions?.[month]?.isDeleted || checkIsIncomeReceived(inc, month)) continue;
+        const override = inc.exceptions?.[month] as any;
+        const date = override?.expectedDate || getEffectiveDateForMonth(month, Number(override?.expectedDay || inc.expectedDay || (inc.expectedDate ? Number(inc.expectedDate.split('-')[2]) : 1)));
+        if (date >= todayStr) candidates.push({ date, amount: Number(override?.amount ?? inc.amount) || 0, name: inc.name });
+      }
+    });
+    candidates.sort((x, y) => y.amount - x.amount || x.date.localeCompare(y.date));
+    const selected = candidates[0];
+    if (ritmoDiarioConfig?.useAutoPayday === false && ritmoDiarioConfig.customPaydayDate && ritmoDiarioConfig.customPaydayDate >= todayStr) {
+      return { date: ritmoDiarioConfig.customPaydayDate, amount: Number(ritmoDiarioConfig.customPaydayAmount || selected?.amount || 0), name: selected?.name || 'Ingresso previsto' };
     }
-    let bestDate: Date | null = null;
-    for (const inc of validIncomes) {
-      let day = inc.expectedDay || (inc.expectedDate ? parseInt(inc.expectedDate.split('-')[2]) : 1);
-      const curMonth = todayStr.substring(0, 7);
-      const offset = checkIsIncomeReceived(inc, curMonth) ? 1 : 0;
-      const d1 = new Date(todayDate.getFullYear(), todayDate.getMonth() + offset, day);
-      const d2 = new Date(todayDate.getFullYear(), todayDate.getMonth() + offset + 1, day);
-      const target = d1 > todayDate ? d1 : d2;
-      if (!bestDate || target < bestDate) bestDate = target;
-    }
-    return bestDate?.toISOString().split('T')[0] || todayStr;
-  }, [incomes, todayStr, checkIsIncomeReceived]);
+    if (selected) return selected;
+    const fallback = new Date(today);
+    fallback.setDate(fallback.getDate() + 15);
+    return { date: fallback.getFullYear() + '-' + String(fallback.getMonth() + 1).padStart(2, '0') + '-' + String(fallback.getDate()).padStart(2, '0'), amount: Number(ritmoDiarioConfig?.customPaydayAmount || 0), name: 'Próximo ingresso' };
+  }, [incomes, todayStr, checkIsIncomeReceived, ritmoDiarioConfig]);
+  const resolvedPaydayStr = paydayInfo.date;
 
   const daysRemaining = useMemo(() => {
     const t = new Date(`${todayStr}T00:00:00`), p = new Date(`${resolvedPaydayStr}T00:00:00`);
