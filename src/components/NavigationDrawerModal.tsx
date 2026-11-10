@@ -97,7 +97,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       title: language === 'es' ? 'Análisis y Extras' : 'Análise e Extras',
       items: [
         { id: 'full_report', label: 'Informe Real', icon: FileText, color: 'cyan', desc: 'Relatório detalhado' },
-        { id: 'report', label: 'Gráfico Mensal', icon: PieChartIcon, color: 'blue', desc: 'Gastos por categoria' },
+        { id: 'report', label: 'Percepções', icon: PieChartIcon, color: 'blue', desc: 'Resumo mensal e distribuição de gastos' },
         { id: 'shared_accounts', label: 'Compartilhados', icon: Users, color: 'indigo', desc: 'Contas em grupo', badge: sharedPendingCount },
       ]
     }
