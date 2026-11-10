@@ -162,32 +162,55 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
   const resolvedPaydayStr = paydayInfo.date;
 
   const daysRemaining = useMemo(() => {
-    const t = new Date(`${todayStr}T00:00:00`), p = new Date(`${resolvedPaydayStr}T00:00:00`);
-    return Math.max(1, Math.round((p.getTime() - t.getTime()) / 86400000));
+    const today = new Date(todayStr + 'T00:00:00');
+    const payday = new Date(resolvedPaydayStr + 'T00:00:00');
+    return Math.max(1, Math.ceil((payday.getTime() - today.getTime()) / 86400000));
   }, [todayStr, resolvedPaydayStr]);
 
   const realTotalBalance = useMemo(() => {
-    const sum = (accounts || []).filter(a => a.isActive !== false).reduce((acc, a) => acc + (Number(a.currentBalance ?? a.initialBalance) || 0), 0);
-    return sum || currentBalance;
+    if (!accounts || accounts.length === 0) return Number(currentBalance) || 0;
+    return accounts.filter(account => account.isActive !== false).reduce((sum, account) => sum + (Number(account.currentBalance ?? account.initialBalance) || 0), 0);
   }, [accounts, currentBalance]);
 
   const pendingCommitmentsList = useMemo(() => {
-    const list: any[] = [], curMonth = todayStr.substring(0, 7), nextMonth = shiftMonthStr(curMonth, 1);
-    [curMonth, nextMonth].forEach(m => {
-      bills.forEach(b => {
-        if (doesItemOccurInMonth(b.startMonth, m, b.recurrence, b.recurrenceMonthsCount) && !checkIsBillPaid(b, m)) {
-          const due = b.exceptions?.[m]?.dueDate || getEffectiveDateForMonth(m, b.dueDay || 1);
-          if (due >= todayStr && due < resolvedPaydayStr) list.push({ name: b.name, amount: b.exceptions?.[m]?.amount || b.amount, due });
-        }
+    const list: Array<{ id: string; name: string; amount: number; due: string; kind: 'bill' | 'shared' }> = [];
+    const currentMonth = todayStr.substring(0, 7);
+    const finalMonth = resolvedPaydayStr.substring(0, 7);
+    const months: string[] = [];
+    let monthCursor = currentMonth;
+    for (let guard = 0; guard < 4; guard++) {
+      months.push(monthCursor);
+      if (monthCursor === finalMonth) break;
+      monthCursor = shiftMonthStr(monthCursor, 1);
+    }
+    months.forEach(month => {
+      bills.forEach(bill => {
+        if (!doesItemOccurInMonth(bill.startMonth, month, bill.recurrence, bill.recurrenceMonthsCount)) return;
+        if (bill.excludedMonths?.includes(month) || bill.exceptions?.[month]?.isDeleted || bill.isRefund || bill.isRefunded) return;
+        if (checkIsBillPaid(bill, month)) return;
+        const due = bill.exceptions?.[month]?.dueDate || getEffectiveDateForMonth(month, bill.dueDay || 1);
+        if (due <= resolvedPaydayStr) list.push({ id: 'bill:' + bill.id + ':' + month, name: bill.name, amount: Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0, due, kind: 'bill' });
+      });
+      sharedBills.forEach(shared => {
+        if (shared.hiddenForUsers?.includes(userId || '') || shared.excludedMonths?.includes(month)) return;
+        if (!doesItemOccurInMonth(shared.startMonth || shared.month, month, shared.recurrence || 'none', shared.recurrenceMonthsCount)) return;
+        const override = shared.exceptions?.[month] as any;
+        if (override?.isDeleted || override?.deletedForUsers?.includes(userId || '')) return;
+        const share = userId ? shared.shares?.[userId] : undefined;
+        if (!share || share.status !== 'pending' || shared.status === 'paid') return;
+        const due = override?.dueDate || (month === shared.month ? shared.dueDate : getEffectiveDateForMonth(month, shared.dueDay || 1));
+        if (due <= resolvedPaydayStr) list.push({ id: 'shared:' + shared.id + ':' + month, name: shared.title + ' (sua parte)', amount: Number(override?.shares?.[userId]?.amount ?? share.amount) || 0, due, kind: 'shared' });
       });
     });
-    return list.sort((a, b) => a.due.localeCompare(b.due));
-  }, [bills, todayStr, resolvedPaydayStr, checkIsBillPaid]);
+    return list.sort((x, y) => x.due.localeCompare(y.due));
+  }, [bills, sharedBills, userId, todayStr, resolvedPaydayStr, checkIsBillPaid]);
 
-  const pendingSum = useMemo(() => pendingCommitmentsList.reduce((acc, i) => acc + i.amount, 0), [pendingCommitmentsList]);
-  const realAvailable = Math.max(0, realTotalBalance - pendingSum);
-  const dailyBudget = daysRemaining > 0 ? realAvailable / daysRemaining : 0;
-  const todaySpent = expenses.filter(e => e.date === todayStr && !(e as any).isTransfer).reduce((acc, e) => acc + Number(e.amount), 0);
+  const pendingSum = useMemo(() => pendingCommitmentsList.reduce((sum, item) => sum + item.amount, 0), [pendingCommitmentsList]);
+  const realAvailable = realTotalBalance - pendingSum;
+  const dailyBudget = Math.max(0, realAvailable) / daysRemaining;
+  const todaySpent = expenses.filter(expense => expense.date === todayStr && !(expense as any).isTransfer && !(expense as any).isRefund).reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+  const remainingToday = dailyBudget - todaySpent;
+  const availablePercentage = realTotalBalance > 0 ? Math.min(100, Math.max(0, (Math.max(0, realAvailable) / realTotalBalance) * 100)) : 0;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-24">
