@@ -441,6 +441,8 @@ export interface FiftyTwoWeekChallenge {
   totalTarget: number; // initialAmount * sum of week numbers
   totalWeeks?: number; // User-defined duration; legacy challenges default to 52
   savingMode?: 'progressive' | 'fixed'; // Legacy plans default to progressive
+  storageLocation?: string; // Informational note: where the saved money is physically kept
+  weekAccountIds?: Record<number, string>; // Account debited for each registered weekly deposit
   completedWeeks: number[]; // Array of week numbers, e.g. [1, 2, 3]
   weekExpenses?: Record<number, string>; // { [weekNumber]: expenseId }
   createdAt: string;
