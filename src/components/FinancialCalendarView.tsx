@@ -98,7 +98,6 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     baseBalance,
     currentBalance,
     forecastBalance,
-    monthBills,
     toggleBillPaid,
     toggleIncomeReceived,
   } = useFinanceControl(
@@ -222,7 +221,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     const finalProjectedBalance = isCurrentSelectedMonth ? forecastBalance : runningBalance;
 
     return { daysData: days, totalInflows: sumInflows, totalOutflows: sumOutflows, endMonthProjected: finalProjectedBalance, maxDayOutflow: maxOutflow, peakDayNumber: peakDay, firstNegativeDay: firstNegDay };
-  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, currentBalance, forecastBalance, monthBills, accounts, accountsTotalBalance, selectedMonth, todayStr, activeFilter]);
+  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, currentBalance, forecastBalance, accounts, accountsTotalBalance, selectedMonth, todayStr, activeFilter]);
 
   const selectedDayData = useMemo(() => daysData.find((d) => d.dayNumber === selectedDayNum) || daysData[0] || null, [daysData, selectedDayNum]);
 
