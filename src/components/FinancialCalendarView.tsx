@@ -84,6 +84,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
   const locale = getLocaleForLanguage(language);
   const todayStr = useMemo(() => getTodayStr(), []);
   const sharedAccounts = useSharedAccounts();
+  const { accounts, totalBalance: accountsTotalBalance } = useAccounts();
 
   const {
     selectedMonth,
@@ -95,9 +96,13 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     expenses,
     timelineItems,
     baseBalance,
+    currentBalance,
     toggleBillPaid,
     toggleIncomeReceived,
-  } = useFinanceControl(sharedAccounts.sharedBills);
+  } = useFinanceControl(
+    sharedAccounts.sharedBills,
+    accounts.length > 0 ? accountsTotalBalance : undefined
+  );
 
   const [activeFilter, setActiveFilter] = useState<CalendarFilter>('all');
   const [showProjected, setShowProjected] = useState<boolean>(true);
@@ -142,7 +147,12 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
   }, [timelineItems, yearStr, monthNumStr]);
 
   const { daysData, totalInflows, totalOutflows, endMonthProjected, maxDayOutflow, peakDayNumber, firstNegativeDay } = useMemo(() => {
-    let runningBalance = baseBalance;
+    const isCurrentSelectedMonth = selectedMonth === getCurrentMonthStr();
+    // For the current month, the account balance already includes all paid/received
+    // movements. Only pending income and unpaid bills should affect the projection.
+    let runningBalance = isCurrentSelectedMonth
+      ? (accounts.length > 0 ? accountsTotalBalance : currentBalance)
+      : baseBalance;
     let sumInflows = 0;
     let sumOutflows = 0;
     let maxOutflow = 0;
@@ -159,11 +169,24 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
 
       for (const it of dayItems) {
         const val = Math.abs(it.amount);
-        if (it.type === 'income') { dayInflows += val; hasIncomes = true; }
-        else {
+        const isPendingMovement = it.status === 'pending' || it.status === 'overdue' || it.status === 'to_receive';
+        if (isCurrentSelectedMonth && !isPendingMovement) {
+          if (it.type === 'bill' && it.status === 'paid') hasPaidBills = true;
+          continue;
+        }
+        if (it.type === 'income') {
+          dayInflows += val;
+          hasIncomes = true;
+        } else if (it.type === 'bill') {
           dayOutflows += val;
-          if (it.type === 'bill') { if (it.status === 'paid') hasPaidBills = true; else hasPendingBills = true; }
-          else hasExpenses = true;
+          if (it.status === 'paid') hasPaidBills = true;
+          else hasPendingBills = true;
+        } else {
+          // One-off expenses are already posted to the account balance.
+          if (!isCurrentSelectedMonth) {
+            dayOutflows += val;
+            hasExpenses = true;
+          }
         }
         if (it.id.startsWith('bill_sb_') || it.id.includes('sb_')) hasShared = true;
       }
@@ -193,7 +216,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     }
 
     return { daysData: days, totalInflows: sumInflows, totalOutflows: sumOutflows, endMonthProjected: runningBalance, maxDayOutflow: maxOutflow, peakDayNumber: peakDay, firstNegativeDay: firstNegDay };
-  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, todayStr, activeFilter]);
+  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, currentBalance, accounts, accountsTotalBalance, selectedMonth, todayStr, activeFilter]);
 
   const selectedDayData = useMemo(() => daysData.find((d) => d.dayNumber === selectedDayNum) || daysData[0] || null, [daysData, selectedDayNum]);
 
