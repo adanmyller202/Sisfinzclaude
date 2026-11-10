@@ -17,7 +17,6 @@ import { GoalModal } from './components/GoalModal';
 import { EditGoalModal } from './components/EditGoalModal';
 import { AvulsoDepositModal } from './components/AvulsoDepositModal';
 import { SettingsModal } from './components/SettingsModal';
-import { CategoryManager } from './components/CategoryManager';
 import { ProfileModal } from './components/ProfileModal';
 import { MoneChatModal } from './components/MoneChatModal';
 import { MoneMascot } from './components/MoneMascot';
