@@ -48,7 +48,6 @@ import { UpcomingBillsView } from './UpcomingBillsView';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
-import { MonthlyReportSection } from './MonthlyReportSection';
 import { CashflowCalendar } from './CashflowCalendar';
 import { BillComparisonBadge } from './BillComparisonBadge';
 import { MonthlyFreedomScale } from './MonthlyFreedomScale';
@@ -1561,33 +1560,6 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
           </motion.div>
         </motion.div>
       )}
-
-      {/* 11. TAB CONTENT 8: GRÁFICO DE PIZZA MENSAL */}
-      {activeTab === 'report' && (
-        <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-4 mx-1">
-          <motion.button
-            variants={itemVariants}
-            type="button"
-            onClick={handleReturnToMainFinance}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-slate-700 bg-white/70 backdrop-blur-md border border-slate-200/60 rounded-2xl transition-all cursor-pointer hover:bg-white shadow-sm"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>{language === 'es' ? 'Volver' : 'Voltar'}</span>
-          </motion.button>
-          <motion.div variants={itemVariants} className="glass rounded-[2.5rem] p-4 sm:p-6 shadow-xl premium-shadow">
-            <ErrorBoundary fallbackTitle="Error al generar el gráfico mensual">
-              <MonthlyReportSection
-                bills={bills || []}
-                incomes={incomes || []}
-                expenses={expenses || []}
-                currency={currency}
-                language={language}
-              />
-            </ErrorBoundary>
-          </motion.div>
-        </motion.div>
-      )}
-
 
       {/* RECURRING BILL DELETE CONFIRMATION MODAL */}
       {billToDelete && (
