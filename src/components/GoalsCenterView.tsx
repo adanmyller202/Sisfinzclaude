@@ -84,59 +84,18 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   const itemVariants: any = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } } };
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-6 pb-24">
-      {/* Premium Cinematic Header */}
-      <motion.div variants={itemVariants} className="glass-panel rounded-[3rem] p-8 sm:p-10 relative overflow-hidden group">
-        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-1000" />
-        
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-600/20 border border-white/80">
-                <Target className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Centro de Metas</h1>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mt-2">Arquitetura de Sonhos e Patrimônio</p>
-              </div>
-            </div>
-            <p className="text-sm font-medium text-slate-400 max-w-xl leading-relaxed">Organize seus cofrinhos e crie planos de economia com a duração que desejar.</p>
-          </div>
-
-{activeTab === 'savings' && (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => (setSavingToEdit(null), setIsSavingModalOpen(true))}
-            className="h-16 px-10 rounded-2xl bg-white text-slate-950 font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-50 transition-all cursor-pointer shrink-0"
-          >
-            <span className="flex items-center gap-2"><Plus className="w-5 h-5 stroke-[4]" /> Criar Cofrinho</span>
-          </motion.button>
-          )}
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="w-full min-w-0 space-y-4 overflow-x-clip pb-24">
+      {/* Compact, responsive goals header */}
+      <section className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm"><Target className="h-5 w-5"/></div>
+          <div className="min-w-0 flex-1"><h1 className="truncate text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">Centro de Metas</h1><p className="mt-0.5 text-xs text-slate-500 sm:text-sm">Organize seus cofrinhos e planos de economia.</p></div>
+          {activeTab === 'savings' && <button type="button" onClick={() => (setSavingToEdit(null), setIsSavingModalOpen(true))} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"><Plus className="h-4 w-4"/> <span className="hidden sm:inline">Cofrinho</span></button>}
         </div>
-
-        {/* Tab Switcher Interface */}
-        <div className="flex items-center justify-center gap-2 p-2 mt-12 bg-white/2 rounded-[2rem] border border-white/5 relative">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-none w-[120px] py-4 rounded-[1.5rem] transition-all cursor-pointer relative z-10 group overflow-hidden border-2 ${
-                  isActive ? 'bg-white text-slate-950 border-emerald-500 shadow-xl' : 'text-slate-500 border-transparent hover:text-white'
-                }`}
-              >
-                <div className="relative z-10 flex flex-col items-center gap-1">
-                  <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'group-hover:text-white transition-colors'}`} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
-                </div>
-              </button>
-            );
-          })}
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+          {tabs.map((tab) => { const isActive = activeTab === tab.id; const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-3 text-xs font-extrabold transition-colors sm:text-sm ${isActive ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}><Icon className="h-4 w-4 shrink-0"/><span className="truncate">{tab.label}</span></button>; })}
         </div>
-      </motion.div>
+      </section>
 
       {/* Main Feature Viewport */}
       <AnimatePresence mode="wait">
