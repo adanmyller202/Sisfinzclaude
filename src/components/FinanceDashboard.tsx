@@ -94,6 +94,7 @@ interface FinanceDashboardProps {
   initialBillFilter?: 'all' | 'pending' | 'paid' | 'overdue';
   initialIncomeFilter?: 'all' | 'pending' | 'received';
   initialMonth?: string;
+  initialTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
   onReturnToFinance?: () => void;
   activePartners?: SharedUserSummary[];
   onShareWithPartner?: (params: {
@@ -126,6 +127,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   initialBillFilter,
   initialIncomeFilter,
   initialMonth,
+  initialTransaction,
   onReturnToFinance,
   activePartners = [],
   onShareWithPartner,
@@ -336,6 +338,38 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [initialTxType, setInitialTxType] = useState<TransactionType>('bill');
   const [editingTx, setEditingTx] = useState<EditingTransaction | null>(null);
+  const openedCalendarTransactionRef = useRef<string | null>(null);
+
+  // When arriving from the planning calendar, open the selected record on the
+  // Finance screen itself (never on top of the calendar's day sheet).
+  useEffect(() => {
+    if (!initialTransaction) {
+      openedCalendarTransactionRef.current = null;
+      return;
+    }
+
+    const targetMonth = initialMonth || selectedMonth;
+    const targetKey = `${initialTransaction.type}:${initialTransaction.id}:${targetMonth}`;
+    if (openedCalendarTransactionRef.current === targetKey || loading) return;
+
+    if (initialMonth && selectedMonth !== initialMonth) {
+      setSelectedMonth(initialMonth);
+      return;
+    }
+
+    const item = initialTransaction.type === 'bill'
+      ? bills.find((entry) => entry.id === initialTransaction.id)
+      : initialTransaction.type === 'income'
+        ? incomes.find((entry) => entry.id === initialTransaction.id)
+        : expenses.find((entry) => entry.id === initialTransaction.id);
+
+    if (!item) return;
+
+    openedCalendarTransactionRef.current = targetKey;
+    setInitialTxType(initialTransaction.type);
+    setEditingTx({ id: item.id, type: initialTransaction.type, item });
+    setIsTxModalOpen(true);
+  }, [initialTransaction, initialMonth, selectedMonth, setSelectedMonth, loading, bills, incomes, expenses]);
 
   // Recurring bill delete prompt modal
   const [billToDelete, setBillToDelete] = useState<{ bill: BillItem; month: string } | null>(null);
