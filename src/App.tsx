@@ -561,6 +561,7 @@ export default function App() {
     billFilter?: 'all' | 'pending' | 'paid' | 'overdue';
     incomeFilter?: 'all' | 'pending' | 'received';
     month?: string;
+    selectedTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
   } | null>(null);
 
   const handleNavigateToFinanceWithParams = useCallback(
@@ -570,6 +571,7 @@ export default function App() {
         billFilter?: 'all' | 'pending' | 'paid' | 'overdue';
         incomeFilter?: 'all' | 'pending' | 'received';
         month?: string;
+        selectedTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
       }
     ) => {
       setFinanceNavParams({ tab, ...options });
@@ -857,6 +859,14 @@ export default function App() {
                     language={currentLang}
                     onReturnToFinance={() => setCurrentView('finance')}
                     onOpenMoneChat={() => setIsMoneChatOpen(true)}
+                    onOpenTransaction={(item, month) => {
+                      if (!item.originalId) return;
+                      const type = item.type;
+                      handleNavigateToFinanceWithParams(
+                        type === 'bill' ? 'bills' : type === 'income' ? 'incomes' : 'expenses',
+                        { month, selectedTransaction: { type, id: item.originalId } }
+                      );
+                    }}
                   />
                 ) : currentView === 'freedom' ? (
                   <MonthlyFreedomScale
@@ -916,6 +926,7 @@ export default function App() {
                     initialBillFilter={financeNavParams?.billFilter}
                     initialIncomeFilter={financeNavParams?.incomeFilter}
                     initialMonth={financeNavParams?.month}
+                    initialTransaction={financeNavParams?.selectedTransaction}
                     onReturnToFinance={() => setCurrentView('finance')}
                     activePartners={sharedAccounts.activePartners}
                     onShareWithPartner={async (params) => {
