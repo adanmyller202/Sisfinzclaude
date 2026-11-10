@@ -40,6 +40,8 @@ interface PlanningViewProps {
   expenses: ExpenseItem[];
   sharedBills?: SharedBill[];
   statusRecords?: MonthlyStatusRecord[];
+  currentBalance?: number;
+  forecastBalance?: number;
   onOpenMoneChat?: () => void;
   onOpenNewTransaction?: (type: 'bill' | 'income' | 'expense') => void;
   overdueBillsCount?: number;
@@ -61,6 +63,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   expenses = [],
   sharedBills = [],
   statusRecords = [],
+  currentBalance = 0,
+  forecastBalance = currentBalance,
   onOpenMoneChat,
   onOpenNewTransaction,
   overdueBillsCount = 0,
@@ -73,6 +77,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
 
   const monthlyProjections = useMemo(() => {
     const list = [];
+    let projectedBalance = forecastBalance;
     for (let i = 0; i < 4; i++) {
       const monthStr = shiftMonthStr(currentMonth, i);
       const dateObj = new Date(parseInt(monthStr.split('-')[0]), parseInt(monthStr.split('-')[1]) - 1, 1);
@@ -104,11 +109,15 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
 
       expenses.filter(e => e.date?.startsWith(monthStr)).forEach(e => sumExpenses += e.amount);
 
-      const surplus = sumIncomes - sumExpenses;
+      // Current month starts from the real account balance and uses the same
+      // pending-income / pending-expense forecast as the Finance dashboard.
+      // Future months continue from the previous month's projected closing balance.
+      if (i > 0) projectedBalance += sumIncomes - sumExpenses;
+      const surplus = projectedBalance;
       list.push({ monthStr, monthTitle, isCurrent: i === 0, sumIncomes, sumExpenses, surplus, isPositive: surplus >= 0 });
     }
     return list;
-  }, [currentMonth, incomes, bills, sharedBills, expenses, locale]);
+  }, [currentMonth, incomes, bills, sharedBills, expenses, locale, forecastBalance, currentBalance]);
 
   const tabs = [
     { id: 'projections', label: 'Projeção', icon: BarChart3 },
