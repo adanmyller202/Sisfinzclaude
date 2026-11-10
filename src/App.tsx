@@ -580,10 +580,6 @@ export default function App() {
     []
   );
 
-  const handleInitialCalendarTransactionOpened = useCallback(() => {
-    setFinanceNavParams((previous) => previous ? { ...previous, selectedTransaction: undefined } : previous);
-  }, []);
-
   // Modals state
   const [activeSquareId, setActiveSquareId] = useState<number | null>(null);
   const [isNewGoalOpen, setIsNewGoalOpen] = useState(false);
@@ -847,6 +843,7 @@ export default function App() {
                 ) : currentView === 'full_report' ? (
                   <FullReportView
                     currency={activeCurrency}
+                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
