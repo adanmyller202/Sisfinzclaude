@@ -661,6 +661,37 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
     [userId, getLocalKey]
   );
 
+  // Create a normal income entry already marked as received. The caller credits the chosen account.
+  const addIncomeAsReceived = useCallback(
+    async (
+      incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+      receivedMonth: string
+    ): Promise<IncomeItem> => {
+      const created = await addIncome(incomeData);
+      const recordId = `income_${created.id}_${receivedMonth}`;
+      const receivedRecord: MonthlyStatusRecord = {
+        id: recordId,
+        userId: userId || '',
+        itemId: created.id,
+        itemType: 'income',
+        month: receivedMonth,
+        isCompleted: true,
+        completedAt: new Date().toISOString(),
+      };
+      setStatusRecords((prev) => {
+        const updated = [...prev.filter((r) => r.id !== recordId), receivedRecord];
+        try { localStorage.setItem(getLocalKey('status'), JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+      if (userId) {
+        const statusRef = doc(db, 'users', userId, 'monthly_status', recordId);
+        await setDoc(statusRef, sanitizeForFirestore(receivedRecord));
+      }
+      return created;
+    },
+    [addIncome, userId, getLocalKey]
+  );
+
   const updateIncome = useCallback(
     async (incomeId: string, partial: Partial<IncomeItem>) => {
       if (!userId) throw new Error('Usuário não autenticado.');
@@ -1484,6 +1515,7 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
     toggleBillPaid,
 
     addIncome,
+    addIncomeAsReceived,
     updateIncome,
     deleteIncome,
     toggleIncomeReceived,
