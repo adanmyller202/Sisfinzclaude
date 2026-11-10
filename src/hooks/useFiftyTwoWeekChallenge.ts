@@ -154,7 +154,8 @@ export function useFiftyTwoWeekChallenge() {
       challengeId: string,
       weekNumber: number,
       accountId: string,
-      adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>
+      adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>,
+      planCurrency?: CurrencyCode
     ): Promise<void> => {
       if (!userId) throw new Error('Usuário não autenticado.');
       if (!accountId) throw new Error('Selecione a conta de origem do depósito.');
@@ -179,6 +180,7 @@ export function useFiftyTwoWeekChallenge() {
       const isAllDone = updatedCompletedWeeks.length >= totalWeeks;
       const updatedChallenge: FiftyTwoWeekChallenge = {
         ...target,
+        ...(planCurrency ? { currency: planCurrency } : {}),
         completedWeeks: updatedCompletedWeeks,
         weekAccountIds: updatedWeekAccountIds,
         status: isAllDone ? 'completed' : 'active',
