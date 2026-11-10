@@ -93,6 +93,7 @@ export function useFiftyTwoWeekChallenge() {
       totalWeeks?: number;
       savingMode?: 'progressive' | 'fixed';
       totalTarget?: number;
+      storageLocation?: string;
     }): Promise<FiftyTwoWeekChallenge> => {
       if (!userId) throw new Error('Usuário não autenticado.');
       if (params.initialAmount <= 0) throw new Error('O valor inicial deve ser maior que zero.');
@@ -114,7 +115,9 @@ export function useFiftyTwoWeekChallenge() {
         savingMode,
         startDate: params.startDate || now.slice(0, 10),
         totalTarget,
+        storageLocation: params.storageLocation?.trim() || '',
         completedWeeks: [],
+        weekAccountIds: {},
         weekExpenses: {},
         createdAt: now,
         updatedAt: now,
@@ -143,20 +146,19 @@ export function useFiftyTwoWeekChallenge() {
     [userId, challenges, getLocalKey]
   );
 
-  // Complete a week
+  // Complete a week by moving real money out of the selected account into the plan.
   const completeWeek = useCallback(
     async (
       challengeId: string,
       weekNumber: number,
-      addExpenseFn: (expData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>
+      accountId: string,
+      adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>
     ): Promise<void> => {
       if (!userId) throw new Error('Usuário não autenticado.');
+      if (!accountId) throw new Error('Selecione a conta de origem do depósito.');
       const target = challenges.find((c) => c.id === challengeId);
-      if (!target) throw new Error('Desafio não encontrado.');
-
-      if (target.completedWeeks.includes(weekNumber)) {
-        return; // Already completed
-      }
+      if (!target) throw new Error('Plano não encontrado.');
+      if (target.completedWeeks.includes(weekNumber)) return;
 
       const totalWeeks = Math.max(1, Math.floor(target.totalWeeks || 52));
       if (weekNumber < 1 || weekNumber > totalWeeks) throw new Error('Etapa inválida para este plano.');
@@ -166,38 +168,22 @@ export function useFiftyTwoWeekChallenge() {
         ? (weekNumber === totalWeeks ? Math.round((target.totalTarget - fixedWeeklyAmount * (totalWeeks - 1)) * 100) / 100 : fixedWeeklyAmount)
         : Math.round(target.initialAmount * weekNumber * 100) / 100;
 
-      // Calculate week date: startDate + (weekNumber - 1) * 7 days
-      const start = new Date(target.startDate);
-      start.setDate(start.getDate() + (weekNumber - 1) * 7);
-      const weekDateStr = start.toISOString().slice(0, 10);
-
-      // Automatically register expense under category "Investimentos"
-      const createdExpense = await addExpenseFn({
-        name: `Plano semanal: etapa ${weekNumber}`,
-        amount: weekAmount,
-        date: weekDateStr,
-        category: 'Investimentos',
-        notes: `Depósito da etapa ${weekNumber} do plano semanal`,
-      });
+      // Debit the selected account exactly once. This is a transfer into savings, not an expense.
+      await adjustAccountBalanceFn(accountId, -weekAmount);
 
       const now = new Date().toISOString();
       const updatedCompletedWeeks = [...target.completedWeeks, weekNumber].sort((a, b) => a - b);
-      const updatedWeekExpenses = {
-        ...(target.weekExpenses || {}),
-        [weekNumber]: createdExpense.id,
-      };
+      const updatedWeekAccountIds = { ...(target.weekAccountIds || {}), [weekNumber]: accountId };
       const isAllDone = updatedCompletedWeeks.length >= totalWeeks;
-
       const updatedChallenge: FiftyTwoWeekChallenge = {
         ...target,
         completedWeeks: updatedCompletedWeeks,
-        weekExpenses: updatedWeekExpenses,
+        weekAccountIds: updatedWeekAccountIds,
         status: isAllDone ? 'completed' : 'active',
         updatedAt: now,
       };
 
       setChallenges((prev) => prev.map((c) => (c.id === challengeId ? updatedChallenge : c)));
-
       try {
         const docRef = doc(db, 'users', userId, 'fifty_two_week_challenges', challengeId);
         await setDoc(docRef, sanitizeForFirestore(updatedChallenge), { merge: true });
@@ -208,48 +194,77 @@ export function useFiftyTwoWeekChallenge() {
     [userId, challenges]
   );
 
-  // Undo a completed week
+  // Undo a deposit by returning the money to the account chosen by the user.
   const undoWeek = useCallback(
     async (
       challengeId: string,
       weekNumber: number,
+      returnAccountId: string,
+      adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>,
       deleteExpenseFn: (expenseId: string) => Promise<void>
     ): Promise<void> => {
       if (!userId) throw new Error('Usuário não autenticado.');
+      if (!returnAccountId) throw new Error('Selecione a conta que receberá a devolução.');
       const target = challenges.find((c) => c.id === challengeId);
-      if (!target) throw new Error('Desafio não encontrado.');
+      if (!target) throw new Error('Plano não encontrado.');
+      if (!target.completedWeeks.includes(weekNumber)) return;
 
-      if (!target.completedWeeks.includes(weekNumber)) {
-        return; // Not completed
+      const totalWeeks = Math.max(1, Math.floor(target.totalWeeks || 52));
+      const savingMode = target.savingMode || 'progressive';
+      const fixedWeeklyAmount = Math.round((target.totalTarget / totalWeeks) * 100) / 100;
+      const weekAmount = savingMode === 'fixed'
+        ? (weekNumber === totalWeeks ? Math.round((target.totalTarget - fixedWeeklyAmount * (totalWeeks - 1)) * 100) / 100 : fixedWeeklyAmount)
+        : Math.round(target.initialAmount * weekNumber * 100) / 100;
+
+      // New deposits have an account reference and are returned as a balance credit.
+      const originalAccountId = target.weekAccountIds?.[weekNumber];
+      if (originalAccountId) {
+        await adjustAccountBalanceFn(returnAccountId, weekAmount);
       }
 
-      const expenseId = target.weekExpenses?.[weekNumber];
-      if (expenseId) {
-        try {
-          await deleteExpenseFn(expenseId);
-        } catch (err) {
-          console.warn('Could not delete associated expense:', err);
-        }
+      // Compatibility with old plans: remove the legacy expense record, if one exists.
+      const legacyExpenseId = target.weekExpenses?.[weekNumber];
+      if (legacyExpenseId) {
+        try { await deleteExpenseFn(legacyExpenseId); }
+        catch (err) { console.warn('Não foi possível remover o lançamento antigo do depósito:', err); }
       }
 
       const now = new Date().toISOString();
       const updatedCompletedWeeks = target.completedWeeks.filter((w) => w !== weekNumber);
       const updatedWeekExpenses = { ...(target.weekExpenses || {}) };
+      const updatedWeekAccountIds = { ...(target.weekAccountIds || {}) };
       delete updatedWeekExpenses[weekNumber];
-
+      delete updatedWeekAccountIds[weekNumber];
       const updatedChallenge: FiftyTwoWeekChallenge = {
         ...target,
         completedWeeks: updatedCompletedWeeks,
         weekExpenses: updatedWeekExpenses,
+        weekAccountIds: updatedWeekAccountIds,
         status: 'active',
         updatedAt: now,
       };
 
       setChallenges((prev) => prev.map((c) => (c.id === challengeId ? updatedChallenge : c)));
-
       try {
         const docRef = doc(db, 'users', userId, 'fifty_two_week_challenges', challengeId);
         await setDoc(docRef, sanitizeForFirestore(updatedChallenge), { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `fifty_two_week_challenges/${challengeId}`);
+      }
+    },
+    [userId, challenges]
+  );
+
+  const updateStorageLocation = useCallback(
+    async (challengeId: string, storageLocation: string): Promise<void> => {
+      if (!userId) throw new Error('Usuário não autenticado.');
+      const target = challenges.find((c) => c.id === challengeId);
+      if (!target) throw new Error('Plano não encontrado.');
+      const updatedChallenge = { ...target, storageLocation: storageLocation.trim(), updatedAt: new Date().toISOString() };
+      setChallenges((prev) => prev.map((c) => c.id === challengeId ? updatedChallenge : c));
+      try {
+        const docRef = doc(db, 'users', userId, 'fifty_two_week_challenges', challengeId);
+        await setDoc(docRef, sanitizeForFirestore({ storageLocation: updatedChallenge.storageLocation, updatedAt: updatedChallenge.updatedAt }), { merge: true });
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `fifty_two_week_challenges/${challengeId}`);
       }
@@ -285,6 +300,7 @@ export function useFiftyTwoWeekChallenge() {
     createChallenge,
     completeWeek,
     undoWeek,
+    updateStorageLocation,
     deleteChallenge,
   };
 }
