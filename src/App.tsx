@@ -775,7 +775,7 @@ export default function App() {
                 ) : currentView === 'report' ? (
                   <FullReportView
                     currency={activeCurrency}
-                    currentAccountBalance={currentBalance}
+                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
