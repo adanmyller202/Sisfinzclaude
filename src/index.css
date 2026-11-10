@@ -317,3 +317,21 @@ div[role="dialog"] {
   .settings-confirm-solid .text-white { color: #1F2937 !important; }
   .settings-confirm-solid [class*="bg-white/5"] { background-color: #F8FAFC !important; }
 }
+
+
+/* Global dark theme: override the light base surfaces and the app shell. */
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: #020617 !important;
+  color: #F1F5F9 !important;
+}
+html.dark body,
+html.dark #root {
+  color-scheme: dark;
+}
+html.dark .mesh-gradient {
+  background-color: #020617 !important;
+  background-image: radial-gradient(circle at 15% 10%, rgba(16, 185, 129, 0.10), transparent 35%),
+    radial-gradient(circle at 85% 80%, rgba(20, 184, 166, 0.08), transparent 35%) !important;
+}
