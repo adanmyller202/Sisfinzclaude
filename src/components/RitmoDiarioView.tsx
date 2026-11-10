@@ -245,11 +245,12 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
             </div>
             <div>
               <div className="text-4xl font-black text-slate-900 font-mono tracking-tight">{formatCurrency(realAvailable, currency)}</div>
-              <p className="text-xs font-medium text-slate-600 mt-2">Valor livre após descontar compromissos fixos até o dia {resolvedPaydayStr.split('-')[2]}.</p>
+              <p className="text-xs font-medium text-slate-600 mt-2">Saldo após reservar as contas pendentes até {resolvedPaydayStr.split('-').reverse().join('/')}. Próximo ingresso: {paydayInfo.name}.</p>
             </div>
             <div className="h-3 w-full bg-slate-200/80 rounded-full overflow-hidden border border-slate-200/50">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max(15, (daysRemaining / 30) * 100)}%` }} className="h-full bg-gradient-to-r from-emerald-600 to-teal-400" />
+              <motion.div initial={{ width: 0 }} animate={{ width: `${availablePercentage}%` }} className="h-full bg-gradient-to-r from-emerald-600 to-teal-400" />
             </div>
+            <div className="flex justify-between text-[10px] font-bold text-slate-500"><span>Reserva: {formatCurrency(pendingSum, currency)}</span><span>{availablePercentage.toFixed(0)}% livre</span></div>
           </div>
         </motion.div>
 
@@ -271,7 +272,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
               </div>
               <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs">
                 <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Restante</div>
-                <div className={`text-lg font-black font-mono ${dailyBudget - todaySpent >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(Math.max(0, dailyBudget - todaySpent), currency)}</div>
+                <div className={`text-lg font-black font-mono ${dailyBudget - todaySpent >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCurrency(remainingToday, currency)}</div>
               </div>
             </div>
           </div>
@@ -285,7 +286,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
           <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-1">Conselho SisFinz</h4>
           <p className="text-sm font-medium text-slate-600 leading-relaxed">
             {dailyBudget <= 0 ? 'Atenção! Seus compromissos superam seu saldo disponível. Evite novos gastos.' : 
-             todaySpent > dailyBudget ? 'Você superou o limite diário. Tente economizar nos próximos dias para reequilibrar.' :
+             remainingToday < 0 ? 'Você ultrapassou o limite de hoje. O excedente será descontado do ritmo dos próximos dias.' :
              'Você está dentro do ritmo! Continue assim para fechar o ciclo com folga financeira.'}
           </p>
         </div>
@@ -298,7 +299,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shadow-xs"><ShieldAlert className="w-6 h-6" /></div>
             <div>
               <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none mb-1">Reserva de Segurança</h3>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest opacity-80">Compromissos protegidos até {resolvedPaydayStr}</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest opacity-80">Contas pendentes até {resolvedPaydayStr.split('-').reverse().join('/')}</p>
             </div>
           </div>
           <div className="text-2xl font-black text-rose-600 font-mono">-{formatCurrency(pendingSum, currency)}</div>
@@ -306,16 +307,16 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
 
         <div className="p-8 space-y-4">
           {pendingCommitmentsList.length === 0 ? (
-            <div className="p-12 rounded-[2rem] border border-dashed border-white/5 text-center text-slate-600 font-bold">Sem contas pendentes até o próximo salário</div>
+            <div className="p-12 rounded-[2rem] border border-dashed border-white/5 text-center text-slate-600 font-bold">Sem contas pendentes até o próximo ingresso</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {pendingCommitmentsList.map((item, idx) => (
                 <div key={idx} className="p-4 rounded-2xl bg-white/2 border border-white/5 hover:bg-white/5 transition-all flex items-center justify-between group">
                   <div className="min-w-0">
-                    <div className="text-sm font-black text-white group-hover:text-amber-400 transition-colors truncate">{item.name}</div>
+                    <div className="text-sm font-black text-slate-800 group-hover:text-amber-600 transition-colors truncate">{item.name}</div>
                     <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">Vence dia {item.due.split('-')[2]}</div>
                   </div>
-                  <div className="text-sm font-black text-rose-400 font-mono">-{formatCurrency(item.amount, currency)}</div>
+                  <div className="text-sm font-black text-rose-600 font-mono">-{formatCurrency(item.amount, currency)}</div>
                 </div>
               ))}
             </div>
