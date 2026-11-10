@@ -245,7 +245,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
             </div>
             <div>
               <div className="text-4xl font-black text-slate-900 font-mono tracking-tight">{formatCurrency(realAvailable, currency)}</div>
-              <p className="text-xs font-medium text-slate-600 mt-2">Saldo após reservar as contas pendentes até {resolvedPaydayStr.split('-').reverse().join('/')}. Próximo ingresso: {paydayInfo.name}.</p>
+              <p className="text-xs font-medium text-slate-600 mt-2">Saldo após reservar as contas pendentes até {resolvedPaydayStr.split('-').reverse().join('/')}. Próximo ingresso de maior valor: {paydayInfo.name} ({formatCurrency(paydayInfo.amount, currency)}).</p>
             </div>
             <div className="h-3 w-full bg-slate-200/80 rounded-full overflow-hidden border border-slate-200/50">
               <motion.div initial={{ width: 0 }} animate={{ width: `${availablePercentage}%` }} className="h-full bg-gradient-to-r from-emerald-600 to-teal-400" />
@@ -314,7 +314,7 @@ export const RitmoDiarioView: React.FC<RitmoDiarioViewProps> = ({
                 <div key={idx} className="p-4 rounded-2xl bg-white/2 border border-white/5 hover:bg-white/5 transition-all flex items-center justify-between group">
                   <div className="min-w-0">
                     <div className="text-sm font-black text-slate-800 group-hover:text-amber-600 transition-colors truncate">{item.name}</div>
-                    <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">Vence dia {item.due.split('-')[2]}</div>
+                    <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{item.due < todayStr ? 'Vencida' : 'Vence'} em {item.due.split('-').reverse().join('/')}</div>
                   </div>
                   <div className="text-sm font-black text-rose-600 font-mono">-{formatCurrency(item.amount, currency)}</div>
                 </div>
