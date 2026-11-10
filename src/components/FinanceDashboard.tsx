@@ -76,7 +76,6 @@ import {
   Target,
   PiggyBank,
   ArrowRightLeft,
-  PieChart as PieChartIcon,
   Eye,
   Undo2,
 } from 'lucide-react';
