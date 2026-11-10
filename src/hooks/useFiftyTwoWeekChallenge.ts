@@ -94,6 +94,7 @@ export function useFiftyTwoWeekChallenge() {
       savingMode?: 'progressive' | 'fixed';
       totalTarget?: number;
       storageLocation?: string;
+      currency?: import('../types').CurrencyCode;
     }): Promise<FiftyTwoWeekChallenge> => {
       if (!userId) throw new Error('Usuário não autenticado.');
       if (params.initialAmount <= 0) throw new Error('O valor inicial deve ser maior que zero.');
@@ -110,6 +111,7 @@ export function useFiftyTwoWeekChallenge() {
         id,
         userId,
         title: params.title?.trim() || 'Plano Semanal',
+        currency: params.currency || 'ARS',
         initialAmount: params.initialAmount,
         totalWeeks,
         savingMode,
