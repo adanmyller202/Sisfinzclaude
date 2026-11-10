@@ -97,6 +97,8 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     timelineItems,
     baseBalance,
     currentBalance,
+    forecastBalance,
+    monthBills,
     toggleBillPaid,
     toggleIncomeReceived,
   } = useFinanceControl(
@@ -215,8 +217,12 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
       });
     }
 
-    return { daysData: days, totalInflows: sumInflows, totalOutflows: sumOutflows, endMonthProjected: runningBalance, maxDayOutflow: maxOutflow, peakDayNumber: peakDay, firstNegativeDay: firstNegDay };
-  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, currentBalance, accounts, accountsTotalBalance, selectedMonth, todayStr, activeFilter]);
+    // The central forecast also includes pending shared-bill obligations,
+    // which are intentionally excluded from timelineItems to avoid duplication.
+    const finalProjectedBalance = isCurrentSelectedMonth ? forecastBalance : runningBalance;
+
+    return { daysData: days, totalInflows: sumInflows, totalOutflows: sumOutflows, endMonthProjected: finalProjectedBalance, maxDayOutflow: maxOutflow, peakDayNumber: peakDay, firstNegativeDay: firstNegDay };
+  }, [daysInMonth, yearStr, monthNumStr, itemsByDay, baseBalance, currentBalance, forecastBalance, monthBills, accounts, accountsTotalBalance, selectedMonth, todayStr, activeFilter]);
 
   const selectedDayData = useMemo(() => daysData.find((d) => d.dayNumber === selectedDayNum) || daysData[0] || null, [daysData, selectedDayNum]);
 
