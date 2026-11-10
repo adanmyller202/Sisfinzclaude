@@ -774,6 +774,26 @@ export default function App() {
                     accounts={accounts}
                     onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
                     onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
+                    onRedeemChallenge={async (challenge, accountId) => {
+                      if (challenge.redeemedAt || challenge.redemptionIncomeId) throw new Error('Esta meta já foi resgatada.');
+                      const account = accounts.find((item) => item.id === accountId && item.isActive !== false);
+                      if (!account) throw new Error('A conta selecionada não está mais disponível.');
+                      if ((account.currency || 'ARS') !== (challenge.currency || 'ARS')) throw new Error('A conta precisa estar na mesma moeda da meta.');
+                      const today = new Date().toISOString().slice(0, 10);
+                      const month = today.slice(0, 7);
+                      const income = await addIncomeAsReceived({
+                        name: `Plano Semanal – ${challenge.title}`,
+                        amount: Number(challenge.totalTarget) || 0,
+                        expectedDate: today,
+                        expectedDay: Number(today.slice(8, 10)),
+                        category: 'Metas',
+                        recurrence: 'none',
+                        startMonth: month,
+                        accountId,
+                      }, month);
+                      await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
+                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
+                    }}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
