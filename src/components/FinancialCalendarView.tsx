@@ -80,6 +80,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
   language = 'pt',
   onReturnToFinance,
   onOpenMoneChat,
+  onOpenTransaction,
 }) => {
   const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
