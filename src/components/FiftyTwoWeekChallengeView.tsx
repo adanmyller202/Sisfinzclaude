@@ -1,459 +1,91 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowLeft, ArrowUpRight, Award, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Coins, Flag, Loader2, PiggyBank, Plus, RotateCcw, Sparkles, Target, TrendingUp, Trash2, X } from 'lucide-react';
 import { FiftyTwoWeekChallenge, CurrencyCode, LanguageCode, ExpenseItem } from '../types';
 import { formatCurrency } from '../utils/currency';
-import { getTranslations } from '../utils/i18n';
-import {
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Plus,
-  ArrowLeft,
-  Sparkles,
-  TrendingUp,
-  Target,
-  PiggyBank,
-  Check,
-  RotateCcw,
-  Trash2,
-  ChevronRight,
-  AlertCircle,
-  Award,
-  Wallet,
-  Loader2,
-  ArrowUpRight,
-  History,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 
-interface FiftyTwoWeekChallengeViewProps {
-  currency: CurrencyCode;
-  language?: LanguageCode;
-  activeChallenge: FiftyTwoWeekChallenge | null;
-  challenges: FiftyTwoWeekChallenge[];
+interface Props {
+  currency: CurrencyCode; language?: LanguageCode; activeChallenge: FiftyTwoWeekChallenge | null; challenges: FiftyTwoWeekChallenge[];
   onSelectChallenge: (id: string) => void;
-  onCreateChallenge: (params: { initialAmount: number; startDate: string; title?: string }) => Promise<any>;
-  onCompleteWeek: (
-    challengeId: string,
-    weekNumber: number,
-    addExpenseFn: (exp: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>
-  ) => Promise<void>;
-  onUndoWeek: (
-    challengeId: string,
-    weekNumber: number,
-    deleteExpenseFn: (expenseId: string) => Promise<void>
-  ) => Promise<void>;
+  onCreateChallenge: (params: { initialAmount: number; startDate: string; title?: string; totalWeeks: number }) => Promise<any>;
+  onCompleteWeek: (challengeId: string, weekNumber: number, addExpenseFn: (exp: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>) => Promise<void>;
+  onUndoWeek: (challengeId: string, weekNumber: number, deleteExpenseFn: (expenseId: string) => Promise<void>) => Promise<void>;
   onDeleteChallenge: (challengeId: string) => Promise<void>;
   onAddExpense: (exp: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
-  onDeleteExpense: (expenseId: string) => Promise<void>;
-  onReturnToFinance?: () => void;
+  onDeleteExpense: (expenseId: string) => Promise<void>; onReturnToFinance?: () => void;
 }
+const todayISO = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); };
 
-export const FiftyTwoWeekChallengeView: React.FC<FiftyTwoWeekChallengeViewProps> = ({
-  currency,
-  language = 'pt',
-  activeChallenge,
-  challenges,
-  onSelectChallenge,
-  onCreateChallenge,
-  onCompleteWeek,
-  onUndoWeek,
-  onDeleteChallenge,
-  onAddExpense,
-  onDeleteExpense,
-  onReturnToFinance,
-}) => {
-  const t = getTranslations(language);
-
-  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
-  const [initialAmountStr, setInitialAmountStr] = useState<string>('1000');
-  const [startDateInput, setStartDateInput] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [titleInput, setTitleInput] = useState<string>('');
-  const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
-
-  const [weekToConfirm, setWeekToConfirm] = useState<number | null>(null);
-  const [weekToUndo, setWeekToUndo] = useState<number | null>(null);
-  const [isSubmittingWeek, setIsSubmittingWeek] = useState<boolean>(false);
-
-  const [weekFilter, setWeekFilter] = useState<'all' | 'pending' | 'completed'>('all');
-
-  const parsedInitialAmount = useMemo(() => {
-    return parseFloat(initialAmountStr.replace(',', '.')) || 0;
-  }, [initialAmountStr]);
-
-  const creationTotalTarget = useMemo(() => {
-    return Math.round(parsedInitialAmount * 1378);
-  }, [parsedInitialAmount]);
-
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (parsedInitialAmount <= 0) return;
-    try {
-      setIsSubmittingCreate(true);
-      await onCreateChallenge({
-        initialAmount: parsedInitialAmount,
-        startDate: startDateInput,
-        title: titleInput.trim() || undefined,
-      });
-      setIsCreatingNew(false);
-    } catch (err) {
-      console.error('Error creating 52-week challenge:', err);
-    } finally {
-      setIsSubmittingCreate(false);
-    }
-  };
-
-  const metrics = useMemo(() => {
-    if (!activeChallenge) return null;
-
-    const completedWeeksSet = new Set(activeChallenge.completedWeeks);
-    let totalSaved = 0;
-    for (const w of activeChallenge.completedWeeks) {
-      totalSaved += activeChallenge.initialAmount * w;
-    }
-
-    const remainingAmount = Math.max(0, activeChallenge.totalTarget - totalSaved);
-    const progressPercent = activeChallenge.totalTarget > 0 ? Math.min(100, (totalSaved / activeChallenge.totalTarget) * 100) : 0;
-
-    const startMs = new Date(activeChallenge.startDate).getTime();
-    const todayMs = new Date().getTime();
-    const diffDays = Math.floor((todayMs - startMs) / (1000 * 60 * 60 * 24));
-    const currentCalculatedWeek = Math.max(1, Math.min(52, Math.floor(diffDays / 7) + 1));
-
-    let nextUncompletedWeek = 1;
-    for (let w = 1; w <= 52; w++) {
-      if (!completedWeeksSet.has(w)) {
-        nextUncompletedWeek = w;
-        break;
-      }
-    }
-
-    const nextWeekAmount = activeChallenge.initialAmount * nextUncompletedWeek;
-
-    return {
-      completedWeeksSet,
-      completedCount: activeChallenge.completedWeeks.length,
-      totalSaved,
-      remainingAmount,
-      progressPercent,
-      currentCalculatedWeek,
-      nextUncompletedWeek,
-      nextWeekAmount,
-    };
-  }, [activeChallenge]);
-
-  const allWeeksList = useMemo(() => {
-    if (!activeChallenge) return [];
-    const list = [];
-    const startDateObj = new Date(activeChallenge.startDate);
-    for (let w = 1; w <= 52; w++) {
-      const weekAmount = Math.round(activeChallenge.initialAmount * w);
-      const weekDateObj = new Date(startDateObj);
-      weekDateObj.setDate(weekDateObj.getDate() + (w - 1) * 7);
-      const weekDateStr = weekDateObj.toISOString().slice(0, 10);
-      const formattedDate = weekDateObj.toLocaleDateString(language === 'es' ? 'es-ES' : language === 'en' ? 'en-US' : 'pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const isCompleted = activeChallenge.completedWeeks.includes(w);
-      const isCurrentWeek = metrics?.currentCalculatedWeek === w;
-      list.push({ weekNumber: w, amount: weekAmount, dateStr: weekDateStr, formattedDate, isCompleted, isCurrentWeek });
-    }
-    return list;
-  }, [activeChallenge, language, metrics]);
-
-  const filteredWeeks = useMemo(() => {
-    return allWeeksList.filter((w) => {
-      if (weekFilter === 'completed') return w.isCompleted;
-      if (weekFilter === 'pending') return !w.isCompleted;
-      return true;
+export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onDeleteChallenge, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
+  const [creating,setCreating]=useState(!activeChallenge), [title,setTitle]=useState(''), [initialAmount,setInitialAmount]=useState('1000'), [totalWeeksInput,setTotalWeeksInput]=useState('52'), [startDate,setStartDate]=useState(todayISO()), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [showChallenges,setShowChallenges]=useState(false);
+  const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0), previewTotal=firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
+  const totalWeeks=Math.max(1,Math.floor(activeChallenge?.totalWeeks||52));
+  const completedSet=useMemo(()=>new Set(activeChallenge?.completedWeeks||[]),[activeChallenge]);
+  const metrics=useMemo(()=>{
+    if(!activeChallenge)return null;
+    const count=activeChallenge.completedWeeks.length, saved=activeChallenge.completedWeeks.reduce((s,w)=>s+activeChallenge.initialAmount*w,0);
+    const target=Number(activeChallenge.totalTarget)||activeChallenge.initialAmount*totalWeeks*(totalWeeks+1)/2;
+    const next=Array.from({length:totalWeeks},(_,i)=>i+1).find(w=>!completedSet.has(w))||0;
+    const diff=Math.floor((new Date(todayISO()+'T00:00:00').getTime()-new Date(activeChallenge.startDate+'T00:00:00').getTime())/86400000);
+    return {count,saved,target,remaining:Math.max(0,target-saved),percent:target>0?Math.min(100,saved/target*100):0,currentWeek:Math.max(1,Math.min(totalWeeks,Math.floor(diff/7)+1)),next,nextAmount:next?activeChallenge.initialAmount*next:0};
+  },[activeChallenge,totalWeeks,completedSet]);
+  const weeks=useMemo(()=>{
+    if(!activeChallenge)return [];
+    const start=new Date(activeChallenge.startDate+'T00:00:00');
+    return Array.from({length:totalWeeks},(_,i)=>{
+      const number=i+1,date=new Date(start); date.setDate(date.getDate()+i*7);
+      return {number,amount:Math.round(activeChallenge.initialAmount*number),date:date.toLocaleDateString(language==='es'?'es-ES':language==='en'?'en-US':'pt-BR',{day:'2-digit',month:'short'}),completed:completedSet.has(number),current:metrics?.currentWeek===number};
     });
-  }, [allWeeksList, weekFilter]);
-
-  const handleConfirmWeekSubmit = async () => {
-    if (!activeChallenge || weekToConfirm === null) return;
-    try {
-      setIsSubmittingWeek(true);
-      await onCompleteWeek(activeChallenge.id, weekToConfirm, onAddExpense);
-      setWeekToConfirm(null);
-    } catch (err) {
-      console.error('Error confirming week:', err);
-    } finally {
-      setIsSubmittingWeek(false);
-    }
+  },[activeChallenge,totalWeeks,language,completedSet,metrics?.currentWeek]);
+  const visibleWeeks=weeks.filter(w=>filter==='all'||(filter==='completed'?w.completed:!w.completed));
+  const create=async(e:React.FormEvent)=>{
+    e.preventDefault(); if(firstDeposit<=0||requestedWeeks<1||!Number.isInteger(requestedWeeks))return;
+    try{setSaving(true);await onCreateChallenge({initialAmount:firstDeposit,startDate,title:title.trim()||undefined,totalWeeks:requestedWeeks});setCreating(false);}
+    catch(err){console.error('Erro ao criar plano semanal:',err);}finally{setSaving(false);}
   };
-
-  const handleUndoWeekSubmit = async () => {
-    if (!activeChallenge || weekToUndo === null) return;
-    try {
-      setIsSubmittingWeek(true);
-      await onUndoWeek(activeChallenge.id, weekToUndo, onDeleteExpense);
-      setWeekToUndo(null);
-    } catch (err) {
-      console.error('Error undoing week:', err);
-    } finally {
-      setIsSubmittingWeek(false);
-    }
+  const confirmWeek=async()=>{
+    if(!activeChallenge||!selectedWeek)return;
+    try{setBusy(true);if(selectedWeek.undo)await onUndoWeek(activeChallenge.id,selectedWeek.number,onDeleteExpense);else await onCompleteWeek(activeChallenge.id,selectedWeek.number,onAddExpense);setSelectedWeek(null);}
+    catch(err){console.error('Erro ao atualizar etapa:',err);}finally{setBusy(false);}
   };
-
-  const containerVariants: any = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.05 } }
+  const removeChallenge=async()=>{
+    if(!activeChallenge)return;
+    if(!window.confirm('Deseja excluir este plano? Os depósitos já registrados como despesas não serão apagados automaticamente.'))return;
+    await onDeleteChallenge(activeChallenge.id);setCreating(true);
   };
+  const locale=language==='es'?'es-ES':language==='en'?'en-US':'pt-BR';
 
-  const itemVariants: any = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } }
-  };
-
-  if (!activeChallenge || isCreatingNew) {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onReturnToFinance}
-            className="h-11 px-4 rounded-2xl glass-card text-slate-700 text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-white transition-all cursor-pointer shadow-xs"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar
-          </button>
-          {challenges.length > 0 && (
-            <button onClick={() => setIsCreatingNew(false)} className="text-xs font-black text-emerald-600 uppercase tracking-widest hover:underline">
-              Voltar ao Ativo
-            </button>
-          )}
+  if(!activeChallenge||creating)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
+    <div className="flex items-center justify-between"><button onClick={onReturnToFinance} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="w-4 h-4"/>Voltar</button>{challenges.length>0&&<button onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus planos</button>}</div>
+    <div className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-xl shadow-emerald-900/5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15"><Target className="h-7 w-7"/></div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">Plano Semanal</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada etapa.</p></div></div></div>
+      <form onSubmit={create} className="space-y-6 p-5 sm:p-8">
+        <div><label className="mb-2 block text-sm font-bold text-slate-700">Nome da sua meta</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Minha viagem, reserva de emergência..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/></div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div><label className="mb-2 block text-sm font-bold text-slate-700">Quanto guardar na 1ª semana?</label><div className="relative"><Coins className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="0.01" step="0.01" required value={initialAmount} onChange={e=>setInitialAmount(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div><div className="mt-2 flex flex-wrap gap-2">{[100,500,1000,2000].map(v=><button key={v} type="button" onClick={()=>setInitialAmount(String(v))} className={'rounded-lg border px-3 py-1.5 text-xs font-bold '+(firstDeposit===v?'border-emerald-600 bg-emerald-600 text-white':'border-slate-200 bg-white text-slate-600 hover:border-emerald-300')}>{formatCurrency(v,currency)}</button>)}</div></div>
+          <div><label className="mb-2 block text-sm font-bold text-slate-700">Por quantas semanas?</label><div className="relative"><CalendarDays className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-violet-600"/><input type="number" min="1" step="1" required value={totalWeeksInput} onChange={e=>setTotalWeeksInput(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-100"/></div><p className="mt-2 text-xs text-slate-500">Escolha a duração que fizer sentido para sua meta.</p></div>
         </div>
-
-        <div className="glass-panel rounded-[2.5rem] p-8 sm:p-10 shadow-xl max-w-2xl mx-auto overflow-hidden relative group">
-          <div className="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity">
-            <Award className="w-48 h-48 text-emerald-600" />
-          </div>
-
-          <div className="flex items-center gap-4 mb-10 relative z-10">
-            <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20">
-              <Award className="w-8 h-8" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Desafio 52 Semanas</h2>
-              <p className="text-xs text-slate-600 font-medium max-w-sm mt-1">Economia progressiva para construir patrimônio com constância.</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleCreateSubmit} className="space-y-8 relative z-10">
-            <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Título do Desafio</label>
-              <input
-                type="text"
-                value={titleInput}
-                onChange={(e) => setTitleInput(e.target.value)}
-                placeholder="Ex: Reserva 2026"
-                className="w-full h-14 rounded-2xl bg-white/5 border border-white/10 px-6 text-white font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all outline-none"
-              />
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Valor da Semana 1 (Multiplicador)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  required
-                  value={initialAmountStr}
-                  onChange={(e) => setInitialAmountStr(e.target.value.replace(/^0+(?=\d)/, ''))}
-                  className="w-full h-16 rounded-2xl bg-white/5 border border-white/10 pl-16 pr-6 text-2xl font-black text-emerald-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500/50 transition-all outline-none font-mono"
-                />
-                <div className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-600 font-black text-xl">$</div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {[100, 500, 1000, 2000].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setInitialAmountStr(String(p))}
-                    className={`h-10 px-4 rounded-xl border text-[11px] font-black tracking-widest uppercase transition-all cursor-pointer ${
-                      parsedInitialAmount === p ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
-                    }`}
-                  >
-                    {formatCurrency(p, currency)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-6 rounded-[2rem] bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-between group">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500/70 mb-1">Total do Desafio</div>
-                <div className="text-3xl font-black text-white group-hover:text-emerald-400 transition-colors">{formatCurrency(creationTotalTarget, currency)}</div>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-emerald-400 border border-white/10">
-                <Target className="w-6 h-6" />
-              </div>
-            </div>
-
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={isSubmittingCreate || parsedInitialAmount <= 0}
-              className="w-full h-16 rounded-[1.5rem] bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-            >
-              {isSubmittingCreate ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
-              {isSubmittingCreate ? 'Lançando...' : 'Iniciar Desafio'}
-            </motion.button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-20">
-      {/* Cinematic Header Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 glass-panel rounded-[2.5rem] p-8 relative overflow-hidden group shadow-md">
-          <div className="absolute top-0 right-0 p-8 opacity-10"><Award className="w-32 h-32 text-emerald-600" /></div>
-          
-          <div className="flex items-center gap-3 mb-6">
-            <button onClick={onReturnToFinance} className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 transition-all shadow-xs"><ArrowLeft className="w-5 h-5" /></button>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">{activeChallenge.title}</h2>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 relative z-10">
-            <div className="space-y-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Progresso</div>
-              <div className="text-2xl font-black text-slate-900">{metrics?.progressPercent.toFixed(1)}%</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Acumulado</div>
-              <div className="text-2xl font-black text-emerald-600 font-mono">{formatCurrency(metrics?.totalSaved || 0, currency)}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Semanas</div>
-              <div className="text-2xl font-black text-slate-900">{metrics?.completedCount}/52</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Restante</div>
-              <div className="text-2xl font-black text-rose-600 font-mono">{formatCurrency(metrics?.remainingAmount || 0, currency)}</div>
-            </div>
-          </div>
-
-          <div className="mt-8 h-3 w-full bg-slate-200/80 rounded-full overflow-hidden border border-slate-200/50">
-            <motion.div 
-              initial={{ width: 0 }} 
-              animate={{ width: `${metrics?.progressPercent}%` }} 
-              className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 relative"
-            >
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent)] animate-shimmer" />
-            </motion.div>
-          </div>
-        </div>
-
-        <div className="glass-card rounded-[2.5rem] p-8 flex flex-col justify-between group shadow-md">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Próximo Passo</div>
-              <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
-            </div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">Semana {metrics?.nextUncompletedWeek}</div>
-            <div className="text-4xl font-black text-slate-900 font-mono">{formatCurrency(metrics?.nextWeekAmount || 0, currency)}</div>
-          </div>
-          <button 
-            onClick={() => setWeekToConfirm(metrics?.nextUncompletedWeek || null)}
-            className="w-full h-14 mt-6 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            Confirmar Depósito
-            <ArrowUpRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Grid of Weeks */}
-      <div className="glass-panel rounded-[2.5rem] overflow-hidden shadow-md">
-        <div className="p-6 border-b border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600"><History className="w-5 h-5" /></div>
-            <h3 className="text-sm font-black text-slate-900 tracking-widest uppercase">Linha do Tempo</h3>
-          </div>
-
-          <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/10">
-            {(['all', 'pending', 'completed'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setWeekFilter(f)}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                  weekFilter === f ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-500 hover:text-white'
-                }`}
-              >
-                {f === 'all' ? 'Todas' : f === 'pending' ? 'Pendentes' : 'Feitas'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <motion.div 
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="p-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3"
-        >
-          {filteredWeeks.map((w) => (
-            <motion.button
-              key={w.weekNumber}
-              variants={itemVariants}
-              whileHover={{ scale: 1.05, y: -2 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => w.isCompleted ? setWeekToUndo(w.weekNumber) : setWeekToConfirm(w.weekNumber)}
-              className={`p-4 rounded-[1.5rem] border transition-all text-left flex flex-col justify-between gap-4 relative overflow-hidden ${
-                w.isCompleted 
-                  ? 'bg-emerald-600/10 border-emerald-500/30' 
-                  : w.isCurrentWeek 
-                    ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/10 ring-2 ring-amber-500/20' 
-                    : 'bg-white/5 border-white/10'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className={`text-[9px] font-black uppercase tracking-widest ${w.isCompleted ? 'text-emerald-400' : w.isCurrentWeek ? 'text-amber-400' : 'text-slate-600'}`}>W{w.weekNumber}</span>
-                {w.isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-              </div>
-              <div>
-                <div className={`text-xs font-black font-mono ${w.isCompleted ? 'text-white' : 'text-slate-300'}`}>{formatCurrency(w.amount, currency)}</div>
-                <div className="text-[9px] font-bold text-slate-500 mt-0.5">{w.formattedDate}</div>
-              </div>
-            </motion.button>
-          ))}
-        </motion.div>
-      </div>
-
-      {/* Confirmation & Undo Modals */}
-      <AnimatePresence>
-        {(weekToConfirm || weekToUndo) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 glass-overlay" onClick={() => { setWeekToConfirm(null); setWeekToUndo(null); }} />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-modal w-full max-w-sm p-8 rounded-[2.5rem] text-center relative z-10 shadow-2xl"
-            >
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 ${weekToConfirm ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>
-                {weekToConfirm ? <CheckCircle2 className="w-8 h-8" /> : <RotateCcw className="w-8 h-8" />}
-              </div>
-              <h4 className="text-xl font-black text-slate-900 tracking-tight mb-2">{weekToConfirm ? `Semana ${weekToConfirm}` : `Reabrir Semana ${weekToUndo}`}</h4>
-              <p className="text-sm font-medium text-slate-600 mb-8">{weekToConfirm ? 'Confirmar depósito desta semana na reserva?' : 'Isso removerá o lançamento correspondente.'}</p>
-              
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={weekToConfirm ? handleConfirmWeekSubmit : handleUndoWeekSubmit}
-                  className={`h-14 rounded-2xl font-black text-xs uppercase tracking-widest text-white transition-all ${weekToConfirm ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20 shadow-xl'}`}
-                >
-                  {isSubmittingWeek ? '...' : (weekToConfirm ? 'Confirmar' : 'Desfazer')}
-                </button>
-                <button onClick={() => { setWeekToConfirm(null); setWeekToUndo(null); }} className="h-14 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-black text-[10px] uppercase tracking-widest transition-all">Cancelar</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+        <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de início</label><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 sm:max-w-xs"/></div>
+        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-cyan-50 p-5"><div className="flex items-center gap-2 text-sm font-bold text-emerald-800"><Sparkles className="h-4 w-4"/>Resumo do seu plano</div><div className="mt-4 grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold text-slate-500">Duração</p><p className="mt-1 text-2xl font-black text-slate-900">{requestedWeeks>0?requestedWeeks:0} <span className="text-sm font-bold text-slate-500">semanas</span></p></div><div><p className="text-xs font-semibold text-slate-500">Total a economizar</p><p className="mt-1 break-words text-xl font-black text-emerald-700">{formatCurrency(previewTotal,currency)}</p></div></div><p className="mt-3 text-xs leading-relaxed text-slate-600">O depósito aumenta a cada semana: 1ª {formatCurrency(firstDeposit,currency)}, 2ª {formatCurrency(firstDeposit*2,currency)}, 3ª {formatCurrency(firstDeposit*3,currency)} e assim por diante.</p></div>
+        <button type="submit" disabled={saving||firstDeposit<=0||requestedWeeks<1||!Number.isInteger(requestedWeeks)} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">{saving?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}Criar meu plano</button>
+      </form>
     </div>
-  );
+  </div>;
+
+  return <div className="space-y-5 pb-20">
+    <div className="flex flex-wrap items-center justify-between gap-3"><button onClick={onReturnToFinance} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Voltar</button><div className="flex flex-wrap items-center gap-2">
+      {challenges.length>1&&<div className="relative"><button onClick={()=>setShowChallenges(v=>!v)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"><Flag className="h-4 w-4 text-emerald-600"/>Meus planos<ChevronDown className="h-4 w-4"/></button>{showChallenges&&<div className="absolute right-0 z-20 mt-2 min-w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">{challenges.map(c=><button key={c.id} onClick={()=>{onSelectChallenge(c.id);setShowChallenges(false);}} className={'block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold '+(c.id===activeChallenge.id?'bg-emerald-50 text-emerald-800':'text-slate-600 hover:bg-slate-50')}>{c.title}</button>)}</div>}</div>}
+      <button onClick={()=>{setTitle('');setInitialAmount('1000');setTotalWeeksInput('52');setStartDate(todayISO());setCreating(true);}} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-emerald-700"><Plus className="h-4 w-4"/>Novo plano</button><button onClick={removeChallenge} title="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button>
+    </div></div>
+    <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-lg shadow-emerald-900/5">
+      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white sm:p-8"><div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl"/><div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Sua jornada de economia</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeChallenge.title}</h2><p className="mt-2 text-sm text-emerald-50">Plano de {totalWeeks} semanas • iniciado em {new Date(activeChallenge.startDate+'T00:00:00').toLocaleDateString(locale)}</p></div><div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-4"><p className="text-xs font-semibold text-emerald-50">Total da meta</p><p className="mt-1 text-2xl font-black">{formatCurrency(metrics?.target||0,currency)}</p></div></div><div className="relative mt-7"><div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-50"><span>Progresso geral</span><span>{(metrics?.percent||0).toFixed(1)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-black/20"><motion.div initial={{width:0}} animate={{width:(metrics?.percent||0)+'%'}} transition={{duration:0.7}} className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"/></div></div></div>
+      <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Já economizado</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.saved||0,currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Falta economizar</p><p className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{formatCurrency(metrics?.remaining||0,currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Etapas concluídas</p><p className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{metrics?.count||0}<span className="text-sm font-bold text-slate-400"> / {totalWeeks}</span></p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Próximo depósito</p><p className="mt-1 break-words text-lg font-black text-violet-700 sm:text-xl">{formatCurrency(metrics?.nextAmount||0,currency)}</p></div></div>
+    </section>
+    {metrics?.next?<section className="flex flex-col gap-4 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm"><TrendingUp className="h-5 w-5"/></div><div><p className="text-xs font-bold uppercase tracking-wider text-violet-700">Próxima etapa • semana {metrics.next}</p><p className="text-sm text-slate-600">Quando guardar, marque esta etapa como concluída.</p></div></div><button onClick={()=>setSelectedWeek({number:metrics.next,undo:false})} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-extrabold text-white shadow-md hover:bg-violet-700">Registrar depósito<ArrowUpRight className="h-4 w-4"/></button></section>:<section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-800"><div className="flex items-center gap-2 font-extrabold"><Award className="h-5 w-5"/>Meta concluída!</div><p className="mt-1 text-sm">Parabéns! Você completou todas as etapas do seu plano.</p></section>}
+    <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-lg font-black text-slate-900">Etapas da sua jornada</h3><p className="mt-1 text-sm text-slate-500">Toque em uma etapa para registrar ou desfazer o depósito.</p></div><div className="flex rounded-xl bg-slate-100 p-1">{(['all','pending','completed'] as const).map(f=><button key={f} onClick={()=>setFilter(f)} className={'rounded-lg px-3 py-2 text-xs font-bold '+(filter===f?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-800')}>{f==='all'?'Todas':f==='pending'?'Pendentes':'Concluídas'}</button>)}</div></div>
+      <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 sm:p-5 md:grid-cols-4 lg:grid-cols-6">{visibleWeeks.map(w=><motion.button key={w.number} whileHover={{y:-2}} whileTap={{scale:0.98}} onClick={()=>setSelectedWeek({number:w.number,undo:w.completed})} className={'min-h-28 rounded-2xl border p-3 text-left transition-shadow hover:shadow-md '+(w.completed?'border-emerald-200 bg-emerald-50':w.current?'border-violet-300 bg-violet-50 ring-2 ring-violet-100':'border-slate-200 bg-slate-50 hover:border-emerald-200 hover:bg-white')}><div className="flex items-center justify-between"><span className={'text-xs font-extrabold '+(w.completed?'text-emerald-700':w.current?'text-violet-700':'text-slate-500')}>Etapa {w.number}</span>{w.completed?<CheckCircle2 className="h-4 w-4 text-emerald-600"/>:w.current?<Sparkles className="h-4 w-4 text-violet-600"/>:<Clock3 className="h-4 w-4 text-slate-400"/>}</div><p className="mt-4 break-words text-sm font-black text-slate-900">{formatCurrency(w.amount,currency)}</p><p className="mt-1 text-[11px] font-medium capitalize text-slate-500">{w.date}</p><p className={'mt-2 text-[10px] font-extrabold '+(w.completed?'text-emerald-700':'text-slate-400')}>{w.completed?'Concluída':'Marcar depósito'}</p></motion.button>)}</div>
+      {visibleWeeks.length===0&&<p className="p-10 text-center text-sm text-slate-500">Nenhuma etapa nesta categoria.</p>}
+    </section>
+    <AnimatePresence>{selectedWeek&&<motion.div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setSelectedWeek(null)}><motion.div className="relative w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl" initial={{opacity:0,y:18,scale:0.96}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:12}} onClick={e=>e.stopPropagation()}><button onClick={()=>setSelectedWeek(null)} className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4"/></button><div className={'mx-auto flex h-14 w-14 items-center justify-center rounded-2xl '+(selectedWeek.undo?'bg-amber-50 text-amber-600':'bg-emerald-50 text-emerald-600')}>{selectedWeek.undo?<RotateCcw className="h-7 w-7"/>:<PiggyBank className="h-7 w-7"/>}</div><h4 className="mt-4 text-center text-xl font-black text-slate-900">{selectedWeek.undo?'Desfazer etapa ':'Registrar etapa '}{selectedWeek.number}</h4><p className="mt-2 text-center text-sm text-slate-500">{selectedWeek.undo?'O lançamento relacionado será removido.':'O depósito será registrado nas suas despesas como valor destinado à economia.'}</p><p className="mt-4 text-center text-2xl font-black text-emerald-700">{formatCurrency(activeChallenge.initialAmount*selectedWeek.number,currency)}</p><button disabled={busy} onClick={confirmWeek} className={'mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-extrabold text-white disabled:opacity-50 '+(selectedWeek.undo?'bg-amber-600 hover:bg-amber-700':'bg-emerald-600 hover:bg-emerald-700')}>{busy?'Aguarde...':selectedWeek.undo?'Sim, desfazer':'Confirmar depósito'}</button><button onClick={()=>setSelectedWeek(null)} className="mt-2 h-11 w-full rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50">Cancelar</button></motion.div></motion.div>}</AnimatePresence>
+  </div>;
 };
