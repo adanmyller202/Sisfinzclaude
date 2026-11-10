@@ -897,7 +897,7 @@ export default function App() {
                     incomes={incomes}
                     expenses={expenses}
                     accounts={accounts}
-                    currentBalance={accounts.length > 0 && accountsTotalBalance !== 0 ? accountsTotalBalance : currentBalance}
+                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     sharedBills={sharedAccounts.sharedBills}
                     statusRecords={statusRecords}
                     currency={activeCurrency}
