@@ -7,7 +7,7 @@ import { formatCurrency } from '../utils/currency';
 interface Props {
   currency: CurrencyCode; language?: LanguageCode; activeChallenge: FiftyTwoWeekChallenge | null; challenges: FiftyTwoWeekChallenge[];
   onSelectChallenge: (id: string) => void;
-  onCreateChallenge: (params: { initialAmount: number; startDate: string; title?: string; totalWeeks: number }) => Promise<any>;
+  onCreateChallenge: (params: { initialAmount: number; startDate: string; title?: string; totalWeeks: number; savingMode: 'progressive' | 'fixed'; totalTarget?: number }) => Promise<any>;
   onCompleteWeek: (challengeId: string, weekNumber: number, addExpenseFn: (exp: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>) => Promise<void>;
   onUndoWeek: (challengeId: string, weekNumber: number, deleteExpenseFn: (expenseId: string) => Promise<void>) => Promise<void>;
   onDeleteChallenge: (challengeId: string) => Promise<void>;
@@ -18,7 +18,11 @@ const todayISO = () => { const d = new Date(); return [d.getFullYear(), String(d
 
 export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onDeleteChallenge, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
   const [creating,setCreating]=useState(false), [title,setTitle]=useState(''), [initialAmount,setInitialAmount]=useState('1000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [showChallenges,setShowChallenges]=useState(false);
-  const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0), previewTotal=firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
+  const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
+  const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
+  const previewTotal=savingMode==='fixed'?totalGoal:firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
+  const previewLastDate=()=>{const d=new Date((startDate||todayISO())+'T00:00:00');d.setDate(d.getDate()+Math.max(0,requestedWeeks-1)*7);return d.toLocaleDateString(language==='es'?'es-ES':language==='en'?'en-US':'pt-BR',{day:'2-digit',month:'long',year:'numeric'});};
+  const amountForWeek=(week:number, challenge:FiftyTwoWeekChallenge)=>{const count=Math.max(1,Math.floor(challenge.totalWeeks||52));if((challenge.savingMode||'progressive')==='fixed'){const regular=Math.round((challenge.totalTarget/count)*100)/100;return week===count?Math.round((challenge.totalTarget-regular*(count-1))*100)/100:regular;}return Math.round(challenge.initialAmount*week*100)/100;};
   const totalWeeks=Math.max(1,Math.floor(activeChallenge?.totalWeeks||52));
   const completedSet=useMemo(()=>new Set(activeChallenge?.completedWeeks||[]),[activeChallenge]);
   const metrics=useMemo(()=>{
@@ -62,7 +66,18 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
       <form onSubmit={create} className="space-y-6 p-5 sm:p-8">
         <div><label className="mb-2 block text-sm font-bold text-slate-700">Nome da sua meta</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Minha viagem, reserva de emergência..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/></div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div><label className="mb-2 block text-sm font-bold text-slate-700">Quanto guardar na 1ª semana?</label><div className="relative"><Coins className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="0.01" step="0.01" required value={initialAmount} onChange={e=>setInitialAmount(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div><div className="mt-2 flex flex-wrap gap-2">{[100,500,1000,2000].map(v=><button key={v} type="button" onClick={()=>setInitialAmount(String(v))} className={'rounded-lg border px-3 py-1.5 text-xs font-bold '+(firstDeposit===v?'border-emerald-600 bg-emerald-600 text-white':'border-slate-200 bg-white text-slate-600 hover:border-emerald-300')}>{formatCurrency(v,currency)}</button>)}</div></div>
+          <div className="sm:col-span-2">
+            <label className="mb-2 block text-sm font-bold text-slate-700">Como deseja economizar?</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button type="button" onClick={()=>setSavingMode('progressive')} className={"rounded-xl border p-3 text-left "+(savingMode==='progressive'?"border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100":"border-slate-200 bg-white")}><span className="block text-sm font-extrabold text-slate-800">Aumentar a cada semana</span><span className="mt-1 block text-xs text-slate-500">Você escolhe o primeiro depósito; depois ele cresce progressivamente.</span></button>
+              <button type="button" onClick={()=>setSavingMode('fixed')} className={"rounded-xl border p-3 text-left "+(savingMode==='fixed'?"border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100":"border-slate-200 bg-white")}><span className="block text-sm font-extrabold text-slate-800">Dividir uma meta total</span><span className="mt-1 block text-xs text-slate-500">Você informa quanto quer juntar e o sistema calcula cada semana.</span></button>
+            </div>
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-700">{savingMode==='progressive'?"Quanto guardar na 1ª semana?":"Qual valor deseja juntar no total?"}</label>
+            <div className="relative"><Coins className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="0.01" step="0.01" required value={savingMode==='progressive'?initialAmount:totalTargetInput} onChange={e=>savingMode==='progressive'?setInitialAmount(e.target.value):setTotalTargetInput(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div>
+            <p className="mt-2 text-xs text-slate-500">{savingMode==='progressive'?"Digite qualquer valor. Não há opções fixas.":"O total será dividido igualmente entre as semanas; o último depósito ajusta os centavos para fechar exatamente a meta."}</p>
+          </div>
           <div><label className="mb-2 block text-sm font-bold text-slate-700">Por quantas semanas?</label><div className="relative"><CalendarDays className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-violet-600"/><input type="number" min="1" step="1" required value={totalWeeksInput} onChange={e=>setTotalWeeksInput(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-100"/></div><p className="mt-2 text-xs text-slate-500">Escolha a duração que fizer sentido para sua meta.</p></div>
         </div>
         <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de início</label><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 sm:max-w-xs"/></div>
