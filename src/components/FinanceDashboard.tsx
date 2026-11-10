@@ -144,6 +144,9 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     }
   };
 
+  // Accounts are the source of truth for the forecast starting balance.
+  const { accounts, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem } = useAccounts();
+
   const {
     selectedMonth,
     setSelectedMonth,
@@ -191,13 +194,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     updateExpense,
     deleteExpense,
     sharedBills,
-  } = useFinanceControl();
+  } = useFinanceControl(undefined, accounts.length > 0 ? accountsTotalBalance : undefined);
 
   const { user } = useAuth();
   const userId = user?.uid;
-
-  // Accounts Hook (Single Source of Truth for main balance when accounts exist)
-  const { accounts, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem } = useAccounts();
   const [isBalanceBreakdownOpen, setIsBalanceBreakdownOpen] = useState(false);
 
   const effectiveCurrentBalance = accounts.length > 0 ? accountsTotalBalance : currentBalance;
