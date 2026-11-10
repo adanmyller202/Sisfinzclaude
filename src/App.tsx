@@ -843,6 +843,9 @@ export default function App() {
                     onCreateChallenge={fiftyTwoChallenge.createChallenge}
                     onCompleteWeek={fiftyTwoChallenge.completeWeek}
                     onUndoWeek={fiftyTwoChallenge.undoWeek}
+                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
+                    accounts={accounts}
+                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
