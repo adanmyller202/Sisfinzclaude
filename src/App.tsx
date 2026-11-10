@@ -94,6 +94,12 @@ export default function App() {
   const currentLang = settings.language || 'pt';
   const t = getTranslations(currentLang);
 
+  React.useEffect(() => {
+    const enableDarkMode = Boolean(settings.darkMode);
+    document.documentElement.classList.toggle('dark', enableDarkMode);
+    document.body.classList.toggle('dark', enableDarkMode);
+  }, [settings.darkMode]);
+
   const { getCategoriesFor, addCategory, allDisplayCategories, updateCategory, deleteCategory, resetPredefinedCategories } = useCategories();
   const sharedAccounts = useSharedAccounts();
   const fiftyTwoChallenge = useFiftyTwoWeekChallenge();
@@ -769,7 +775,7 @@ export default function App() {
                 ) : currentView === 'report' ? (
                   <FullReportView
                     currency={activeCurrency}
-                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
+                    currentAccountBalance={currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
