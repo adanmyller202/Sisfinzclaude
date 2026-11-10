@@ -39,6 +39,7 @@ interface GoalsCenterViewProps {
   accounts: AccountItem[];
   onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
   onUpdateStorageLocation: (challengeId: string, storageLocation: string) => Promise<void>;
+  onRedeemChallenge: (challenge: any, accountId: string) => Promise<void>;
   onAddExpense?: any;
   onDeleteExpense?: any;
 }
@@ -50,6 +51,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   accounts,
   onAdjustAccountBalance,
   onUpdateStorageLocation,
+  onRedeemChallenge,
   onAddExpense,
   onDeleteExpense,
 }) => {
@@ -172,6 +174,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onCompleteWeek={fiftyTwoChallenge.completeWeek}
               onUndoWeek={fiftyTwoChallenge.undoWeek}
               onUpdateStorageLocation={onUpdateStorageLocation}
+              onRedeemChallenge={onRedeemChallenge}
               accounts={accounts}
               onAdjustAccountBalance={onAdjustAccountBalance}
               onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
