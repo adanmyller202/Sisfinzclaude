@@ -241,7 +241,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           )}
 
           {subTab === 'freedom' && (
-            <MonthlyFreedomScale bills={bills} incomes={incomes} expenses={expenses} sharedBills={sharedBills} statusRecords={statusRecords} currency={currency} language={language} startMonth={currentMonth} />
+            <MonthlyFreedomScale bills={bills} incomes={incomes} expenses={expenses} sharedBills={sharedBills} statusRecords={statusRecords} currency={currency} language={language} startMonth={currentMonth} currentBalance={currentBalance} forecastBalance={forecastBalance} />
           )}
 
           {subTab === 'calendar' && (
