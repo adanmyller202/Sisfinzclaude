@@ -580,6 +580,10 @@ export default function App() {
     []
   );
 
+  const handleInitialCalendarTransactionOpened = useCallback(() => {
+    setFinanceNavParams((previous) => previous ? { ...previous, selectedTransaction: undefined } : previous);
+  }, []);
+
   // Modals state
   const [activeSquareId, setActiveSquareId] = useState<number | null>(null);
   const [isNewGoalOpen, setIsNewGoalOpen] = useState(false);
@@ -927,6 +931,7 @@ export default function App() {
                     initialIncomeFilter={financeNavParams?.incomeFilter}
                     initialMonth={financeNavParams?.month}
                     initialTransaction={financeNavParams?.selectedTransaction}
+                    onInitialTransactionOpened={handleInitialCalendarTransactionOpened}
                     onReturnToFinance={() => setCurrentView('finance')}
                     activePartners={sharedAccounts.activePartners}
                     onShareWithPartner={async (params) => {
