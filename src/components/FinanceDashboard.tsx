@@ -95,6 +95,7 @@ interface FinanceDashboardProps {
   initialIncomeFilter?: 'all' | 'pending' | 'received';
   initialMonth?: string;
   initialTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
+  onInitialTransactionOpened?: () => void;
   onReturnToFinance?: () => void;
   activePartners?: SharedUserSummary[];
   onShareWithPartner?: (params: {
@@ -128,6 +129,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   initialIncomeFilter,
   initialMonth,
   initialTransaction,
+  onInitialTransactionOpened,
   onReturnToFinance,
   activePartners = [],
   onShareWithPartner,
@@ -369,7 +371,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     setInitialTxType(initialTransaction.type);
     setEditingTx({ id: item.id, type: initialTransaction.type, item });
     setIsTxModalOpen(true);
-  }, [initialTransaction, initialMonth, selectedMonth, setSelectedMonth, loading, bills, incomes, expenses]);
+    onInitialTransactionOpened?.();
+  }, [initialTransaction, initialMonth, selectedMonth, setSelectedMonth, loading, bills, incomes, expenses, onInitialTransactionOpened]);
 
   // Recurring bill delete prompt modal
   const [billToDelete, setBillToDelete] = useState<{ bill: BillItem; month: string } | null>(null);
