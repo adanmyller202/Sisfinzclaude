@@ -91,6 +91,8 @@ export function useFiftyTwoWeekChallenge() {
       startDate: string;
       title?: string;
       totalWeeks?: number;
+      savingMode?: 'progressive' | 'fixed';
+      totalTarget?: number;
     }): Promise<FiftyTwoWeekChallenge> => {
       if (!userId) throw new Error('Usuário não autenticado.');
       if (params.initialAmount <= 0) throw new Error('O valor inicial deve ser maior que zero.');
@@ -98,7 +100,10 @@ export function useFiftyTwoWeekChallenge() {
       const id = 'c52_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const now = new Date().toISOString();
       const totalWeeks = Math.max(1, Math.floor(params.totalWeeks || 52));
-      const totalTarget = Math.round(params.initialAmount * totalWeeks * (totalWeeks + 1) / 2);
+      const savingMode = params.savingMode || 'progressive';
+      const totalTarget = savingMode === 'fixed'
+        ? Math.round((params.totalTarget || params.initialAmount * totalWeeks) * 100) / 100
+        : Math.round(params.initialAmount * totalWeeks * (totalWeeks + 1) / 2 * 100) / 100;
 
       const newChallenge: FiftyTwoWeekChallenge = {
         id,
@@ -106,6 +111,7 @@ export function useFiftyTwoWeekChallenge() {
         title: params.title?.trim() || 'Plano Semanal',
         initialAmount: params.initialAmount,
         totalWeeks,
+        savingMode,
         startDate: params.startDate || now.slice(0, 10),
         totalTarget,
         completedWeeks: [],
@@ -154,7 +160,11 @@ export function useFiftyTwoWeekChallenge() {
 
       const totalWeeks = Math.max(1, Math.floor(target.totalWeeks || 52));
       if (weekNumber < 1 || weekNumber > totalWeeks) throw new Error('Etapa inválida para este plano.');
-      const weekAmount = Math.round(target.initialAmount * weekNumber);
+      const savingMode = target.savingMode || 'progressive';
+      const fixedWeeklyAmount = Math.round((target.totalTarget / totalWeeks) * 100) / 100;
+      const weekAmount = savingMode === 'fixed'
+        ? (weekNumber === totalWeeks ? Math.round((target.totalTarget - fixedWeeklyAmount * (totalWeeks - 1)) * 100) / 100 : fixedWeeklyAmount)
+        : Math.round(target.initialAmount * weekNumber * 100) / 100;
 
       // Calculate week date: startDate + (weekNumber - 1) * 7 days
       const start = new Date(target.startDate);
