@@ -729,6 +729,8 @@ export default function App() {
                     expenses={expenses}
                     sharedBills={sharedAccounts.sharedBills}
                     statusRecords={statusRecords}
+                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
+                    forecastBalance={forecastBalance}
                     onOpenMoneChat={() => setIsMoneChatOpen(true)}
                     onOpenNewTransaction={(type) => {
                       setGlobalTxModalType(type);
