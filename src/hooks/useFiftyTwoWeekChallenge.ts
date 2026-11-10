@@ -90,19 +90,22 @@ export function useFiftyTwoWeekChallenge() {
       initialAmount: number;
       startDate: string;
       title?: string;
+      totalWeeks?: number;
     }): Promise<FiftyTwoWeekChallenge> => {
       if (!userId) throw new Error('Usuário não autenticado.');
       if (params.initialAmount <= 0) throw new Error('O valor inicial deve ser maior que zero.');
 
       const id = 'c52_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const now = new Date().toISOString();
-      const totalTarget = Math.round(params.initialAmount * 1378);
+      const totalWeeks = Math.max(1, Math.floor(params.totalWeeks || 52));
+      const totalTarget = Math.round(params.initialAmount * totalWeeks * (totalWeeks + 1) / 2);
 
       const newChallenge: FiftyTwoWeekChallenge = {
         id,
         userId,
-        title: params.title?.trim() || 'Desafio de 52 Semanas',
+        title: params.title?.trim() || 'Plano Semanal',
         initialAmount: params.initialAmount,
+        totalWeeks,
         startDate: params.startDate || now.slice(0, 10),
         totalTarget,
         completedWeeks: [],
@@ -149,6 +152,8 @@ export function useFiftyTwoWeekChallenge() {
         return; // Already completed
       }
 
+      const totalWeeks = Math.max(1, Math.floor(target.totalWeeks || 52));
+      if (weekNumber < 1 || weekNumber > totalWeeks) throw new Error('Etapa inválida para este plano.');
       const weekAmount = Math.round(target.initialAmount * weekNumber);
 
       // Calculate week date: startDate + (weekNumber - 1) * 7 days
@@ -158,11 +163,11 @@ export function useFiftyTwoWeekChallenge() {
 
       // Automatically register expense under category "Investimentos"
       const createdExpense = await addExpenseFn({
-        name: `Desafio 52 Semanas: Semana ${weekNumber}`,
+        name: `Plano semanal: etapa ${weekNumber}`,
         amount: weekAmount,
         date: weekDateStr,
         category: 'Investimentos',
-        notes: `Ahorro/Inversión Semana ${weekNumber} do Desafio de 52 Semanas`,
+        notes: `Depósito da etapa ${weekNumber} do plano semanal`,
       });
 
       const now = new Date().toISOString();
@@ -171,7 +176,7 @@ export function useFiftyTwoWeekChallenge() {
         ...(target.weekExpenses || {}),
         [weekNumber]: createdExpense.id,
       };
-      const isAllDone = updatedCompletedWeeks.length === 52;
+      const isAllDone = updatedCompletedWeeks.length >= totalWeeks;
 
       const updatedChallenge: FiftyTwoWeekChallenge = {
         ...target,
