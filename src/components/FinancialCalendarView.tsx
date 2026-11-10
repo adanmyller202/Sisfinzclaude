@@ -53,6 +53,7 @@ interface FinancialCalendarViewProps {
   language?: LanguageCode;
   onReturnToFinance?: () => void;
   onOpenMoneChat?: () => void;
+  onOpenTransaction?: (item: MonthTimelineItem, month: string) => void;
 }
 
 type CalendarFilter = 'all' | 'income' | 'expense' | 'pending' | 'paid' | 'shared';
@@ -252,6 +253,18 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
     }
   };
 
+
+  const handleSelectCalendarItem = (item: MonthTimelineItem) => {
+    // Close the day sheet before leaving the calendar so it cannot remain
+    // mounted behind the destination screen.
+    setIsDayDetailModalOpen(false);
+    if (onOpenTransaction && item.originalId) {
+      onOpenTransaction(item, selectedMonth);
+      return;
+    }
+    // Keep the local editor as a safe fallback when the calendar is used standalone.
+    handleOpenEditItem(item);
+  };
   const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.01 } } };
   const cellVariants = { hidden: { opacity: 0, scale: 0.9 }, visible: { opacity: 1, scale: 1 } };
 
@@ -436,7 +449,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
                   ) : (
                     <div className="space-y-2">
                       {selectedDayData.items.map(it => (
-                        <div key={it.id} onClick={() => handleOpenEditItem(it)} className="p-4 rounded-2xl bg-white/80 border border-slate-200 hover:border-emerald-500/40 hover:bg-white shadow-xs transition-all flex items-center justify-between group cursor-pointer">
+                        <div key={it.id} onClick={() => handleSelectCalendarItem(it)} className="p-4 rounded-2xl bg-white/80 border border-slate-200 hover:border-emerald-500/40 hover:bg-white shadow-xs transition-all flex items-center justify-between group cursor-pointer">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${it.type === 'income' ? 'bg-emerald-500/15 text-emerald-700' : 'bg-rose-500/15 text-rose-700'}`}>
                               {it.type === 'income' ? <TrendingUp className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
