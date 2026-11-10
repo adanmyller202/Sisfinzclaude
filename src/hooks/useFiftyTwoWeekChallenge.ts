@@ -61,8 +61,8 @@ export function useFiftyTwoWeekChallenge() {
         setChallenges(list);
 
         if (list.length > 0) {
-          // Keep activeChallengeId if valid, otherwise select first
-          setActiveChallengeId((prev) => (prev && list.some((c) => c.id === prev) ? prev : list[0].id));
+          // Do not auto-open a plan; the user chooses one from the plans dashboard.
+          setActiveChallengeId((prev) => (prev && list.some((c) => c.id === prev) ? prev : null));
         } else {
           setActiveChallengeId(null);
         }
@@ -82,7 +82,7 @@ export function useFiftyTwoWeekChallenge() {
   }, [userId, getLocalKey]);
 
   // Active challenge getter
-  const activeChallenge = challenges.find((c) => c.id === activeChallengeId) || challenges[0] || null;
+  const activeChallenge = challenges.find((c) => c.id === activeChallengeId) || null;
 
   // Create new 52-week challenge
   const createChallenge = useCallback(
@@ -127,7 +127,7 @@ export function useFiftyTwoWeekChallenge() {
       };
 
       setChallenges((prev) => [newChallenge, ...prev]);
-      setActiveChallengeId(id);
+      setActiveChallengeId(null);
 
       try {
         localStorage.setItem(
