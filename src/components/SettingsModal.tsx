@@ -148,7 +148,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <>
       <AnimatePresence>
         {isOpen && (
-          <div key="settings-modal-root" className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 overflow-hidden overscroll-contain">
+          <div key="settings-modal-root" className="fixed inset-0 z-[70] flex items-center justify-center p-0 sm:p-4 overflow-hidden overscroll-contain">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -162,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="settings-panel-solid w-full sm:max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[92dvh] rounded-none sm:rounded-[2rem] shadow-2xl overflow-hidden sm:my-auto flex flex-col relative z-10 pt-safe pb-safe touch-pan-y"
+            className="settings-panel-solid w-full sm:max-w-2xl h-[100dvh] max-h-[100dvh] sm:h-[92dvh] sm:max-h-[92dvh] rounded-none sm:rounded-[2rem] shadow-2xl overflow-hidden sm:my-auto flex flex-col relative z-10 pt-safe pb-safe touch-pan-y"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
