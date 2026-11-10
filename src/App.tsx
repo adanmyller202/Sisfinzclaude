@@ -869,6 +869,8 @@ export default function App() {
                     currency={activeCurrency}
                     language={currentLang}
                     startMonth={getCurrentMonthStr()}
+                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
+                    forecastBalance={forecastBalance}
                     onReturnToFinance={() => setCurrentView('finance')}
                   />
                 ) : (currentView as string) === 'daily_pace' ? (
