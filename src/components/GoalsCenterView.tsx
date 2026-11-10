@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types';
+import { AccountItem, ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types';
 import { useSavings } from '../hooks/useSavings';
 import { useFinanceControl } from '../hooks/useFinanceControl';
 import { SavingsSection } from './SavingsSection';
@@ -36,6 +36,9 @@ interface GoalsCenterViewProps {
   onSquareClick: (squareId: number) => void;
   selectedSquareId: number | null;
   fiftyTwoChallenge: any;
+  accounts: AccountItem[];
+  onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
+  onUpdateStorageLocation: (challengeId: string, storageLocation: string) => Promise<void>;
   onAddExpense?: any;
   onDeleteExpense?: any;
 }
@@ -44,6 +47,9 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   currency,
   language = 'pt',
   fiftyTwoChallenge,
+  accounts,
+  onAdjustAccountBalance,
+  onUpdateStorageLocation,
   onAddExpense,
   onDeleteExpense,
 }) => {
@@ -165,6 +171,9 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onCreateChallenge={fiftyTwoChallenge.createChallenge}
               onCompleteWeek={fiftyTwoChallenge.completeWeek}
               onUndoWeek={fiftyTwoChallenge.undoWeek}
+              onUpdateStorageLocation={onUpdateStorageLocation}
+              accounts={accounts}
+              onAdjustAccountBalance={onAdjustAccountBalance}
               onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
               onAddExpense={onAddExpense}
               onDeleteExpense={onDeleteExpense}
