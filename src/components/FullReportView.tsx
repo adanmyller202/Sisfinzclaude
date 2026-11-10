@@ -17,6 +17,7 @@ import {
   SharedUserSummary,
 } from '../types';
 import { formatCurrency } from '../utils/currency';
+import { MonthlyReportSection } from './MonthlyReportSection';
 import { getTranslations, getLocaleForLanguage } from '../utils/i18n';
 import {
   doesItemOccurInMonth,
@@ -494,8 +495,7 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
 
   // No mês atual, o saldo oficial é o saldo real das contas (mesma referência da tela inicial).
   // Em períodos históricos ou filtros personalizados, mantemos o resultado analítico do período.
-  const isCurrentMonthSummary = filterMode === 'monthly' && selectedMonth === getCurrentMonthStr();
-  const hasAccountBalance = isCurrentMonthSummary && Number.isFinite(currentAccountBalance);
+  const hasAccountBalance = Number.isFinite(currentAccountBalance);
   const netResultPeriod = hasAccountBalance ? Number(currentAccountBalance) : calculatedNetResultPeriod;
   const hasBalanceAdjustment = hasAccountBalance && Math.abs(netResultPeriod - calculatedNetResultPeriod) >= 0.01;
   const balanceDifference = netResultPeriod - calculatedNetResultPeriod;
@@ -857,6 +857,15 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
           <span>{language === 'es' ? 'Imprimir' : 'Imprimir'}</span>
         </motion.button>
       </motion.div>
+
+      {/* Monthly summary and spending distribution charts */}
+      <MonthlyReportSection
+        bills={bills}
+        incomes={incomes}
+        expenses={expenses}
+        currency={currency}
+        language={language}
+      />
 
       {/* SECTION 1: FILTRO DEL INFORME */}
       <motion.div 
