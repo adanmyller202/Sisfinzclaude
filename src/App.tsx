@@ -24,6 +24,7 @@ import { getMoneMood } from './utils/moneMood';
 import { CelebrationModal } from './components/CelebrationModal';
 import { AchievementToast } from './components/AchievementToast';
 import { FinanceDashboard } from './components/FinanceDashboard';
+import { AlertCenter } from './components/AlertCenter';
 import { ObjectivesView } from './components/ObjectivesView';
 import { NavigationDrawerModal } from './components/NavigationDrawerModal';
 import { SharedAccountsView } from './components/shared/SharedAccountsView';
@@ -701,6 +702,7 @@ export default function App() {
         onOpenNewGoalModal={() => setIsNewGoalOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         hasPendingNotifications={sharedAccounts.pendingReceivedInvitationsCount > 0 || sharedAccounts.unreadNotificationsCount > 0}
+        alertCenter={<AlertCenter bills={bills} monthBills={monthBills} incomes={incomes} expenses={expenses} statusRecords={statusRecords} currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance} forecastBalance={forecastBalance} safetyReserveAmount={financeSettings.ritmoDiarioConfig?.safetyReserveAmount || 0} currency={activeCurrency} onOpenBill={(id, month) => handleNavigateToFinanceWithParams('bills', { month, selectedTransaction: { type: 'bill', id } })} onOpenDailyPace={() => setCurrentView('daily_pace')} onOpenGoals={() => setCurrentView('goals')} />}
       />
 
       {/* Main Content Area */}
