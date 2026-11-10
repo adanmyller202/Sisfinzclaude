@@ -868,6 +868,15 @@ export default function App() {
                     onCompleteWeek={fiftyTwoChallenge.completeWeek}
                     onUndoWeek={fiftyTwoChallenge.undoWeek}
                     onUpdateStorageLocation={(challengeId, location) => fiftyTwoChallenge.updateStorageLocation(challengeId, location)}
+                    onRedeemChallenge={async (challenge, accountId) => {
+                      const account = accounts.find((item) => item.id === accountId && item.isActive !== false);
+                      if (!account) throw new Error('Conta indisponível.');
+                      const today = new Date().toISOString().slice(0, 10);
+                      const month = today.slice(0, 7);
+                      const income = await addIncomeAsReceived({ name: 'Plano Semanal - ' + challenge.title, amount: Number(challenge.totalTarget) || 0, expectedDate: today, expectedDay: Number(today.slice(8, 10)), category: 'Metas', recurrence: 'none', startMonth: month, accountId }, month);
+                      await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
+                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
+                    }}
                     accounts={accounts}
                     onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
