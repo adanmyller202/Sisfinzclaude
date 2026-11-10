@@ -3,6 +3,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowUpRight, Award, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Coins, Flag, Loader2, PiggyBank, Plus, RotateCcw, Sparkles, Target, TrendingUp, Trash2, X, Pencil } from 'lucide-react';
 import { FiftyTwoWeekChallenge, CurrencyCode, LanguageCode, ExpenseItem, AccountItem } from '../types';
 import { formatCurrency } from '../utils/currency';
+import { useAuth } from '../context/AuthContext';
+import { db, sanitizeForFirestore } from '../firebase/config';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface Props {
   currency: CurrencyCode; language?: LanguageCode; activeChallenge: FiftyTwoWeekChallenge | null; challenges: FiftyTwoWeekChallenge[];
@@ -10,7 +13,7 @@ interface Props {
   onCreateChallenge: (params: { initialAmount: number; startDate: string; title?: string; totalWeeks: number; savingMode: 'progressive' | 'fixed'; totalTarget?: number; storageLocation?: string }) => Promise<any>;
   onCompleteWeek: (challengeId: string, weekNumber: number, accountId: string, adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>) => Promise<void>;
   onUndoWeek: (challengeId: string, weekNumber: number, returnAccountId: string, adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>, deleteExpenseFn: (expenseId: string) => Promise<void>) => Promise<void>;
-  onUpdateStorageLocation: (challengeId: string, storageLocation: string) => Promise<void>;
+  onUpdateStorageLocation?: (challengeId: string, storageLocation: string) => Promise<void>;
   accounts: AccountItem[];
   onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
   onDeleteChallenge: (challengeId: string) => Promise<void>;
@@ -22,6 +25,7 @@ const todayISO = () => { const d = new Date(); return [d.getFullYear(), String(d
 export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onUpdateStorageLocation, accounts = [], onAdjustAccountBalance, onDeleteChallenge, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
   // Guard against accounts being temporarily undefined while Firebase data loads.
   const safeAccounts = Array.isArray(accounts) ? accounts : [];
+  const { user } = useAuth();
   const [creating,setCreating]=useState(false), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [showChallenges,setShowChallenges]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState('');
   const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
   const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
@@ -84,8 +88,15 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     if(!activeChallenge)return;
     try{
       setStorageSaving(true);setStorageError('');
-      if (typeof onUpdateStorageLocation !== 'function') throw new Error('A função de salvar o local não foi carregada. Atualize o aplicativo e tente novamente.');
-      await onUpdateStorageLocation(activeChallenge.id,storageDraft.trim());
+      const cleanLocation = storageDraft.trim();
+      if (typeof onUpdateStorageLocation === 'function') {
+        await onUpdateStorageLocation(activeChallenge.id, cleanLocation);
+      } else {
+        // Fallback independente: the storage note is saved directly to this user's challenge document.
+        if (!user?.uid) throw new Error('Sua sessão expirou. Entre novamente e tente salvar.');
+        const challengeRef = doc(db, 'users', user.uid, 'fifty_two_week_challenges', activeChallenge.id);
+        await setDoc(challengeRef, sanitizeForFirestore({ storageLocation: cleanLocation, updatedAt: new Date().toISOString() }), { merge: true });
+      }
       setEditingStorage(false);
     }catch(err){
       console.error('Erro ao salvar local do dinheiro:',err);
