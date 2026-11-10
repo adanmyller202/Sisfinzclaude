@@ -444,6 +444,9 @@ export interface FiftyTwoWeekChallenge {
   savingMode?: 'progressive' | 'fixed'; // Legacy plans default to progressive
   storageLocation?: string; // Informational note: where the saved money is physically kept
   weekAccountIds?: Record<number, string>; // Account debited for each registered weekly deposit
+  redeemedAt?: string; // When the completed savings plan was transferred into an account
+  redemptionIncomeId?: string; // Normal income entry created for the redemption
+  redemptionAccountId?: string; // Account that received the completed plan
   completedWeeks: number[]; // Array of week numbers, e.g. [1, 2, 3]
   weekExpenses?: Record<number, string>; // { [weekNumber]: expenseId }
   createdAt: string;
