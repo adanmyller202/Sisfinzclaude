@@ -19,6 +19,7 @@ interface NavbarProps {
   onOpenNewGoalModal: () => void;
   hasPendingNotifications?: boolean;
   onOpenProfile: () => void;
+  alertCenter?: React.ReactNode;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewGoalModal,
   hasPendingNotifications = false,
   onOpenProfile,
+  alertCenter,
 }) => {
   const { user } = useAuth();
   const t = getTranslations(language);
@@ -86,6 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Side: Quick Tools (PWA Install, New Goal Shortcut, Finzy Mascot / Profile Button) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {alertCenter}
           {/* PWA Install Button (auto-hides when already running standalone) */}
           <PWAInstallButton language={language} variant="compact" />
 
