@@ -54,6 +54,17 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     });
   },[activeChallenge,totalWeeks,language,completedSet,metrics?.currentWeek]);
   const visibleWeeks=weeks.filter(w=>filter==='all'||(filter==='completed'?w.completed:!w.completed));
+  const planSummaries = useMemo(() => challenges.map((plan) => {
+    const count = Math.max(1, Math.floor(plan.totalWeeks || 52));
+    const completed = plan.completedWeeks || [];
+    const saved = completed.reduce((sum, week) => sum + amountForWeek(week, plan), 0);
+    const target = Number(plan.totalTarget) || 0;
+    const finalized = plan.status === 'completed' || completed.length >= count;
+    return { plan, count, completedCount: completed.length, saved, target, percent: target > 0 ? Math.min(100, saved / target * 100) : 0, finalized };
+  }), [challenges]);
+  const activePlans = planSummaries.filter(item => !item.finalized);
+  const finalizedPlans = planSummaries.filter(item => item.finalized);
+
   const create=async(e:React.FormEvent)=>{
     e.preventDefault(); if((savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks))return;
     try{setSaving(true);await onCreateChallenge({initialAmount:savingMode==='fixed'?fixedInstallment:firstDeposit,startDate,title:title.trim()||undefined,totalWeeks:requestedWeeks,savingMode,totalTarget:savingMode==='fixed'?totalGoal:undefined,storageLocation:storageLocation.trim(),currency:planCurrency});setCreating(false);}
@@ -115,11 +126,11 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const removeChallenge=async()=>{
     if(!activeChallenge)return;
     if(!window.confirm('Deseja excluir este plano? Os depósitos já registrados como despesas não serão apagados automaticamente.'))return;
-    await onDeleteChallenge(activeChallenge.id);setCreating(challenges.length <= 1);
+    await onDeleteChallenge(activeChallenge.id);onSelectChallenge('');setCreating(false);
   };
   const locale=language==='es'?'es-ES':language==='en'?'en-US':'pt-BR';
 
-  if(!activeChallenge||creating)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
+  if(creating)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
     <div className="flex items-center justify-between"><button onClick={onReturnToFinance} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="w-4 h-4"/>Voltar</button>{challenges.length>0&&<button onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus planos</button>}</div>
     <div className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-xl shadow-emerald-900/5">
       <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15"><Target className="h-7 w-7"/></div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">Plano Semanal</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada etapa.</p></div></div></div>
@@ -147,11 +158,51 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     </div>
   </div>;
 
+  if(!activeChallenge)return <div className="mx-auto max-w-5xl space-y-7 pb-20">
+    <div className="flex items-center justify-between gap-3">
+      <button onClick={onReturnToFinance} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Voltar</button>
+      <div className="text-right"><p className="text-xs font-bold uppercase tracking-wider text-emerald-600">SisFinz • economia</p><h2 className="text-2xl font-black text-slate-900">Meus planos</h2></div>
+    </div>
+    <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-sm">
+      <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-7 text-white sm:px-8">
+        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-emerald-100">Sua jornada financeira</p>
+        <h1 className="mt-2 text-3xl font-black">Planos semanais</h1>
+        <p className="mt-2 max-w-xl text-sm text-emerald-50">Acompanhe cada objetivo, veja seu progresso e continue de onde parou.</p>
+        <div className="mt-5 flex flex-wrap gap-3 text-sm font-bold">
+          <span className="rounded-full border border-white/20 bg-white/15 px-4 py-2">{activePlans.length} ativos</span>
+          <span className="rounded-full border border-white/20 bg-white/15 px-4 py-2">{finalizedPlans.length} finalizados</span>
+        </div>
+      </div>
+    </section>
+    <section className="space-y-4">
+      <div className="flex items-end justify-between gap-3"><div><h3 className="text-xl font-black text-slate-900">Meus planos ativos</h3><p className="mt-1 text-sm text-slate-500">Toque em um plano para abrir suas etapas.</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700">{activePlans.length}</span></div>
+      {activePlans.length===0?<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-7 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Target className="h-6 w-6"/></div><p className="mt-3 font-bold text-slate-800">Nenhum plano ativo</p><p className="mt-1 text-sm text-slate-500">Crie um plano para começar a acompanhar sua economia.</p></div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {activePlans.map(({plan,count,completedCount,saved,target,percent})=><motion.button key={plan.id} whileHover={{y:-3}} whileTap={{scale:0.99}} onClick={()=>onSelectChallenge(plan.id)} className="rounded-2xl border border-emerald-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-lg">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-600">Plano ativo</p><h4 className="mt-1 truncate text-lg font-black text-slate-900">{plan.title}</h4></div><span className="rounded-xl bg-emerald-50 p-2 text-emerald-600"><Target className="h-5 w-5"/></span></div>
+          <div className="mt-5 flex items-end justify-between gap-3"><div><p className="text-[11px] font-semibold text-slate-500">Já acumulado</p><p className="mt-1 break-words text-xl font-black text-emerald-700">{formatCurrency(saved,plan.currency||currency)}</p></div><p className="text-xs font-extrabold text-slate-500">{percent.toFixed(0)}%</p></div>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all" style={{width:percent+'%'}}/></div>
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs"><span className="font-semibold text-slate-500">{completedCount} de {count} etapas</span><span className="font-bold text-slate-700">Meta: {formatCurrency(target,plan.currency||currency)}</span></div>
+          <div className="mt-4 flex items-center justify-end gap-1 text-xs font-extrabold text-emerald-700">Abrir plano <ArrowUpRight className="h-4 w-4"/></div>
+        </motion.button>)}
+      </div>}
+    </section>
+    <section className="space-y-4">
+      <div className="flex items-end justify-between gap-3"><div><h3 className="text-xl font-black text-slate-900">Meus planos finalizados</h3><p className="mt-1 text-sm text-slate-500">Metas concluídas, com resgate pendente ou já recebido.</p></div><span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-extrabold text-violet-700">{finalizedPlans.length}</span></div>
+      {finalizedPlans.length===0?<div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Seus planos concluídos aparecerão aqui.</div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {finalizedPlans.map(({plan,count,completedCount,saved,target})=><motion.button key={plan.id} whileHover={{y:-2}} whileTap={{scale:0.99}} onClick={()=>onSelectChallenge(plan.id)} className="rounded-2xl border border-violet-100 bg-white p-5 text-left shadow-sm transition hover:border-violet-300 hover:shadow-md">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-violet-600">Meta concluída</p><h4 className="mt-1 truncate text-lg font-black text-slate-900">{plan.title}</h4></div><span className="rounded-xl bg-violet-50 p-2 text-violet-600"><Award className="h-5 w-5"/></span></div>
+          <p className="mt-4 text-[11px] font-semibold text-slate-500">Valor acumulado</p><p className="mt-1 text-xl font-black text-slate-900">{formatCurrency(saved,plan.currency||currency)}</p>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-violet-100"><div className="h-full w-full rounded-full bg-violet-500"/></div>
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs"><span className="font-semibold text-slate-500">{completedCount} de {count} etapas</span><span className={'rounded-full px-2.5 py-1 font-extrabold '+(plan.redeemedAt?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700')}>{plan.redeemedAt?'Valor resgatado':'Aguardando resgate'}</span></div>
+          <div className="mt-4 flex items-center justify-end gap-1 text-xs font-extrabold text-violet-700">Ver plano <ArrowUpRight className="h-4 w-4"/></div>
+        </motion.button>)}
+      </div>}
+    </section>
+    <div className="pt-2"><button onClick={()=>{setTitle('');setStorageLocation('');setPlanCurrency(currency);setSavingMode('progressive');setInitialAmount('1000');setTotalTargetInput('12000');setTotalWeeksInput('12');setStartDate(todayISO());setCreating(true);}} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg shadow-emerald-900/10 transition hover:bg-emerald-700"><Plus className="h-5 w-5"/>Adicionar plano</button></div>
+  </div>;
+
   return <div className="space-y-5 pb-20">
-    <div className="flex flex-wrap items-center justify-between gap-3"><button onClick={onReturnToFinance} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Voltar</button><div className="flex flex-wrap items-center gap-2">
-      {challenges.length>1&&<div className="relative"><button onClick={()=>setShowChallenges(v=>!v)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"><Flag className="h-4 w-4 text-emerald-600"/>Meus planos<ChevronDown className="h-4 w-4"/></button>{showChallenges&&<div className="absolute right-0 z-20 mt-2 min-w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">{challenges.map(c=><button key={c.id} onClick={()=>{onSelectChallenge(c.id);setShowChallenges(false);}} className={'block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold '+(c.id===activeChallenge.id?'bg-emerald-50 text-emerald-800':'text-slate-600 hover:bg-slate-50')}>{c.title}</button>)}</div>}</div>}
-      <button onClick={()=>{setTitle('');setStorageLocation('');setPlanCurrency(currency);setSavingMode('progressive');setInitialAmount('1000');setTotalTargetInput('12000');setTotalWeeksInput('12');setStartDate(todayISO());setCreating(true);}} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-emerald-700"><Plus className="h-4 w-4"/>Novo plano</button><button onClick={removeChallenge} title="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button>
-    </div></div>
+    <div className="flex items-center justify-between gap-3"><button onClick={()=>onSelectChallenge('')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Meus planos</button><button onClick={removeChallenge} title="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button></div>
     <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-lg shadow-emerald-900/5">
       <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white sm:p-8"><div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl"/><div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Sua jornada de economia</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeChallenge.title}</h2><div className="mt-2 flex items-center gap-2 text-sm text-emerald-50"><span>{activeChallenge.storageLocation?.trim()||'Local do dinheiro não informado'}</span><button type="button" title="Editar local onde o dinheiro está guardado" onClick={()=>{setStorageDraft(activeChallenge.storageLocation||'');setStorageError('');setEditingStorage(true);}} className="rounded-lg p-1.5 text-white/90 hover:bg-white/15"><Pencil className="h-3.5 w-3.5"/></button></div><p className="mt-2 text-sm text-emerald-50">Plano de {totalWeeks} semanas • iniciado em {new Date(activeChallenge.startDate+'T00:00:00').toLocaleDateString(locale)}</p></div><div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-4"><p className="text-xs font-semibold text-emerald-50">Total da meta</p><p className="mt-1 text-2xl font-black">{formatCurrency(metrics?.target||0,activePlanCurrency)}</p></div></div><div className="relative mt-7"><div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-50"><span>Progresso geral</span><span>{(metrics?.percent||0).toFixed(1)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-black/20"><motion.div initial={{width:0}} animate={{width:(metrics?.percent||0)+'%'}} transition={{duration:0.7}} className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"/></div></div></div>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Já economizado</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.saved||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Falta economizar</p><p className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{formatCurrency(metrics?.remaining||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Etapas concluídas</p><p className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{metrics?.count||0}<span className="text-sm font-bold text-slate-400"> / {totalWeeks}</span></p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Próximo depósito</p><p className="mt-1 break-words text-lg font-black text-violet-700 sm:text-xl">{formatCurrency(metrics?.nextAmount||0,activeChallenge.currency||currency)}</p></div></div>
