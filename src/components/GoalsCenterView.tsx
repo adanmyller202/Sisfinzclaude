@@ -4,7 +4,6 @@ import { ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types'
 import { useSavings } from '../hooks/useSavings';
 import { useFinanceControl } from '../hooks/useFinanceControl';
 import { getTranslations } from '../utils/i18n';
-import { ObjectivesView } from './ObjectivesView';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
@@ -17,7 +16,7 @@ import {
   ArrowRight,
   TrendingUp,
   Sparkles,
-  LayoutGrid,
+  
 } from 'lucide-react';
 
 interface GoalsCenterViewProps {
@@ -70,7 +69,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   onDeleteExpense,
 }) => {
   const t = getTranslations(language);
-  const [activeTab, setActiveTab] = useState<'squares' | 'savings' | 'challenge52'>('squares');
+  const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
 
   const {
     savings,
@@ -91,7 +90,6 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   const [transferDefaultType, setTransferDefaultType] = useState<'deposit' | 'withdrawal'>('deposit');
 
   const tabs = [
-    { id: 'squares', label: 'Desafio', icon: LayoutGrid, desc: 'Quadrados' },
     { id: 'savings', label: 'Cofrinhos', icon: PiggyBank, desc: 'Metas Livres' },
     { id: 'challenge52', label: '52 Semanas', icon: Award, desc: 'Poupança Progressiva' },
   ] as const;
@@ -116,17 +114,19 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400 mt-2">Arquitetura de Sonhos e Patrimônio</p>
               </div>
             </div>
-            <p className="text-sm font-medium text-slate-400 max-w-xl leading-relaxed">Gerencie seus objetivos financeiros, desde pequenos cofrinhos até grandes desafios anuais, em um ambiente visual integrado.</p>
+            <p className="text-sm font-medium text-slate-400 max-w-xl leading-relaxed">Organize seus cofrinhos e acompanhe sua poupança progressiva de 52 semanas.</p>
           </div>
 
+{activeTab === 'savings' && (
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => activeTab === 'savings' ? (setSavingToEdit(null), setIsSavingModalOpen(true)) : onOpenNewGoalModal()}
+            onClick={() => (setSavingToEdit(null), setIsSavingModalOpen(true))}
             className="h-16 px-10 rounded-2xl bg-white text-slate-950 font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-50 transition-all cursor-pointer shrink-0"
           >
-            <span className="flex items-center gap-2"><Plus className="w-5 h-5 stroke-[4]" /> Criar Nova</span>
+            <span className="flex items-center gap-2"><Plus className="w-5 h-5 stroke-[4]" /> Criar Cofrinho</span>
           </motion.button>
+          )}
         </div>
 
         {/* Tab Switcher Interface */}
@@ -162,29 +162,6 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="relative"
         >
-          {activeTab === 'squares' && (
-            <ObjectivesView
-              goals={goals}
-              activeGoal={activeGoal}
-              activeGoalSquares={activeGoalSquares}
-              currency={currency}
-              language={language}
-              savedAmount={savedAmount}
-              targetAmount={targetAmount}
-              remainingAmount={remainingAmount}
-              financialProgressPercent={financialProgressPercent}
-              completedSquaresCount={completedSquaresCount}
-              totalSquaresCount={totalSquaresCount}
-              squaresProgressPercent={squaresProgressPercent}
-              onSwitchGoal={onSwitchGoal}
-              onOpenNewGoalModal={onOpenNewGoalModal}
-              onOpenEditGoalModal={onOpenEditGoalModal}
-              onOpenAvulsoModal={onOpenAvulsoModal}
-              onDeleteGoal={onDeleteGoal}
-              onSquareClick={onSquareClick}
-              selectedSquareId={selectedSquareId}
-            />
-          )}
 
           {activeTab === 'savings' && (
             <SavingsSection
