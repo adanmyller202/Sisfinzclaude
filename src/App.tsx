@@ -771,6 +771,9 @@ export default function App() {
                     onSquareClick={handleSquareClick}
                     selectedSquareId={activeSquareId}
                     fiftyTwoChallenge={fiftyTwoChallenge}
+                    accounts={accounts}
+                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
+                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
