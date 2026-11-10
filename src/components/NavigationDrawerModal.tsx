@@ -16,7 +16,6 @@ import {
   Sun,
   Moon,
   ShieldCheck,
-  Tag,
   PieChart as PieChartIcon,
   Users,
   Award,
@@ -100,7 +99,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         { id: 'full_report', label: 'Informe Real', icon: FileText, color: 'cyan', desc: 'Relatório detalhado' },
         { id: 'report', label: 'Gráfico Mensal', icon: PieChartIcon, color: 'blue', desc: 'Gastos por categoria' },
         { id: 'shared_accounts', label: 'Compartilhados', icon: Users, color: 'indigo', desc: 'Contas em grupo', badge: sharedPendingCount },
-        { id: 'categories', label: 'Categorias', icon: Tag, color: 'indigo', desc: 'Gerenciar rótulos' },
       ]
     }
   ];
