@@ -104,75 +104,56 @@ div[role="dialog"] {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Light Glassmorphism Global Utility System */
+/* Solid, readable surface system.
+   Keep the SisFinz emerald/white look without blur layers that obscure screens. */
 @layer utilities {
   .glass {
-    background: rgba(255, 255, 255, 0.80);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.05);
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.06);
     color: #1F2937;
   }
 
   .glass-panel {
-    background: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.90);
-    box-shadow: 0 15px 35px rgba(16, 185, 129, 0.06);
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    box-shadow: 0 12px 28px rgba(16, 185, 129, 0.07);
     color: #1F2937;
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.80);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+    background: #FFFFFF;
+    border: 1px solid #E2F5EB;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
     color: #1F2937;
   }
 
   .glass-modal {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    box-shadow: 0 25px 60px rgba(16, 185, 129, 0.12);
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
     color: #1F2937;
   }
 
   .glass-navigation {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.85);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    background: #FFFFFF;
+    border-bottom: 1px solid #D1FAE5;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
     color: #1F2937;
   }
 
-  .glass-drawer {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-right: 1px solid rgba(255, 255, 255, 0.90);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.04);
-    color: #1F2937;
-  }
-
+  .glass-drawer,
   .glass-drawer-no-blur {
-    background: rgba(255, 255, 255, 0.95);
-    border-right: 1px solid rgba(255, 255, 255, 0.90);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.04);
+    background: #FFFFFF;
+    border-right: 1px solid #D1FAE5;
+    box-shadow: 10px 0 30px rgba(15, 23, 42, 0.08);
     color: #1F2937;
   }
 
   .glass-dropdown {
-    background: rgba(255, 255, 255, 0.90);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.90);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    background: #FFFFFF;
+    border: 1px solid #D1FAE5;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
     color: #1F2937;
   }
 
@@ -183,9 +164,7 @@ div[role="dialog"] {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, 0.30);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(15, 23, 42, 0.32);
   }
 
   .solid-overlay {
@@ -205,49 +184,35 @@ div[role="dialog"] {
     color: #1F2937;
   }
 
-  .glass-dark {
-    background: rgba(209, 250, 235, 0.65) !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(16, 185, 129, 0.20) !important;
+  .glass-dark,
+  .glass-emerald {
+    background: #D1FAEB !important;
+    border: 1px solid rgba(16, 185, 129, 0.22) !important;
     box-shadow: 0 4px 15px rgba(16, 185, 129, 0.08) !important;
     color: #064E3B !important;
   }
 
-  .glass-emerald {
-    background: rgba(209, 250, 235, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(16, 185, 129, 0.20);
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.08);
-  }
-
   .mesh-gradient {
     background-color: #F4F8F6;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(52, 211, 153, 0.12) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.10) 0px, transparent 50%),
-      radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.10) 0px, transparent 50%);
-    background-attachment: fixed;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(52, 211, 153, 0.10) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.08) 0px, transparent 50%);
   }
 
   .premium-shadow {
-    box-shadow: 
-      0 10px 25px -3px rgba(16, 185, 129, 0.08),
+    box-shadow: 0 10px 25px -3px rgba(16, 185, 129, 0.08),
       0 4px 6px -4px rgba(0, 0, 0, 0.03),
       inset 0 0 0 1px rgba(255, 255, 255, 0.8);
   }
 
   .premium-shadow-emerald {
-    box-shadow: 
-      0 20px 25px -5px rgba(16, 185, 129, 0.15),
+    box-shadow: 0 20px 25px -5px rgba(16, 185, 129, 0.15),
       0 8px 10px -6px rgba(16, 185, 129, 0.1);
   }
 
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -257,9 +222,7 @@ div[role="dialog"] {
     position: absolute;
     inset: 0;
     z-index: 0;
-    background: rgba(209, 250, 235, 0.55);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: #E6F4EA;
   }
 
   .settings-backdrop {
@@ -283,9 +246,7 @@ div[role="dialog"] {
   .settings-panel-solid [class*="bg-white/10"] {
     background-color: #F0FDF7 !important;
   }
-  .settings-panel-solid [class*="border-white/"] {
-    border-color: #D1FAE5 !important;
-  }
+  .settings-panel-solid [class*="border-white/"] { border-color: #D1FAE5 !important; }
   .settings-panel-solid [class*="text-slate-400"] { color: #64748B !important; }
   .settings-panel-solid [class*="text-slate-500"] { color: #475569 !important; }
   .settings-panel-solid [class*="hover:bg-white/10"]:hover { background-color: #D1FAE5 !important; }
@@ -306,7 +267,6 @@ div[role="dialog"] {
   .settings-confirm-solid [class*="bg-white/5"] { background-color: #F8FAFC !important; }
 }
 
-
 /* Global dark theme: override the light base surfaces and the app shell. */
 html.dark,
 html.dark body,
@@ -319,16 +279,17 @@ html.dark #root {
   color-scheme: dark;
 }
 
-/* Real dark surfaces for the app's reusable glass panels. */
+/* Dark mode uses opaque surfaces too: never blur the screen content. */
 html.dark .glass,
 html.dark .glass-panel,
 html.dark .glass-card,
 html.dark .glass-modal,
 html.dark .glass-navigation,
 html.dark .glass-drawer,
+html.dark .glass-drawer-no-blur,
 html.dark .glass-dropdown {
-  background: rgba(15, 23, 42, 0.94) !important;
-  border-color: rgba(71, 85, 105, 0.65) !important;
+  background: #0F172A !important;
+  border-color: #334155 !important;
   color: #E2E8F0 !important;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
 }
@@ -337,15 +298,11 @@ html.dark .glass [class*="text-slate-800"],
 html.dark .glass-panel [class*="text-slate-900"],
 html.dark .glass-panel [class*="text-slate-800"],
 html.dark .glass-card [class*="text-slate-900"],
-html.dark .glass-modal [class*="text-slate-900"] {
-  color: #F1F5F9 !important;
-}
+html.dark .glass-modal [class*="text-slate-900"] { color: #F1F5F9 !important; }
 html.dark .glass [class*="text-slate-600"],
 html.dark .glass-panel [class*="text-slate-600"],
 html.dark .glass-card [class*="text-slate-600"],
-html.dark .glass-modal [class*="text-slate-600"] {
-  color: #CBD5E1 !important;
-}
+html.dark .glass-modal [class*="text-slate-600"] { color: #CBD5E1 !important; }
 html.dark .mesh-gradient {
   background-color: #020617 !important;
   background-image: radial-gradient(circle at 15% 10%, rgba(16, 185, 129, 0.10), transparent 35%),
