@@ -222,18 +222,6 @@ div[role="dialog"] {
     box-shadow: 0 4px 15px rgba(16, 185, 129, 0.08);
   }
 
-  /* Global safeguard: eliminate all dark transparent backgrounds in favor of mint glass */
-  .dark [class*="bg-slate-900"],
-  .dark [class*="bg-slate-950"],
-  .dark [class*="bg-slate-800"],
-  .dark [class*="bg-black"],
-  .dark [class*="bg-zinc-900"],
-  .dark [class*="bg-gray-900"] {
-    background-color: rgba(209, 250, 235, 0.60) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-  }
-
   .mesh-gradient {
     background-color: #F4F8F6;
     background-image: 
@@ -329,6 +317,34 @@ html.dark #root {
 html.dark body,
 html.dark #root {
   color-scheme: dark;
+}
+
+/* Real dark surfaces for the app's reusable glass panels. */
+html.dark .glass,
+html.dark .glass-panel,
+html.dark .glass-card,
+html.dark .glass-modal,
+html.dark .glass-navigation,
+html.dark .glass-drawer,
+html.dark .glass-dropdown {
+  background: rgba(15, 23, 42, 0.94) !important;
+  border-color: rgba(71, 85, 105, 0.65) !important;
+  color: #E2E8F0 !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+html.dark .glass [class*="text-slate-900"],
+html.dark .glass [class*="text-slate-800"],
+html.dark .glass-panel [class*="text-slate-900"],
+html.dark .glass-panel [class*="text-slate-800"],
+html.dark .glass-card [class*="text-slate-900"],
+html.dark .glass-modal [class*="text-slate-900"] {
+  color: #F1F5F9 !important;
+}
+html.dark .glass [class*="text-slate-600"],
+html.dark .glass-panel [class*="text-slate-600"],
+html.dark .glass-card [class*="text-slate-600"],
+html.dark .glass-modal [class*="text-slate-600"] {
+  color: #CBD5E1 !important;
 }
 html.dark .mesh-gradient {
   background-color: #020617 !important;
