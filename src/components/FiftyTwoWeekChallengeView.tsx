@@ -21,7 +21,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
   const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
   const previewTotal=savingMode==='fixed'?totalGoal:firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
-  const previewLastDate=()=>{const d=new Date((startDate||todayISO())+'T00:00:00');d.setDate(d.getDate()+Math.max(0,requestedWeeks-1)*7);return d.toLocaleDateString(language==='es'?'es-ES':language==='en'?'en-US':'pt-BR',{day:'2-digit',month:'long',year:'numeric'});};
+  const previewLastDate=()=>{const d=new Date((startDate||todayISO())+'T00:00:00');d.setDate(d.getDate()+Math.max(0,requestedWeeks*7-1));return d.toLocaleDateString(language==='es'?'es-ES':language==='en'?'en-US':'pt-BR',{day:'2-digit',month:'long',year:'numeric'});};
   const amountForWeek=(week:number, challenge:FiftyTwoWeekChallenge)=>{const count=Math.max(1,Math.floor(challenge.totalWeeks||52));if((challenge.savingMode||'progressive')==='fixed'){const regular=Math.round((challenge.totalTarget/count)*100)/100;return week===count?Math.round((challenge.totalTarget-regular*(count-1))*100)/100:regular;}return Math.round(challenge.initialAmount*week*100)/100;};
   const totalWeeks=Math.max(1,Math.floor(activeChallenge?.totalWeeks||52));
   const completedSet=useMemo(()=>new Set(activeChallenge?.completedWeeks||[]),[activeChallenge]);
