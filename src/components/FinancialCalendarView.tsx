@@ -255,13 +255,14 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
 
 
   const handleSelectCalendarItem = (item: MonthTimelineItem) => {
-    // Close the day sheet before leaving the calendar so it cannot remain
-    // mounted behind the destination screen.
-    setIsDayDetailModalOpen(false);
     if (onOpenTransaction && item.originalId) {
-      onOpenTransaction(item, selectedMonth);
+      // Navigate first; the calendar unmounts with the destination route,
+      // and the destination opens the exact transaction.
+      onOpenTransaction({ ...item, originalId: String(item.originalId) }, selectedMonth);
+      setIsDayDetailModalOpen(false);
       return;
     }
+    setIsDayDetailModalOpen(false);
     // Keep the local editor as a safe fallback when the calendar is used standalone.
     handleOpenEditItem(item);
   };
