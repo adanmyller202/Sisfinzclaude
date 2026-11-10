@@ -54,6 +54,7 @@ import {
 
 interface FullReportViewProps {
   currency: CurrencyCode;
+  currentAccountBalance?: number;
   language?: LanguageCode;
   bills: BillItem[];
   incomes: IncomeItem[];
@@ -76,6 +77,7 @@ interface FullReportViewProps {
 
 export const FullReportView: React.FC<FullReportViewProps> = ({
   currency,
+  currentAccountBalance,
   language = 'pt',
   bills,
   incomes,
@@ -485,10 +487,18 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
     return personalOverdue + sharedOverdue;
   }, [rangePersonalBills, rangeSharedBillsDetailed, myUserId]);
 
-  // Saldo / Resultante do Período
-  const netResultPeriod = useMemo(() => {
+  // Resultado analítico do período: entradas recebidas menos gastos pagos.
+  const calculatedNetResultPeriod = useMemo(() => {
     return totalReceivedIncomes - totalSpentPeriod;
   }, [totalReceivedIncomes, totalSpentPeriod]);
+
+  // No mês atual, o saldo oficial é o saldo real das contas (mesma referência da tela inicial).
+  // Em períodos históricos ou filtros personalizados, mantemos o resultado analítico do período.
+  const isCurrentMonthSummary = filterMode === 'monthly' && selectedMonth === getCurrentMonthStr();
+  const hasAccountBalance = isCurrentMonthSummary && Number.isFinite(currentAccountBalance);
+  const netResultPeriod = hasAccountBalance ? Number(currentAccountBalance) : calculatedNetResultPeriod;
+  const hasBalanceAdjustment = hasAccountBalance && Math.abs(netResultPeriod - calculatedNetResultPeriod) >= 0.01;
+  const balanceDifference = netResultPeriod - calculatedNetResultPeriod;
 
   // 6. QUIÉN ME DEBE / A QUIÉN DEBO
   const debtSummary = useMemo(() => {
@@ -1081,8 +1091,19 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
                 {formatCurrency(netResultPeriod, currency)}
               </div>
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">
-                {netResultPeriod >= 0 ? 'Superávit no período' : 'Déficit no período'} • {language === 'es' ? 'Ver resumen' : 'Ver resumo'} →
+                {hasAccountBalance ? 'Saldo atual das contas' : netResultPeriod >= 0 ? 'Superávit no período' : 'Déficit no período'} • {language === 'es' ? 'Ver resumen' : 'Ver resumo'} →
               </p>
+              {hasBalanceAdjustment && (
+                <div className="mt-3 rounded-xl bg-white/15 border border-white/20 p-3 text-left space-y-1">
+                  <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    Saldo ajustado para coincidir com as contas
+                  </div>
+                  <p className="text-[10px] leading-relaxed font-medium normal-case tracking-normal opacity-90">
+                    Entradas menos saídas: {formatCurrency(calculatedNetResultPeriod, currency)}. Saldo atual: {formatCurrency(netResultPeriod, currency)}. Diferença: {formatCurrency(Math.abs(balanceDifference), currency)}. Isso pode ocorrer por ajustes manuais, saldo anterior, transferências ou lançamentos fora do período.
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
 
