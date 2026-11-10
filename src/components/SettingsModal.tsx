@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react';
 import { AppSettings, CurrencyCode, LanguageCode, BillItem, IncomeItem, ExpenseItem } from '../types';
 import { CURRENCIES } from '../utils/currency';
 import { LANGUAGES, getTranslations } from '../utils/i18n';
-import { MonthlyReportSection } from './MonthlyReportSection';
 import { CategoryManager } from './CategoryManager';
 import { DisplayCategory } from '../hooks/useCategories';
 import { CategoryScope, CustomCategory } from '../types';
@@ -332,14 +331,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Layout className="w-3.5 h-3.5 text-teal-500" />
                   Dados & Relatórios
                 </div>
-
-                <MonthlyReportSection
-                  bills={bills}
-                  incomes={incomes}
-                  expenses={expenses}
-                  currency={activeCurrency}
-                  language={localLang}
-                />
 
                 <div className="grid grid-cols-2 gap-3">
                   <motion.button
