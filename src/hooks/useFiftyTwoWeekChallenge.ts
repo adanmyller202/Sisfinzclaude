@@ -13,7 +13,7 @@ import {
   deleteDoc,
   onSnapshot,
 } from 'firebase/firestore';
-import { FiftyTwoWeekChallenge, ExpenseItem } from '../types';
+import { FiftyTwoWeekChallenge, ExpenseItem, CurrencyCode } from '../types';
 
 export function useFiftyTwoWeekChallenge() {
   const { user } = useAuth();
