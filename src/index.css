@@ -275,25 +275,45 @@ div[role="dialog"] {
   }
 
   .settings-backdrop {
-    position: fixed;
+    position: absolute;
     inset: 0;
-    z-index: 50;
+    z-index: 0;
     background: rgba(15, 23, 42, 0.35);
   }
 
   .settings-panel-solid {
-    background-color: #0F172A !important;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
-    color: #F8FAFC;
+    background-color: #FFFFFF !important;
+    border: 1px solid #D1FAE5;
+    box-shadow: 0 25px 60px -15px rgba(5, 150, 105, 0.18);
+    color: #1F2937;
     opacity: 1 !important;
+    isolation: isolate;
+  }
+
+  .settings-panel-solid .text-white { color: #1F2937 !important; }
+  .settings-panel-solid [class*="bg-white/5"],
+  .settings-panel-solid [class*="bg-white/10"] {
+    background-color: #F0FDF7 !important;
+  }
+  .settings-panel-solid [class*="border-white/"] {
+    border-color: #D1FAE5 !important;
+  }
+  .settings-panel-solid [class*="text-slate-400"] { color: #64748B !important; }
+  .settings-panel-solid [class*="text-slate-500"] { color: #475569 !important; }
+  .settings-panel-solid [class*="hover:bg-white/10"]:hover { background-color: #D1FAE5 !important; }
+  .settings-panel-solid .custom-scrollbar {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
   }
 
   .settings-confirm-solid {
-    background-color: #0F172A !important;
+    background-color: #FFFFFF !important;
     border: 1px solid rgba(244, 63, 94, 0.35);
-    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
-    color: #F8FAFC;
+    box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.25);
+    color: #1F2937;
     opacity: 1 !important;
   }
+  .settings-confirm-solid .text-white { color: #1F2937 !important; }
+  .settings-confirm-solid [class*="bg-white/5"] { background-color: #F8FAFC !important; }
 }
