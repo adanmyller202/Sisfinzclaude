@@ -108,7 +108,6 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
   );
 
   const [activeFilter, setActiveFilter] = useState<CalendarFilter>('all');
-  const [showProjected, setShowProjected] = useState<boolean>(true);
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [txInitialType, setTxInitialType] = useState<TransactionType>('bill');
   const [txDefaultDate, setTxDefaultDate] = useState<string>(todayStr);
@@ -272,61 +271,76 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20">
-      {/* Premium Header */}
-      <div className="glass-panel rounded-[2.5rem] p-6 sm:p-8 shadow-md space-y-8 relative overflow-hidden group">
-        <div className="absolute top-0 right-0 p-8 opacity-10"><Calendar className="w-40 h-48 text-emerald-600" /></div>
-        
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-4">
-            <button onClick={onReturnToFinance} className="p-3 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 transition-all shadow-xs">
+      {/* Compact calendar header and reliable month navigation */}
+      <div className="glass-panel rounded-[2rem] p-4 sm:p-6 shadow-md space-y-5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-6 opacity-[0.07] pointer-events-none" aria-hidden="true">
+          <Calendar className="w-28 h-28 text-emerald-600" />
+        </div>
+
+        <div className="relative z-10 flex flex-col gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md">
+              <Calendar className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Calendário</h2>
+              <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Acompanhe suas movimentações por mês</p>
+            </div>
+          </div>
+
+          <div className="relative z-20 flex items-center gap-2 w-full">
+            <button
+              type="button"
+              aria-label="Mês anterior"
+              onClick={goToPreviousMonth}
+              className="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all flex items-center justify-center"
+            >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md"><Calendar className="w-5 h-5 text-white" /></div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Calendário</h2>
-              </div>
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-widest mt-1.5 opacity-80">Projeção temporal de fluxo de caixa</p>
+            <div className="min-w-0 flex-1 h-11 rounded-xl bg-white/90 border border-slate-200/80 flex items-center justify-center px-2">
+              <span className="text-sm sm:text-base font-black text-slate-900 capitalize text-center truncate">{formatMonthName(selectedMonth, locale)}</span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="bg-white/80 rounded-2xl p-1.5 flex items-center gap-2 border border-slate-200/80 shadow-xs">
-              <button onClick={goToPreviousMonth} className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-all"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="px-4 text-sm font-black text-slate-900 uppercase tracking-widest min-w-[140px] text-center capitalize">{formatMonthName(selectedMonth, locale)}</span>
-              <button onClick={goToNextMonth} className="p-2 rounded-xl hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-all"><ChevronRight className="w-4 h-4" /></button>
-            </div>
-            <button onClick={() => setSelectedMonth(getCurrentMonthStr())} className="h-12 px-6 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 text-slate-700 text-[10px] font-black uppercase tracking-widest transition-all shadow-xs">Hoje</button>
-            <button onClick={() => setShowProjected(!showProjected)} className={`h-12 px-5 rounded-2xl border transition-all flex items-center gap-2 shadow-xs ${showProjected ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-white/80 border-slate-200/80 text-slate-600'}`}>
-              {showProjected ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            <button
+              type="button"
+              aria-label="Próximo mês"
+              onClick={goToNextMonth}
+              className="w-11 h-11 shrink-0 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition-all flex items-center justify-center"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedMonth(getCurrentMonthStr())}
+              className="h-11 shrink-0 px-3 sm:px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[10px] font-black uppercase tracking-wider transition-all"
+            >
+              Hoje
             </button>
           </div>
         </div>
 
-        {/* Dynamic KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
-          <div className="p-5 rounded-3xl bg-white/80 border border-slate-200/80 shadow-xs">
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Total Entradas</div>
-            <div className="text-2xl font-black text-emerald-600 font-mono">{formatCurrency(totalInflows, currency)}</div>
+        <div className="relative z-10 grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-white/85 border border-slate-200/80">
+            <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">Entradas</div>
+            <div className="text-sm sm:text-xl font-black text-emerald-600 font-mono truncate">{formatCurrency(totalInflows, currency)}</div>
           </div>
-          <div className="p-5 rounded-3xl bg-white/80 border border-slate-200/80 shadow-xs">
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Total Saídas</div>
-            <div className="text-2xl font-black text-rose-600 font-mono">{formatCurrency(totalOutflows, currency)}</div>
+          <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-white/85 border border-slate-200/80">
+            <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">Saídas</div>
+            <div className="text-sm sm:text-xl font-black text-rose-600 font-mono truncate">{formatCurrency(totalOutflows, currency)}</div>
           </div>
-          <div className="p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 shadow-xs">
-            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-1">Projeção Final</div>
-            <div className="text-2xl font-black text-slate-900 font-mono">{formatCurrency(endMonthProjected, currency)}</div>
+          <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+            <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-emerald-700 mb-1">Projeção final</div>
+            <div className="text-sm sm:text-xl font-black text-slate-900 font-mono truncate">{formatCurrency(endMonthProjected, currency)}</div>
           </div>
         </div>
 
-        {/* Filter Scroll */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 relative z-10">
+        <div className="relative z-10 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {(['all', 'income', 'expense', 'pending', 'paid', 'shared'] as const).map(f => (
             <button
               key={f}
+              type="button"
               onClick={() => setActiveFilter(f)}
-              className={`h-10 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer whitespace-nowrap ${
-                activeFilter === f ? 'bg-emerald-600 text-white shadow-md' : 'bg-white/80 text-slate-600 hover:text-slate-900 border border-slate-200/80 shadow-xs'
+              className={`h-9 shrink-0 px-3 sm:px-4 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+                activeFilter === f ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white/85 text-slate-600 hover:text-slate-900 border border-slate-200/80'
               }`}
             >
               {f === 'all' ? 'Todos' : f === 'income' ? 'Entradas' : f === 'expense' ? 'Saídas' : f === 'pending' ? 'Pendentes' : f === 'paid' ? 'Pagos' : 'Em Grupo'}
