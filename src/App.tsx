@@ -721,7 +721,7 @@ export default function App() {
       ) : (
         <div className="flex-1 flex min-w-0 max-w-7xl w-full mx-auto overflow-x-clip">
           {/* Content Viewport: Clean, wide, space-saving layout */}
-          <main className="flex-1 min-w-0 p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-hidden pb-28 relative">
+          <main className="flex-1 min-w-0 min-h-0 p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-clip pb-28 relative">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentView}
@@ -729,7 +729,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full h-full"
+                className="w-full min-w-0 min-h-0"
               >
                 {currentView === 'planejar' ? (
                   <PlanningView
