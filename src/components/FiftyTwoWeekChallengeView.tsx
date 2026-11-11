@@ -160,8 +160,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   </div>;
 
   if(!activeChallenge || !showingSelectedPlan)return <div className="mx-auto w-full max-w-3xl min-w-0 space-y-4 overflow-x-clip px-1 pb-24 sm:px-2">
-    <div className="flex items-center justify-between gap-3">
-      <button onClick={onReturnToFinance} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-sm"><ArrowLeft className="h-4 w-4"/>Voltar</button>
+    <div className="flex min-w-0 items-center justify-between gap-3">
       <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Meus planos</h2>
     </div>
     <section className="space-y-3">
