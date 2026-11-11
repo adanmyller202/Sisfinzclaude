@@ -109,7 +109,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const displayError = localError || authError;
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6 text-slate-900 relative box-border overflow-y-auto pt-safe pb-safe mesh-gradient selection:bg-emerald-500/20">
+    <div className="min-h-[100svh] w-full flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 pt-20 sm:pt-8 pb-8 text-slate-900 relative box-border overflow-x-hidden overflow-y-auto overscroll-y-auto mesh-gradient selection:bg-emerald-500/20">
       {/* Cinematic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/15 rounded-full blur-[120px] animate-pulse" />
@@ -138,7 +138,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         initial={{ opacity: 0, scale: 0.95, y: 40 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-[3rem] shadow-[0_30px_70px_rgba(16,185,129,0.12)] p-8 sm:p-10 space-y-8 my-auto border border-white/90"
+        className="relative w-full max-w-md bg-white/90 backdrop-blur-2xl rounded-[2rem] sm:rounded-[3rem] shadow-[0_30px_70px_rgba(16,185,129,0.12)] p-5 sm:p-10 space-y-6 sm:space-y-8 my-4 sm:my-auto border border-white/90"
       >
         {/* Brand Header */}
         <div className="text-center space-y-4">
