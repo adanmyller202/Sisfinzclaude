@@ -36,8 +36,6 @@ import {
   Clock,
   AlertTriangle,
   Users,
-  Eye,
-  EyeOff,
   Filter,
   Sparkles,
   X,
