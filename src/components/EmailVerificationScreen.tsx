@@ -44,7 +44,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-6 text-slate-900 dark:text-slate-100 relative box-border overflow-y-auto pt-safe pb-safe mesh-gradient">
+    <div className="min-h-[100svh] w-full flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 pt-20 sm:pt-8 pb-8 text-slate-900 dark:text-slate-100 relative box-border overflow-x-hidden overflow-y-auto overscroll-y-auto mesh-gradient">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-amber-600/10 rounded-full blur-[120px] animate-pulse" />
       </div>
@@ -52,7 +52,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 40 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-md glass-modal rounded-[3rem] p-8 sm:p-10 space-y-10 my-auto text-center"
+        className="relative w-full max-w-md glass-modal rounded-[3rem] p-8 sm:p-10 space-y-10 my-4 sm:my-auto text-center"
       >
         <div className="space-y-6">
           <div className="relative mx-auto w-24 h-24 rounded-[2rem] bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shadow-xs group overflow-hidden">
