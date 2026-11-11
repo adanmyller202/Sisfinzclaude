@@ -10,12 +10,13 @@
   html {
     width: 100%;
     max-width: 100%;
-    overflow-x: clip;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
     min-height: 100%;
     height: auto;
-    overscroll-behavior-y: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overscroll-behavior-y: auto;
     background-color: #F4F8F6 !important;
     color: #1F2937;
   }
@@ -23,14 +24,14 @@
   body {
     width: 100%;
     max-width: 100%;
-    overflow-x: clip;
+    min-height: 100%;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overscroll-behavior-y: none;
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
+    overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
     background-color: #F4F8F6 !important;
     color: #1F2937;
@@ -40,12 +41,13 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    overflow-x: clip;
     min-height: 100vh;
-    min-height: 100dvh;
+    min-height: 100svh;
     height: auto;
+    overflow: visible;
     display: flex;
     flex-direction: column;
+    flex: 1 0 auto;
     background-color: #F4F8F6 !important;
   }
 
@@ -331,6 +333,10 @@ html.dark .mesh-gradient {
 /* Responsive viewport guard: prevent oversized cards, pets and animated elements from widening the app. */
 @media (max-width: 640px) {
   #root, #root > *, main, main > *, header, nav { min-width: 0; max-width: 100%; }
+  html, body { overflow-y: auto !important; }
+  #root { overflow-y: visible !important; }
+  main { min-height: max-content; overflow-y: visible !important; }
+  body, #root { overscroll-behavior-y: auto !important; }
   img, svg, video, canvas { max-width: 100%; }
   .mesh-gradient { overflow-x: clip; }
 }
