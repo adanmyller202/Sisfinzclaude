@@ -30,6 +30,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const activePlanCurrency = activeChallenge?.currency || (safeAccounts.some(a=>a.isActive!==false&&a.currency===currency) ? currency : safeAccounts.find(a=>a.isActive!==false)?.currency || currency);
   const { user } = useAuth();
   const [showingSelectedPlan,setShowingSelectedPlan]=useState(false);
+  const [planListFilter,setPlanListFilter]=useState<'active'|'finalized'>('active');
   const [creating,setCreating]=useState(false), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [planCurrency,setPlanCurrency]=useState<CurrencyCode>(currency), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [weekCurrency,setWeekCurrency]=useState<CurrencyCode>(currency), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [showChallenges,setShowChallenges]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState(''), [showRedeemModal,setShowRedeemModal]=useState(false), [redeemAccountId,setRedeemAccountId]=useState(''), [redeemBusy,setRedeemBusy]=useState(false), [redeemError,setRedeemError]=useState('');
   const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
   const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
@@ -163,21 +164,61 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     <div className="flex min-w-0 items-center justify-between gap-3">
       <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Meus planos</h2>
     </div>
-    <section className="space-y-3">
-      <div className="flex items-center justify-between"><h3 className="text-base font-extrabold text-slate-900">Planos ativos</h3><span className="text-xs font-bold text-slate-500">{activePlans.length}</span></div>
-      {activePlans.length===0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center"><p className="text-sm font-bold text-slate-700">Nenhum plano ativo</p><p className="mt-1 text-xs text-slate-500">Adicione um plano para começar.</p></div> : <div className="space-y-2">
-        {activePlans.map(({plan,count,completedCount,saved,target,percent})=><button type="button" key={plan.id} onClick={()=>{onSelectChallenge(plan.id);setShowingSelectedPlan(true);}} className="w-full min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md">
-          <div className="flex min-w-0 items-center justify-between gap-3"><div className="min-w-0 flex-1"><h4 className="truncate text-sm font-extrabold text-slate-900 sm:text-base">{plan.title}</h4><p className="mt-1 text-xs text-slate-500">{completedCount}/{count} etapas concluídas</p></div><div className="shrink-0 text-right"><p className="text-sm font-extrabold text-emerald-700">{formatCurrency(saved,plan.currency||currency)}</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">de {formatCurrency(target,plan.currency||currency)}</p></div></div>
-          <div className="mt-3 flex items-center gap-2"><div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{width:percent+'%'}}/></div><span className="w-9 shrink-0 text-right text-[10px] font-bold text-slate-500">{Math.round(percent)}%</span></div>
-        </button>)}
-      </div>}
+    <section className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 rounded-[1.25rem] border border-emerald-500/20 bg-[#D1FAEB]/60 p-1.5 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setPlanListFilter('active')}
+          className={`relative z-10 flex items-center justify-center gap-2 rounded-xl px-3 py-3.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all sm:text-xs ${planListFilter === 'active' ? 'text-white' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          {planListFilter === 'active' && <motion.div layoutId="weekly-plan-filter-bg" className="absolute inset-0 rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20" />}
+          <Target className="relative z-10 h-4 w-4" />
+          <span className="relative z-10">Planos ativos</span>
+          <span className={`relative z-10 rounded-full px-1.5 py-0.5 text-[9px] ${planListFilter === 'active' ? 'bg-white/20 text-white' : 'bg-white/70 text-slate-600'}`}>{activePlans.length}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setPlanListFilter('finalized')}
+          className={`relative z-10 flex items-center justify-center gap-2 rounded-xl px-3 py-3.5 text-[10px] font-black uppercase tracking-[0.12em] transition-all sm:text-xs ${planListFilter === 'finalized' ? 'text-white' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          {planListFilter === 'finalized' && <motion.div layoutId="weekly-plan-filter-bg" className="absolute inset-0 rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20" />}
+          <CheckCircle2 className="relative z-10 h-4 w-4" />
+          <span className="relative z-10">Planos finalizados</span>
+          <span className={`relative z-10 rounded-full px-1.5 py-0.5 text-[9px] ${planListFilter === 'finalized' ? 'bg-white/20 text-white' : 'bg-white/70 text-slate-600'}`}>{finalizedPlans.length}</span>
+        </button>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={planListFilter}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18 }}
+          className="space-y-3"
+        >
+          {planListFilter === 'active' ? (
+            activePlans.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 bg-white p-6 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Target className="h-6 w-6"/></div>
+                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum plano ativo</p>
+                <p className="mt-1 text-xs text-slate-500">Adicione um plano para começar.</p>
+              </div>
+            ) : activePlans.map(({plan,count,completedCount,saved,target,percent})=><button type="button" key={plan.id} onClick={()=>{onSelectChallenge(plan.id);setShowingSelectedPlan(true);}} className="w-full min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md">
+              <div className="flex min-w-0 items-center justify-between gap-3"><div className="min-w-0 flex-1"><h4 className="truncate text-sm font-extrabold text-slate-900 sm:text-base">{plan.title}</h4><p className="mt-1 text-xs text-slate-500">{completedCount}/{count} etapas concluídas</p></div><div className="shrink-0 text-right"><p className="text-sm font-extrabold text-emerald-700">{formatCurrency(saved,plan.currency||currency)}</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">de {formatCurrency(target,plan.currency||currency)}</p></div></div>
+              <div className="mt-3 flex items-center gap-2"><div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{width:percent+'%'}}/></div><span className="w-9 shrink-0 text-right text-[10px] font-bold text-slate-500">{Math.round(percent)}%</span></div>
+            </button>)
+          ) : (
+            finalizedPlans.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 bg-white p-6 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Award className="h-6 w-6"/></div>
+                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum plano finalizado</p>
+                <p className="mt-1 text-xs text-slate-500">Seus planos concluídos aparecerão aqui.</p>
+              </div>
+            ) : finalizedPlans.map(({plan,count,completedCount,saved})=><button type="button" key={plan.id} onClick={()=>{onSelectChallenge(plan.id);setShowingSelectedPlan(true);}} className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50/50"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-slate-800">{plan.title}</span><span className="mt-1 block text-[10px] text-slate-500">{completedCount}/{count} etapas · {plan.redeemedAt?'Valor resgatado':'Aguardando resgate'}</span></span><span className="shrink-0 text-sm font-extrabold text-slate-700">{formatCurrency(saved,plan.currency||currency)}</span></button>)
+          )}
+        </motion.div>
+      </AnimatePresence>
     </section>
-    <details className="group rounded-2xl border border-slate-200 bg-white">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4"><span className="text-sm font-extrabold text-slate-800">Planos finalizados</span><span className="flex items-center gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{finalizedPlans.length}</span><ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180"/></span></summary>
-      {finalizedPlans.length===0 ? <p className="border-t border-slate-100 px-4 py-4 text-xs text-slate-500">Seus planos concluídos aparecerão aqui.</p> : <div className="space-y-2 border-t border-slate-100 p-3">
-        {finalizedPlans.map(({plan,count,completedCount,saved})=><button type="button" key={plan.id} onClick={()=>{onSelectChallenge(plan.id);setShowingSelectedPlan(true);}} className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-left hover:bg-emerald-50"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-slate-800">{plan.title}</span><span className="mt-0.5 block text-[10px] text-slate-500">{completedCount}/{count} etapas · {plan.redeemedAt?'Valor resgatado':'Aguardando resgate'}</span></span><span className="shrink-0 text-xs font-extrabold text-slate-700">{formatCurrency(saved,plan.currency||currency)}</span></button>)}
-      </div>}
-    </details>
     <button type="button" onClick={()=>{setTitle('');setStorageLocation('');setPlanCurrency(currency);setSavingMode('progressive');setInitialAmount('1000');setTotalTargetInput('12000');setTotalWeeksInput('12');setStartDate(todayISO());setCreating(true);}} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar plano</button>
   </div>;
 
