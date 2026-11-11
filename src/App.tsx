@@ -719,9 +719,9 @@ export default function App() {
           </p>
         </div>
       ) : (
-        <div className="flex-1 flex min-w-0 max-w-7xl w-full mx-auto overflow-x-clip">
+        <div className="w-full min-w-0 max-w-7xl mx-auto flex-none overflow-x-clip">
           {/* Content Viewport: Clean, wide, space-saving layout */}
-          <main className="flex-1 min-w-0 min-h-0 p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-clip pb-28 relative">
+          <main className="w-full min-w-0 flex-none p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-clip overflow-y-visible pb-28 relative">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentView}
