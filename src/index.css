@@ -27,7 +27,7 @@
     min-height: 100%;
     height: auto;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: visible;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -333,7 +333,8 @@ html.dark .mesh-gradient {
 /* Responsive viewport guard: prevent oversized cards, pets and animated elements from widening the app. */
 @media (max-width: 640px) {
   #root, #root > *, main, main > *, header, nav { min-width: 0; max-width: 100%; }
-  html, body { overflow-y: auto !important; }
+  html { overflow-y: auto !important; }
+  body { overflow-y: visible !important; }
   #root { overflow-y: visible !important; }
   main { min-height: max-content; overflow-y: visible !important; }
   body, #root { overscroll-behavior-y: auto !important; }
