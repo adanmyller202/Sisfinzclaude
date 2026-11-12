@@ -1072,6 +1072,9 @@ export default function App() {
         onCompleteChallengeWeek={(challengeId, weekNumber, accountId) =>
           fiftyTwoChallenge.completeWeek(challengeId, weekNumber, accountId, adjustAccountBalanceForFinancialItem)
         }
+        onUndoChallengeWeek={(challengeId, weekNumber, returnAccountId) =>
+          fiftyTwoChallenge.undoWeek(challengeId, weekNumber, returnAccountId, adjustAccountBalanceForFinancialItem, deleteExpense)
+        }
       />
 
       {/* Deposit Modal */}
