@@ -537,6 +537,7 @@ Mensagem atual do usuário: ${message.trim()}`;
       savingTransactions = [],
       categories = [],
       sharedBills = [],
+      sharedPartners = [],
       weeklyChallenges = [],
       lastActionItem = null,
     } = context;
@@ -652,6 +653,11 @@ Mensagem atual do usuário: ${message.trim()}`;
       note: tx.note || '',
     }));
 
+    const sharedPartnersSummary = (sharedPartners || []).map((partner: any) => ({
+      uid: partner.uid,
+      displayName: partner.displayName,
+      email: partner.email || '',
+    }));
     const userIdForContext = verifiedUid ?? '';
     const sharedBillsSummary = (sharedBills || []).map((b: any) => ({
       id: b.id,
@@ -733,6 +739,7 @@ Contexto financeiro do usuário:
 - Cofrinhos e reservas: ${JSON.stringify(savingsSummary)}
 - Categorias disponíveis e seus escopos: ${JSON.stringify(categoriesSummary)}
 - Histórico de aportes e resgates: ${JSON.stringify(savingTransactionsSummary)}
+- Pessoas conectadas para compartilhar contas: ${JSON.stringify(sharedPartnersSummary)}
 - Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
 - Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
 
@@ -872,6 +879,11 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      intent: "query_shared_bills"
      name: título da conta, se o usuário citar uma
      targetMonth: "YYYY-MM"
+   - Criar conta compartilhada: intent "create_shared_bill", title, amount, dueDay, targetMonth, partnerName ou partnerId, myPercentage, partnerPercentage, isRecurring e category.
+   - Editar conta compartilhada: intent "update_shared_bill", name ou matchedId e os campos que devem mudar.
+   - Excluir conta compartilhada: intent "delete_shared_bill", name ou matchedId exato.
+   - Use somente pessoas em "Pessoas conectadas para compartilhar contas". Se houver mais de uma e não for indicada, pergunte quem é o parceiro. Se não houver conexão, explique que precisa conectar a pessoa primeiro.
+   - Se o usuário não informar percentuais, reutilize a divisão da última conta compartilhada com essa pessoa; se não houver histórico, use 50/50. As porcentagens devem somar 100%.
    - Consultar progresso do desafio semanal (ex: "como está meu desafio da moto?"):
      intent: "query_weekly_challenge"
      challengeId: id exato do desafio
