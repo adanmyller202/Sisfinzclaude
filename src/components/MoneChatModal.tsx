@@ -45,7 +45,7 @@ import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
 
 const isFinancialQuestion = (value: string): boolean => {
   const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return /\b(saldo|dividas?|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|quanto tenho|quanto devo)\b/.test(normalized);
+  return /\b(saldo|divid\\w*|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|quanto tenho|quanto devo)\b/.test(normalized);
 };
 
 interface ChatMessage {
@@ -716,7 +716,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
-              if (!liveUserTextRef.current) liveFinanceToolUsedRef.current = false;
               const spoken = content.inputTranscription.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[,.!?]+/g, ' ').replace(/\s+/g, ' ').trim();
               if (/^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(spoken)) {
                 pendingVoiceActionRef.current = null;
