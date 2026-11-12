@@ -38,6 +38,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI, Modality } from '@google/genai';
 
 interface ChatMessage {
   id: string;
@@ -199,6 +200,18 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [isVoiceReplyEnabled, setIsVoiceReplyEnabled] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const liveSessionRef = useRef<any>(null);
+  const liveInputContextRef = useRef<AudioContext | null>(null);
+  const liveOutputContextRef = useRef<AudioContext | null>(null);
+  const liveStreamRef = useRef<MediaStream | null>(null);
+  const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const liveSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const livePlaybackTimeRef = useRef(0);
+  const liveUserTextRef = useRef('');
+  const liveMoneTextRef = useRef('');
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'connecting' | 'listening' | 'speaking'>('idle');
+  const [liveTranscript, setLiveTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -353,7 +366,186 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     }
   };
 
+  const stopLiveVoice = () => {
+    try { liveProcessorRef.current?.disconnect(); } catch {}
+    try { liveSourceRef.current?.disconnect(); } catch {}
+    liveStreamRef.current?.getTracks().forEach((track) => track.stop());
+    liveSessionRef.current?.close?.();
+    liveSessionRef.current = null;
+    liveProcessorRef.current = null;
+    liveSourceRef.current = null;
+    liveStreamRef.current = null;
+    liveInputContextRef.current?.close().catch(() => {});
+    liveOutputContextRef.current?.close().catch(() => {});
+    liveInputContextRef.current = null;
+    liveOutputContextRef.current = null;
+    livePlaybackTimeRef.current = 0;
+    setIsLiveConnected(false);
+    setIsRecording(false);
+    setLiveStatus('idle');
+    setLiveTranscript('');
+  };
+
+  const floatToPcm16Base64 = (input: Float32Array, inputRate: number) => {
+    const ratio = inputRate / 16000;
+    const pcm = new Int16Array(Math.floor(input.length / ratio));
+    for (let i = 0; i < pcm.length; i++) {
+      const sample = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)] || 0));
+      pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+    const bytes = new Uint8Array(pcm.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 0x8000, bytes.length)));
+    }
+    return btoa(binary);
+  };
+
+  const playLiveAudio = (base64: string) => {
+    const context = liveOutputContextRef.current;
+    if (!context || !base64) return;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const pcm = new Int16Array(bytes.buffer);
+    const buffer = context.createBuffer(1, pcm.length, 24000);
+    const channel = buffer.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    const startAt = Math.max(context.currentTime + 0.025, livePlaybackTimeRef.current);
+    source.start(startAt);
+    livePlaybackTimeRef.current = startAt + buffer.duration;
+  };
+
+  const startLiveVoice = async () => {
+    if (isLiveConnected || liveStatus === 'connecting' || isLoading) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessages((prev) => [...prev, { id: 'live_unsupported_' + Date.now(), sender: 'mone', text: 'Este navegador não oferece acesso ao microfone. Você pode conversar por texto.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      return;
+    }
+    setLiveStatus('connecting');
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Entre na sua conta SisFinz para iniciar a conversa por voz.');
+      const idToken = await user.getIdToken();
+      const tokenResponse = await fetch('/api/mone/live-token', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
+      });
+      if (!tokenResponse.ok) {
+        const body = await tokenResponse.json().catch(() => ({}));
+        throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
+      }
+      const tokenData = await tokenResponse.json();
+      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
+      const session = await ai.live.connect({
+        model: tokenData.model || 'gemini-3.1-flash-live-preview',
+        config: { responseModalities: [Modality.AUDIO] },
+        callbacks: {
+          onopen: () => {
+            setIsLiveConnected(true);
+            setIsRecording(true);
+            setLiveStatus('listening');
+          },
+          onmessage: (message: any) => {
+            const content = message?.serverContent;
+            if (content?.inputTranscription?.text) {
+              liveUserTextRef.current += content.inputTranscription.text;
+              setLiveTranscript(liveUserTextRef.current);
+            }
+            if (content?.outputTranscription?.text) {
+              liveMoneTextRef.current += content.outputTranscription.text;
+              setLiveTranscript(liveMoneTextRef.current);
+              setLiveStatus('speaking');
+            }
+            (content?.modelTurn?.parts || []).forEach((part: any) => {
+              if (part?.inlineData?.data) playLiveAudio(part.inlineData.data);
+              if (part?.text) {
+                liveMoneTextRef.current += part.text;
+                setLiveTranscript(liveMoneTextRef.current);
+              }
+            });
+            if (content?.interrupted) {
+              livePlaybackTimeRef.current = liveOutputContextRef.current?.currentTime || 0;
+              setLiveStatus('listening');
+            }
+            if (content?.turnComplete) {
+              const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const userText = liveUserTextRef.current.trim();
+              const moneText = liveMoneTextRef.current.trim();
+              setMessages((prev) => [
+                ...prev,
+                ...(userText ? [{ id: 'live_user_' + Date.now(), sender: 'user' as const, text: userText, timestamp: stamp }] : []),
+                ...(moneText ? [{ id: 'live_mone_' + Date.now(), sender: 'mone' as const, text: moneText, timestamp: stamp }] : []),
+              ]);
+              liveUserTextRef.current = '';
+              liveMoneTextRef.current = '';
+              setLiveTranscript('');
+              setLiveStatus('listening');
+            }
+          },
+          onerror: (error: any) => {
+            console.error('[Mone Live] Connection error:', error);
+            setLiveStatus('idle');
+          },
+          onclose: () => {
+            setIsLiveConnected(false);
+            setIsRecording(false);
+            setLiveStatus('idle');
+          },
+        },
+      });
+      liveSessionRef.current = session;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      liveStreamRef.current = stream;
+      const inputContext = new AudioContext({ sampleRate: 16000 });
+      const outputContext = new AudioContext({ sampleRate: 24000 });
+      await Promise.all([inputContext.resume(), outputContext.resume()]);
+      liveInputContextRef.current = inputContext;
+      liveOutputContextRef.current = outputContext;
+      const source = inputContext.createMediaStreamSource(stream);
+      const processor = inputContext.createScriptProcessor(4096, 1, 1);
+      const silentGain = inputContext.createGain();
+      silentGain.gain.value = 0;
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(inputContext.destination);
+      processor.onaudioprocess = (event) => {
+        if (!liveSessionRef.current) return;
+        const data = floatToPcm16Base64(event.inputBuffer.getChannelData(0), inputContext.sampleRate);
+        liveSessionRef.current.sendRealtimeInput({ audio: { data, mimeType: 'audio/pcm;rate=16000' } });
+      };
+      liveSourceRef.current = source;
+      liveProcessorRef.current = processor;
+
+      const financialContext = [
+        'Idioma: ' + language + '; moeda: ' + currency + '.',
+        'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
+        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency }))).slice(0, 4500) + '.',
+        'Faturas: ' + JSON.stringify(bills.map((b) => ({ id: b.id, name: b.name, amount: b.amount, dueDay: b.dueDay }))).slice(0, 4500) + '.',
+        'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
+        'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
+        'Metas: ' + JSON.stringify(goals.map((g) => ({ id: g.id, title: g.title, targetAmount: g.targetAmount }))).slice(0, 1500) + '.',
+      ].join(' ');
+      session.sendRealtimeInput({
+        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Nesta versão de voz você ainda não pode alterar registros; nunca diga que executou operações. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
+      });
+    } catch (error: any) {
+      console.error('[Mone Live] Start failed:', error);
+      stopLiveVoice();
+      setMessages((prev) => [...prev, { id: 'live_error_' + Date.now(), sender: 'mone', text: error?.message || 'Não consegui iniciar a conversa em tempo real. Você ainda pode usar o texto.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    }
+  };
+
   const stopRecording = () => {
+    if (isLiveConnected) {
+      stopLiveVoice();
+      return;
+    }
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   };
@@ -396,6 +588,12 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
   useEffect(() => () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+    try { liveProcessorRef.current?.disconnect(); } catch {}
+    try { liveSourceRef.current?.disconnect(); } catch {}
+    liveStreamRef.current?.getTracks().forEach((track) => track.stop());
+    liveSessionRef.current?.close?.();
+    liveInputContextRef.current?.close().catch(() => {});
+    liveOutputContextRef.current?.close().catch(() => {});
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
   }, []);
 
@@ -495,11 +693,11 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                     exit={{ opacity: 0, y: -8 }}
                     className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl"
                   >
-                    {isRecording ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
+                    {liveStatus === 'connecting' ? 'Conectando à Mone…' : liveStatus === 'speaking' ? 'Mone está falando…' : isLiveConnected ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
                   </motion.h1>
                 </AnimatePresence>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                  {isRecording ? 'Pode falar naturalmente. Quando terminar, toque no botão para enviar.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre suas finanças ou peça para eu fazer algo no SisFinz.'}
+                  {isLiveConnected ? 'Conversa em tempo real. Pode falar naturalmente e me interromper.' : liveStatus === 'connecting' ? 'Preparando o microfone e a conexão segura.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre qualquer assunto ou suas finanças.'}
                 </p>
               </div>
 
@@ -533,13 +731,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
                 <motion.button
                   type="button"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isLoading}
+                  onClick={isLiveConnected ? stopRecording : startLiveVoice}
+                  disabled={isLoading || liveStatus === 'connecting'}
                   whileTap={{ scale: 0.94 }}
                   className={`flex h-24 w-24 items-center justify-center rounded-full border-[6px] border-white shadow-[0_14px_40px_rgba(16,185,129,0.25)] transition-all disabled:opacity-50 ${isRecording ? 'bg-gradient-to-br from-rose-400 to-rose-600 text-white' : 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'}`}
-                  aria-label={isRecording ? 'Enviar áudio' : 'Começar a falar'}
+                  aria-label={isLiveConnected ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
                 >
-                  {isRecording ? <Square className="h-8 w-8 fill-current" /> : <Mic className="h-9 w-9" />}
+                  {liveStatus === 'connecting' ? <Loader2 className="h-8 w-8 animate-spin" /> : isLiveConnected ? <Square className="h-8 w-8 fill-current" /> : <Mic className="h-9 w-9" />}
                 </motion.button>
 
                 <button type="button" onClick={() => { setIsVoiceReplyEnabled((value) => !value); if (typeof window !== 'undefined' && 'speechSynthesis' in window && isVoiceReplyEnabled) window.speechSynthesis.cancel(); }} className={`flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 transition hover:bg-white/80 ${isVoiceReplyEnabled ? 'text-emerald-700' : 'text-slate-400'}`} aria-label="Alternar resposta falada">
@@ -549,7 +747,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               </div>
 
               <p className="mt-4 text-[10px] font-medium text-slate-400">
-                {isRecording ? 'Toque no botão vermelho quando terminar de falar' : 'Toque no microfone para começar'}
+                {isLiveConnected ? 'Toque no botão para encerrar a conversa' : 'Toque no microfone para iniciar uma conversa ao vivo'}
               </p>
             </div>
 
