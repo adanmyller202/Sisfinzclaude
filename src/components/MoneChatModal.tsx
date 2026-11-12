@@ -691,10 +691,37 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
       }
       const tokenData = await tokenResponse.json();
+      const DOLLAR_SIGN = String.fromCharCode(36);
+      const currencyNames: Record<string, string> = {
+        ARS: 'pesos argentinos',
+        USD: 'dólares estadounidenses',
+        BRL: 'reais',
+        EUR: 'euros',
+      };
+      const currencySymbols: Record<string, string> = {
+        ARS: 'ARS ' + DOLLAR_SIGN,
+        USD: 'US' + DOLLAR_SIGN,
+        BRL: 'R' + DOLLAR_SIGN,
+        EUR: '€',
+      };
       const financialContext = [
-        'Idioma obrigatório da Mone: português brasileiro (pt-BR). Moeda ativa do SisFinz: ' + currency + '. Os códigos são obrigatórios: ARS = pesos argentinos (símbolo ARS $); USD = dólares estadounidenses (símbolo US$); BRL = reais (símbolo R$); EUR = euros (símbolo €). Nunca interprete o cifrão isoladamente.',
+        'Idioma obrigatório da Mone: português brasileiro (pt-BR). Moeda ativa do SisFinz: ' + currency + '. Códigos de moeda são obrigatórios: ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Nunca deduza a moeda pelo cifrão genérico.',
         'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
-        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency, currencyName: ({ ARS: 'pesos argentinos', USD: 'dólares estadounidenses', BRL: 'reais', EUR: 'euros' } as Record<string, string>)[a.currency] || 'moeda não identificada', currencySymbol: ({ ARS: 'ARS 
+        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency, currencyName: currencyNames[a.currency] || 'moeda não identificada', currencySymbol: currencySymbols[a.currency] || '' }))).slice(0, 4500) + '.',
+        'Faturas: ' + JSON.stringify(bills.map((b) => {
+          const linkedAccount = accounts.find((account) => account.id === b.accountId);
+          const billCurrency = linkedAccount?.currency || currency;
+          return {
+            id: b.id,
+            name: b.name,
+            amount: b.amount,
+            currency: billCurrency,
+            currencyName: currencyNames[billCurrency] || 'moeda não identificada',
+            currencySymbol: currencySymbols[billCurrency] || '',
+            accountName: linkedAccount?.name || null,
+            dueDay: b.dueDay,
+          };
+        })).slice(0, 4500) + '.',
         'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
         'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
         'Metas: ' + JSON.stringify(goals.map((g) => {
@@ -715,7 +742,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
-      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto e use o histórico para manter continuidade. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas ou pagamentos DEVE chamar a ferramenta sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se a ferramenta não encontrar registros, diga claramente que não há registros correspondentes. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. ARS = pesos argentinos e símbolo visual ARS $; USD = dólares estadounidenses e símbolo US$; BRL = reais e símbolo R$; EUR = euros e símbolo €. Nunca deduza moeda pelo símbolo $, pois ARS e USD podem usar cifrão. Sempre diga o nome completo da moeda junto ao valor, por exemplo "45.000 pesos argentinos"; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Se a ferramenta retornar status diferente de \"ok\", informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
+      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas ou pagamentos DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um sim claro. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
@@ -1513,9 +1540,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -1609,16 +1633,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
@@ -2007,9 +2021,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -2103,16 +2114,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
@@ -2511,9 +2512,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -2607,16 +2605,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
@@ -3005,9 +2993,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -3101,16 +3086,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
@@ -3499,9 +3474,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -3595,16 +3567,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
@@ -3997,9 +3959,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
-  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -4093,16 +4052,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 ))}
               </div>
 
-              {latestMoneMessage && messages.length > 1 && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
-                </motion.div>
-              )}
-
-              {latestUserMessage && (
-                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
-              )}
               {isLiveConnected && liveTranscript && (
                 <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
