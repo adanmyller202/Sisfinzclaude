@@ -31,6 +31,11 @@ import {
 import { formatCurrencySpoken } from './currency';
 import { getLocaleForLanguage } from './i18n';
 
+export type MoneNavigationSection =
+  | 'finance' | 'planejar' | 'goals' | 'savings' | 'categories' | 'report'
+  | 'shared_accounts' | 'challenge_52' | 'full_report' | 'accounts'
+  | 'financial_calendar' | 'freedom' | 'daily_pace';
+
 export interface MoneActionItem {
   type: 'expense' | 'bill' | 'income';
   id: string;
@@ -75,6 +80,7 @@ export interface MoneActionHandlers {
   onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
+  onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
 }
 
 export interface MoneContext {
@@ -938,6 +944,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const currentMonthStr = getCurrentMonthStr();
     const todayStr = getTodayStr();
     const locale = getLocaleForLanguage(ctx.language);
+
+    if (intent === 'navigate_to_section') {
+      const allowedSections: MoneNavigationSection[] = [
+        'finance', 'planejar', 'goals', 'savings', 'categories', 'report',
+        'shared_accounts', 'challenge_52', 'full_report', 'accounts',
+        'financial_calendar', 'freedom', 'daily_pace',
+      ];
+      const section = d.section as MoneNavigationSection;
+      if (!allowedSections.includes(section) || !handlers?.onNavigateToSection) {
+        return { text: 'Não consegui identificar qual tela do SisFinz você quer abrir. Pode dizer o nome da seção?', isInternalCalculation: true };
+      }
+      await handlers.onNavigateToSection(section);
+      const labels: Record<MoneNavigationSection, string> = {
+        finance: 'início', planejar: 'planejamento', goals: 'metas', savings: 'cofrinhos',
+        categories: 'categorias', report: 'relatórios', shared_accounts: 'contas compartilhadas',
+        challenge_52: 'desafio de 52 semanas', full_report: 'relatório completo',
+        accounts: 'contas', financial_calendar: 'calendário financeiro',
+        freedom: 'liberdade financeira', daily_pace: 'ritmo diário',
+      };
+      return { text: `Abri a seção ${labels[section]} do SisFinz.`, isInternalCalculation: true, actionExecuted: 'navigate_to_section' };
+    }
 
     // Complete a 52-week challenge deposit through the existing account-balance workflow.
     if (intent === 'complete_challenge_week') {
