@@ -239,6 +239,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
   useEffect(() => {
     if (!isOpen && liveSessionRef.current) {
+      pendingVoiceActionRef.current = null;
       try { liveProcessorRef.current?.disconnect(); } catch {}
       try { liveSourceRef.current?.disconnect(); } catch {}
       liveStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -565,6 +566,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
+              const spoken = content.inputTranscription.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
+              if (/^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(spoken)) {
+                pendingVoiceActionRef.current = null;
+              }
               liveUserTextRef.current += content.inputTranscription.text;
               setLiveTranscript(liveUserTextRef.current);
             }
@@ -726,6 +731,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   };
 
   useEffect(() => () => {
+    pendingVoiceActionRef.current = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
     try { liveProcessorRef.current?.disconnect(); } catch {}
     try { liveSourceRef.current?.disconnect(); } catch {}
