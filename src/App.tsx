@@ -1037,7 +1037,7 @@ export default function App() {
       <MoneChatModal
         isOpen={isMoneChatOpen}
         onClose={() => setIsMoneChatOpen(false)}
-        currentBalance={currentBalance}
+        currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
         forecastBalance={forecastBalance}
         accounts={accounts}
         sharedBills={sharedAccounts.sharedBills}
