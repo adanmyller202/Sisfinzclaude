@@ -126,6 +126,10 @@ interface MoneChatModalProps {
   onAddCategory?: (name: string, scope: 'all' | 'bill' | 'income' | 'expense') => Promise<any> | void;
   onUpdateCategory?: (categoryId: string, updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string }) => Promise<any> | void;
   onDeleteCategory?: (categoryId: string) => Promise<any> | void;
+  onAddAccount?: (params: { name: string; type: 'bank' | 'wallet' | 'cash' | 'safe' | 'other'; currency: CurrencyCode; initialBalance: number; currentBalance?: number; notes?: string }) => Promise<any> | void;
+  onUpdateAccount?: (accountId: string, params: Partial<AccountItem> & { currentBalance?: number }) => Promise<any> | void;
+  onDeleteAccount?: (accountId: string) => Promise<any> | void;
+  onToggleAccountActive?: (accountId: string) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -172,6 +176,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onAddAccount,
+  onUpdateAccount,
+  onDeleteAccount,
+  onToggleAccountActive,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -421,6 +429,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onAddCategory,
       onUpdateCategory,
       onDeleteCategory,
+      onAddAccount,
+      onUpdateAccount,
+      onDeleteAccount,
+      onToggleAccountActive,
       onCreateSavingGoal: savingsControl.createSavingGoal,
       onUpdateSavingGoal: savingsControl.updateSavingGoal,
       onDeleteSavingGoal: savingsControl.deleteSavingGoal,
