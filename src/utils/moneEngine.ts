@@ -2998,11 +2998,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
   }
 
-  // 7. Balance query (e.g. "Qual meu saldo atual?")
-  if (norm.includes('saldo')) {
+  // 7. Balance query: resolve a named account first, otherwise report active balances by currency.
+  const asksBalance = /\b(?:saldo|quanto\s+tenho|quanto\s+tem|disponivel|balance)\b/i.test(norm);
+  const asksAllAccounts = /\b(?:total|geral|todas\s+as\s+contas|somad\w*)\b/i.test(norm);
+  if (asksBalance && !asksAllAccounts) {
+    const mentionedAccounts = (context.accounts || []).filter((account) => {
+      const tokens = normalize(account.name).split(/\s+/).filter((token) =>
+        token.length > 2 && !['banco', 'bank', 'conta', 'cuenta', 'account'].includes(token)
+      );
+      return (tokens.length ? tokens : [normalize(account.name)]).some((token) => norm.includes(token));
+    });
+    if (mentionedAccounts.length === 1) {
+      return await executeMoneIntent({ intent: 'query_account_balance', data: { accountId: mentionedAccounts[0].id } }, context);
+    }
+    if (mentionedAccounts.length > 1) {
+      return { text: 'Encontrei mais de uma conta com esse nome. Qual delas você quer consultar?', isInternalCalculation: true };
+    }
+  }
+  if (asksBalance) {
     const balanceSummary = formatCurrencyBreakdown(getCurrentBalancesByCurrency(context), 'não encontrei saldo nas contas ativas');
     return {
-      text: `Seu saldo atual nas contas do SisFinz é ${balanceSummary}.`,
+      text: `Seu saldo atual nas contas ativas do SisFinz é ${balanceSummary}.`,
       isInternalCalculation: true,
     };
   }
