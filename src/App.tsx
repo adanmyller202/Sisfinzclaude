@@ -796,7 +796,13 @@ export default function App() {
                       await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
                       await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
                     }}
-                    onAddExpense={addExpense}
+                    onAddExpense={async (expenseData) => {
+          const created = await addExpense(expenseData);
+          if (expenseData.accountId) {
+            await adjustAccountBalanceForFinancialItem(expenseData.accountId, -expenseData.amount);
+          }
+          return created;
+        }}
                     onDeleteExpense={deleteExpense}
                   />
                 ) : currentView === 'report' ? (
