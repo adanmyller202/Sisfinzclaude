@@ -1042,6 +1042,7 @@ export default function App() {
         accounts={accounts}
         sharedBills={sharedAccounts.sharedBills}
         weeklyChallenges={fiftyTwoChallenge.challenges}
+        categories={allDisplayCategories}
         myUserId={user?.uid}
         bills={bills}
         incomes={incomes}
@@ -1094,6 +1095,9 @@ export default function App() {
           setCurrentView(section);
           setIsMoneChatOpen(false);
         }}
+        onAddCategory={(name, scope) => addCategory(name, scope)}
+        onUpdateCategory={(categoryId, updates) => updateCategory(categoryId, updates)}
+        onDeleteCategory={(categoryId) => deleteCategory(categoryId)}
       />
 
       {/* Deposit Modal */}
