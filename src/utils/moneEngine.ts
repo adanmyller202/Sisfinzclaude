@@ -17,6 +17,7 @@ import {
   RecurrenceType,
   MoneStyle,
   SharedBill,
+  FiftyTwoWeekChallenge,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -66,6 +67,7 @@ export interface MoneActionHandlers {
     notes?: string;
   }) => Promise<any> | void;
   onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
+  onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -73,6 +75,7 @@ export interface MoneContext {
   forecastBalance?: number;
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
+  weeklyChallenges?: FiftyTwoWeekChallenge[];
   myUserId?: string;
   bills: BillItem[];
   incomes: IncomeItem[];
@@ -746,6 +749,67 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const currentMonthStr = getCurrentMonthStr();
     const todayStr = getTodayStr();
     const locale = getLocaleForLanguage(ctx.language);
+
+    // Complete a 52-week challenge deposit through the existing account-balance workflow.
+    if (intent === 'complete_challenge_week') {
+      if (!handlers?.onCompleteChallengeWeek) {
+        return { text: 'A integração com o desafio semanal ainda não está disponível.', isInternalCalculation: true };
+      }
+      const challenges = ctx.weeklyChallenges || [];
+      const challengeName = normalize(d.challengeName || d.name || '');
+      const challengeMatches = challenges.filter((challenge) =>
+        (d.challengeId && challenge.id === d.challengeId) ||
+        (challengeName && normalize(challenge.title).includes(challengeName))
+      );
+      if (challengeMatches.length !== 1) {
+        return {
+          text: challengeMatches.length > 1
+            ? 'Encontrei mais de um desafio semanal. Qual deles você quer atualizar?'
+            : 'Qual desafio semanal você quer atualizar? Diga o nome do plano.',
+          isInternalCalculation: true,
+        };
+      }
+      const challenge = challengeMatches[0];
+      const weekNumber = Number(d.weekNumber);
+      const totalWeeks = Math.max(1, Math.floor(challenge.totalWeeks || 52));
+      if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > totalWeeks) {
+        return { text: `Qual semana do desafio "${challenge.title}" você deseja concluir? O plano vai até a semana ${totalWeeks}.`, isInternalCalculation: true };
+      }
+      if (challenge.completedWeeks.includes(weekNumber)) {
+        return { text: `A semana ${weekNumber} do desafio "${challenge.title}" já está concluída.`, isInternalCalculation: true };
+      }
+      const accountName = normalize(d.accountName || '');
+      const accountMatches = (ctx.accounts || []).filter((account) =>
+        account.isActive !== false &&
+        ((d.accountId && account.id === d.accountId) ||
+          (accountName && normalize(account.name).includes(accountName))) &&
+        (!challenge.currency || account.currency === challenge.currency)
+      );
+      if (accountMatches.length !== 1) {
+        return {
+          text: accountMatches.length > 1
+            ? 'Encontrei mais de uma conta compatível. De qual conta devo retirar o valor dessa semana?'
+            : 'De qual conta devo retirar o valor para concluir essa semana? Diga o nome da conta.',
+          isInternalCalculation: true,
+        };
+      }
+      const amount = (challenge.savingMode || 'progressive') === 'fixed'
+        ? Math.round((challenge.totalTarget / totalWeeks) * 100) / 100
+        : Math.round(challenge.initialAmount * weekNumber * 100) / 100;
+      try {
+        await handlers.onCompleteChallengeWeek(challenge.id, weekNumber, accountMatches[0].id);
+        return {
+          text: parsed.directResponse || `Semana ${weekNumber} do desafio "${challenge.title}" concluída. ${formatCurrency(amount, challenge.currency || currency)} foi separado de ${accountMatches[0].name}.`,
+          isInternalCalculation: true,
+          actionExecuted: 'complete_challenge_week',
+        };
+      } catch (err: any) {
+        return {
+          text: `Não consegui concluir a semana do desafio: ${err?.message || 'falha ao salvar'}.`,
+          isInternalCalculation: true,
+        };
+      }
+    }
 
     // Mark only the authenticated user's share of a shared bill as paid.
     if (intent === 'mark_shared_share_paid') {
