@@ -72,6 +72,7 @@ interface MoneChatModalProps {
   forecastBalance?: number;
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
+  sharedPartners?: Array<{ uid: string; displayName: string; email?: string }>;
   weeklyChallenges?: FiftyTwoWeekChallenge[];
   categories?: Array<{ id: string; name: string; scope: string; isPredefined?: boolean }>;
   myUserId?: string;
@@ -131,6 +132,16 @@ interface MoneChatModalProps {
   onUpdateAccount?: (accountId: string, params: Partial<AccountItem> & { currentBalance?: number }) => Promise<any> | void;
   onDeleteAccount?: (accountId: string) => Promise<any> | void;
   onToggleAccountActive?: (accountId: string) => Promise<any> | void;
+  onCreateSharedBill?: (params: {
+    title: string; amount: number; dueDate: string; dueDay: number; category: string; notes?: string;
+    partnerId: string; splitMethod: 'fifty_fifty' | 'custom_percentage'; myPercentage: number; partnerPercentage: number;
+    recurrence?: 'none' | 'monthly'; recurrenceMonthsCount?: number;
+  }) => Promise<any> | void;
+  onUpdateSharedBill?: (billId: string, updates: {
+    title: string; amount: number; dueDate: string; dueDay: number; category: string; notes?: string;
+    splitMethod: 'fifty_fifty' | 'custom_percentage'; myPercentage: number; partnerPercentage: number;
+  }) => Promise<any> | void;
+  onDeleteSharedBill?: (billId: string) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -140,6 +151,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   forecastBalance = currentBalance,
   accounts = [],
   sharedBills = [],
+  sharedPartners = [],
   weeklyChallenges = [],
   categories = [],
   myUserId,
@@ -182,6 +194,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onUpdateAccount,
   onDeleteAccount,
   onToggleAccountActive,
+  onCreateSharedBill,
+  onUpdateSharedBill,
+  onDeleteSharedBill,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -391,6 +406,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     forecastBalance,
     accounts,
     sharedBills,
+    sharedPartners,
     weeklyChallenges,
     myUserId,
     bills,
@@ -436,6 +452,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onUpdateAccount,
       onDeleteAccount,
       onToggleAccountActive,
+      onCreateSharedBill,
+      onUpdateSharedBill,
+      onDeleteSharedBill,
       onCreateSavingGoal: savingsControl.createSavingGoal,
       onUpdateSavingGoal: savingsControl.updateSavingGoal,
       onDeleteSavingGoal: savingsControl.deleteSavingGoal,
