@@ -90,6 +90,8 @@ interface MoneChatModalProps {
     currency: CurrencyCode;
     notes?: string;
   }) => Promise<any> | void;
+  onUpdateGoal?: (goalId: string, partial: { title?: string; icon?: string; notes?: string }) => Promise<any> | void;
+  onDeleteGoal?: (goalId: string) => Promise<any> | void;
   onTransferBetweenAccounts?: (params: {
     fromAccountId: string;
     toAccountId: string;
@@ -134,6 +136,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onToggleIncomeReceived,
   onUpdateCurrentBalance,
   onCreateGoal,
+  onUpdateGoal,
+  onDeleteGoal,
   onTransferBetweenAccounts,
   onToggleMySharePaid,
   onCompleteChallengeWeek,
@@ -354,6 +358,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onToggleIncomeReceived,
       onUpdateCurrentBalance,
       onCreateGoal,
+      onUpdateGoal,
+      onDeleteGoal,
       onTransferBetweenAccounts,
       onToggleMySharePaid,
       onCompleteChallengeWeek,
