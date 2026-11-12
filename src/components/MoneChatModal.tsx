@@ -123,6 +123,7 @@ interface MoneChatModalProps {
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
   onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
+  onViewForecastMonth?: (month: string) => Promise<void> | void;
   onAddCategory?: (name: string, scope: 'all' | 'bill' | 'income' | 'expense') => Promise<any> | void;
   onUpdateCategory?: (categoryId: string, updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string }) => Promise<any> | void;
   onDeleteCategory?: (categoryId: string) => Promise<any> | void;
@@ -173,6 +174,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onCompleteChallengeWeek,
   onUndoChallengeWeek,
   onNavigateToSection,
+  onViewForecastMonth,
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -426,6 +428,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onCompleteChallengeWeek,
       onUndoChallengeWeek,
       onNavigateToSection,
+      onViewForecastMonth,
       onAddCategory,
       onUpdateCategory,
       onDeleteCategory,
