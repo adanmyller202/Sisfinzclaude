@@ -1064,6 +1064,7 @@ export default function App() {
         onToggleIncomeReceived={toggleIncomeReceived}
         onUpdateCurrentBalance={updateCurrentBalance}
         onCreateGoal={handleSaveNewGoal}
+        onTransferBetweenAccounts={transferBetweenAccounts}
       />
 
       {/* Deposit Modal */}
