@@ -1,5 +1,9 @@
 name: SisFinz validation
 
+concurrency:
+  group: sisfinz-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
