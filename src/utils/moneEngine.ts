@@ -83,6 +83,7 @@ export interface MoneActionHandlers {
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
   onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
+  onViewForecastMonth?: (month: string) => Promise<void> | void;
   onCreateSavingGoal?: (params: {
     name: string; hasTarget?: boolean; targetAmount?: number; currency?: CurrencyCode;
     deadline?: string; icon?: string; notes?: string;
@@ -793,6 +794,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
 
   if (asksForecast) {
+    if (targetMonth !== currentMonthStr && handlers?.onViewForecastMonth) {
+      await handlers.onViewForecastMonth(targetMonth);
+    }
     const monthData = calculateMonthFinancials(context, targetMonth);
     const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
     const projectedSummary = formatCurrencyBreakdown(monthData.projectedBalanceByCurrency);
@@ -1896,6 +1900,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     // 11. QUERY FORECAST
     if (intent === 'query_forecast') {
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
+      if (targetMonth !== currentMonthStr && handlers?.onViewForecastMonth) {
+        await handlers.onViewForecastMonth(targetMonth);
+      }
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
       const projected = formatCurrencyBreakdown(data.projectedBalanceByCurrency);
