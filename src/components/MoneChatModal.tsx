@@ -100,7 +100,7 @@ interface MoneChatModalProps {
   ) => Promise<any> | void;
   onUpdateIncome?: (incomeId: string, partial: Partial<IncomeItem>) => Promise<any> | void;
   onDeleteIncome?: (incomeId: string) => Promise<any> | void;
-  onToggleIncomeReceived?: (incomeId: string, month: string, isReceived: boolean) => Promise<any> | void;
+  onToggleIncomeReceived?: (incomeId: string, month: string, isReceived: boolean, receivedDate?: string) => Promise<any> | void;
   onUpdateCurrentBalance?: (newBalance: number) => Promise<any> | void;
   onCreateGoal?: (goalData: {
     title: string;
