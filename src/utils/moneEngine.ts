@@ -788,7 +788,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // Route core financial questions directly to real SisFinz data before asking an LLM.
   const targetMonth = extractTargetMonth(question, currentMonthStr);
   const asksForecast =
-    /\b(?:quanto\s+(?:vai\s+)?sobr\w*|quanto\s+(?:me\s+)?rest\w*|previs[aã]o|proje[cç][aã]o|saldo\s+(?:final|no\s+fim)|fim\s+do\s+m[eê]s|fechamento\s+do\s+m[eê]s)\b/i.test(norm) ||
+    /\b(?:quanto\s+(?:que\s+)?(?:vai\s+)?(?:me\s+)?sobr\w*|quanto\s+(?:que\s+)?(?:me\s+)?rest\w*|previs[aã]o|proje[cç][aã]o|saldo\s+(?:final|no\s+fim)|fim\s+do\s+m[eê]s|fechamento\s+do\s+m[eê]s)\b/i.test(norm) ||
     (/\bsaldo\b/i.test(norm) && /\b(?:em|de|no|na|para|do|da)\s+(?:pr[oó]xim[oa]\s+m[eê]s|m[eê]s\s+que\s+vem|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/i.test(norm));
   const asksBills = /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) && /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm);
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
