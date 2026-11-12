@@ -721,19 +721,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -742,22 +742,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -801,7 +801,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -1394,7 +1394,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -1411,19 +1411,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -1432,22 +1432,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -1491,7 +1491,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -2084,7 +2084,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -2101,19 +2101,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -2122,22 +2122,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -2181,7 +2181,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -2776,7 +2776,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -2793,19 +2793,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -2814,22 +2814,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -2873,7 +2873,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -3361,19 +3361,19 @@ startServer();
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -3382,22 +3382,22 @@ startServer();
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -3441,7 +3441,7 @@ startServer();
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -4034,7 +4034,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -4051,19 +4051,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -4072,22 +4072,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -4131,7 +4131,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -4724,7 +4724,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -4741,19 +4741,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -4762,22 +4762,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -4821,7 +4821,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
@@ -5416,7 +5416,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: use o campo currency de cada registro, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Sempre fale e escreva o nome completo da moeda junto ao valor (ex.: 45.000 pesos argentinos), nunca responda apenas 45.000. A moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes e nunca converta sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
@@ -5433,19 +5433,19 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: "Compra da sapatilha"
      matchedId: id da conta correspondente
      amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para $ 150."
+     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
    - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
      intent: "update_expense"
      name: "Uber"
      matchedId: id da despesa
      amount: 35
-     directResponse: "Despesa de Uber alterada para $ 35."
+     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
    - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
      intent: "update_income"
      name: "Salário"
      matchedId: id da receita
      amount: 55000
-     directResponse: "Salário alterado para $ 55.000."
+     directResponse: "Salário alterado para 55.000 na moeda do registro."
 6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
    - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
      intent: "add_installment_bill"
@@ -5454,22 +5454,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de $ 40.000, todo dia 17."
+     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de $ 2.500 adicionada."
+     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
      isRecurring: true se salário
-     directResponse: "Receita de Salário de $ 50.000 adicionada."
+     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
    - Conta regular (ex: "minha internet vence todo dia 10"):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
+     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
@@ -5513,7 +5513,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para $ 3.000."
+     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
    - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
      intent: "delete_item"
      name: nome do item
