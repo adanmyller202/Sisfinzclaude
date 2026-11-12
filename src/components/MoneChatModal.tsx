@@ -698,7 +698,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   return { id: call.id, name: call.name, response: { status: 'error', retryable: false, message: error?.message || 'A operação não foi concluída.' } };
                 }
               }));
-              await liveSessionRef.current.sendToolResponse({ functionResponses });
+              if (liveSessionRef.current) await liveSessionRef.current.sendToolResponse({ functionResponses });
             }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
