@@ -2060,6 +2060,38 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }
     }
 
+    // UPDATE A SAVINGS JAR.
+    if (intent === 'update_saving_goal') {
+      if (!handlers?.onUpdateSavingGoal) return { text: 'A edição de cofrinhos não está disponível.', isInternalCalculation: true };
+      const savingName = normalize(d.savingName || d.name || '');
+      const matches = (ctx.savings || []).filter((goal) =>
+        d.savingId ? goal.id === d.savingId : Boolean(savingName && normalize(goal.name).includes(savingName))
+      );
+      if (matches.length !== 1) {
+        return { text: matches.length > 1 ? 'Encontrei mais de um cofrinho com esse nome. Qual você quer editar?' : 'Qual cofrinho você quer editar?', isInternalCalculation: true };
+      }
+      const updates: Partial<SavingGoal> = {};
+      if (typeof d.newName === 'string' && d.newName.trim()) updates.name = d.newName.trim();
+      if (typeof d.targetAmount === 'number' && d.targetAmount > 0) {
+        updates.targetAmount = d.targetAmount;
+        updates.hasTarget = true;
+      }
+      if (d.hasTarget === false || d.withoutTarget === true) {
+        updates.hasTarget = false;
+        updates.targetAmount = undefined;
+        updates.deadline = undefined;
+      }
+      if (typeof d.deadline === 'string') updates.deadline = d.deadline;
+      if (typeof d.notes === 'string') updates.notes = d.notes;
+      if (!Object.keys(updates).length) return { text: 'O que você quer mudar nesse cofrinho: nome, meta, prazo ou observações?', isInternalCalculation: true };
+      try {
+        await handlers.onUpdateSavingGoal(matches[0].id, updates);
+        return { text: `Atualizei o cofrinho "${matches[0].name}" com as alterações solicitadas.`, isInternalCalculation: true, actionExecuted: 'update_saving_goal' };
+      } catch (err: any) {
+        return { text: `Não consegui atualizar o cofrinho: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // DELETE A SAVINGS JAR.
     if (intent === 'delete_saving_goal') {
       if (!handlers?.onDeleteSavingGoal) return { text: 'A exclusão de cofrinhos não está disponível.', isInternalCalculation: true };
@@ -2623,7 +2655,7 @@ REGRAS:
 - Fatura/conta: intent "add_bill", com name, amount, accountName, dueDay, targetMonth e isRecurring. Sem repetição: isRecurring=false. Repetição mensal: isRecurring=true. Se faltar valor ou vencimento essencial, pergunte antes.
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
-- Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
+- Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; edite com "update_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
 - Marcar fatura como paga: "mark_bill_paid". Marcar receita recebida: "mark_income_received".
 - Para correções, edições e exclusões, identifique exatamente o registro. Se houver mais de um possível, pergunte qual. Nunca exclua por suposição.
@@ -2631,7 +2663,7 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string,
