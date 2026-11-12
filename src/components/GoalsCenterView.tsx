@@ -67,7 +67,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
     withdrawFromSaving,
   } = useSavings();
 
-  const { currentBalance, addExpense, addIncome, toggleIncomeReceived, selectedMonth } = useFinanceControl();
+  const { currentBalance, addExpense, addIncome, addIncomeAsReceived, toggleIncomeReceived, selectedMonth } = useFinanceControl();
 
   const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
   const [savingToEdit, setSavingToEdit] = useState<SavingGoal | null>(null);
@@ -169,7 +169,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
         currency={currency}
         language={language}
         onTransferToSaving={async (id, amt, rate, d, n) => await transferToSaving(id, amt, rate, d, n, { addExpense, currency })}
-        onWithdrawFromSaving={async (id, amt, rate, d, n) => await withdrawFromSaving(id, amt, rate, d, n, { addIncome, toggleIncomeReceived, currentMonthStr: selectedMonth })}
+        onWithdrawFromSaving={async (id, amt, rate, d, n) => await withdrawFromSaving(id, amt, rate, d, n, { addIncome, addIncomeAsReceived, toggleIncomeReceived, currentMonthStr: selectedMonth })}
       />
     </motion.div>
   );
