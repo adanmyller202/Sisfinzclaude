@@ -535,6 +535,7 @@ Mensagem atual do usuário: ${message.trim()}`;
       goals = [],
       savings = [],
       savingTransactions = [],
+      categories = [],
       sharedBills = [],
       weeklyChallenges = [],
       lastActionItem = null,
@@ -624,6 +625,12 @@ Mensagem atual do usuário: ${message.trim()}`;
       };
     });
 
+    const categoriesSummary = (categories || []).map((category: any) => ({
+      id: category.id,
+      name: category.name,
+      scope: category.scope || 'all',
+      isPredefined: Boolean(category.isPredefined),
+    }));
     const savingsSummary = (savings || []).map((saving: any) => ({
       id: saving.id,
       name: saving.name,
@@ -723,6 +730,7 @@ Contexto financeiro do usuário:
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
 - Cofrinhos e reservas: ${JSON.stringify(savingsSummary)}
+- Categorias disponíveis e seus escopos: ${JSON.stringify(categoriesSummary)}
 - Histórico de aportes e resgates: ${JSON.stringify(savingTransactionsSummary)}
 - Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
 - Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
@@ -866,6 +874,10 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      intent: "query_goal_progress"
      goalId: id exato da meta
      goalName: nome da meta
+   - Consultar categorias: intent "query_categories".
+   - Criar categoria: intent "create_category", name e scope (all, bill, income ou expense).
+   - Renomear/alterar categoria: intent "update_category", categoryId ou categoryName exato e newName/scope.
+   - Excluir categoria: intent "delete_category", categoryId ou categoryName exato.
    - Consultar cofrinhos/reservas: intent "query_savings", savingId ou savingName se citar um cofrinho específico.
    - Consultar histórico de aportes/resgates: intent "query_saving_transactions", savingId ou savingName se citar um cofrinho específico.
    - Criar cofrinho: intent "create_saving_goal", name, hasTarget, targetAmount se houver meta, currency e deadline se informado.
