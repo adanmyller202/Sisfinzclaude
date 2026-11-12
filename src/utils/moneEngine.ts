@@ -459,6 +459,34 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     }
   }
 
+  // Include the user's own share of shared bills, just like the monthly report.
+  if (context.myUserId) {
+    for (const sharedBill of context.sharedBills || []) {
+      const startMonth = sharedBill.startMonth || sharedBill.month || (sharedBill.dueDate || '').slice(0, 7);
+      if (!doesItemOccurInMonth(startMonth, targetMonthStr, sharedBill.recurrence || 'none', sharedBill.recurrenceMonthsCount)) continue;
+      const exception = sharedBill.exceptions?.[targetMonthStr];
+      if (exception?.isDeleted || exception?.deletedForUsers?.includes(context.myUserId) ||
+          sharedBill.excludedMonths?.includes(targetMonthStr) || sharedBill.hiddenForUsers?.includes(context.myUserId) ||
+          sharedBill.shareRequest?.status === 'rejected') continue;
+      if (!sharedBill.members?.includes(context.myUserId)) continue;
+      const myShare = exception?.shares?.[context.myUserId] || sharedBill.shares?.[context.myUserId];
+      if (!myShare) continue;
+      const accountId = exception?.accountId || sharedBill.accountId;
+      const linkedAccount = context.accounts?.find((account) => account.id === accountId);
+      const completed = statusMap.get(`bill_sb_${sharedBill.id}_${targetMonthStr}`)?.isCompleted === true ||
+        myShare.status === 'paid';
+      monthBills.push({
+        id: `sb_${sharedBill.id}`,
+        name: `[Compartilhada] ${exception?.title || sharedBill.title}`,
+        amount: Number(myShare.amount) || 0,
+        currency: linkedAccount?.currency || context.currency,
+        category: sharedBill.category || 'Contas Compartilhadas',
+        date: getEffectiveDateForMonth(targetMonthStr, sharedBill.dueDay || 1),
+        isCompleted: completed,
+      });
+    }
+  }
+
   const monthExpenses = expenses.filter((expense) =>
     expense.date && expense.date.startsWith(targetMonthStr) && !expense.isRefund && !expense.isRefunded
   );
@@ -482,9 +510,18 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     pendingBillsByCurrency.set(item.currency, (pendingBillsByCurrency.get(item.currency) || 0) + item.amount);
   }
   for (const expense of monthExpenses) {
-    const linkedAccount = context.accounts?.find((account) => account.id === (expense as any).accountId);
-    const code = linkedAccount?.currency || context.currency;
-    expensesByCurrency.set(code, (expensesByCurrency.get(code) || 0) + expense.amount);
+    const distributions = (expense as any).accountDistributions as { accountId: string; amount: number }[] | undefined;
+    if (distributions?.length) {
+      for (const distribution of distributions) {
+        const linkedAccount = context.accounts?.find((account) => account.id === distribution.accountId);
+        const code = linkedAccount?.currency || context.currency;
+        expensesByCurrency.set(code, (expensesByCurrency.get(code) || 0) + distribution.amount);
+      }
+    } else {
+      const linkedAccount = context.accounts?.find((account) => account.id === (expense as any).accountId);
+      const code = linkedAccount?.currency || context.currency;
+      expensesByCurrency.set(code, (expensesByCurrency.get(code) || 0) + expense.amount);
+    }
   }
 
   const monthlySurplus = totalIncomes - totalBills - totalOneOffExpenses;
