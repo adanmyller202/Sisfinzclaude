@@ -761,7 +761,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      matchedId: id do item correspondente
      directResponse: "Registro excluído."
    - Consultas financeiras (quanto gastei este mês?, quanto vou receber?, tenho algo para pagar?, qual meu saldo?):
-     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress" | "update_goal" | "delete_goal"
+     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast"
      targetMonth: "YYYY-MM"
      directResponse: resposta direta e exata.
    - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
@@ -797,7 +797,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "undo_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "undo_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress" | "update_goal" | "delete_goal" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
@@ -814,6 +814,7 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "itemType": "expense" | "bill" | "income",
     "newAmount": number,
     "newName": "string",
+    "icon": "string",
     "fromAccountId": "string",
     "toAccountId": "string",
     "fromAccountName": "string",
