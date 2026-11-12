@@ -1,7 +1,7 @@
 name: SisFinz validation
 
 concurrency:
-  group: sisfinz-validation-v2-${{ github.ref }}
+  group: sisfinz-validation-v3-${{ github.ref }}
   cancel-in-progress: true
 
 on:
