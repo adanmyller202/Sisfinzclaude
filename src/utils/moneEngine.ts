@@ -21,6 +21,7 @@ import {
   FiftyTwoWeekChallenge,
   SavingGoal,
   SavingTransaction,
+  SplitMethod,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -99,6 +100,16 @@ export interface MoneActionHandlers {
   onUpdateAccount?: (accountId: string, params: Partial<AccountItem> & { currentBalance?: number }) => Promise<any> | void;
   onDeleteAccount?: (accountId: string) => Promise<any> | void;
   onToggleAccountActive?: (accountId: string) => Promise<any> | void;
+  onCreateSharedBill?: (params: {
+    title: string; amount: number; dueDate: string; dueDay: number; category: string; notes?: string;
+    partnerId: string; splitMethod: SplitMethod; myPercentage: number; partnerPercentage: number;
+    recurrence?: 'none' | 'monthly'; recurrenceMonthsCount?: number;
+  }) => Promise<any> | void;
+  onUpdateSharedBill?: (billId: string, updates: {
+    title: string; amount: number; dueDate: string; dueDay: number; category: string; notes?: string;
+    splitMethod: SplitMethod; myPercentage: number; partnerPercentage: number;
+  }) => Promise<any> | void;
+  onDeleteSharedBill?: (billId: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -106,6 +117,7 @@ export interface MoneContext {
   forecastBalance?: number;
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
+  sharedPartners?: Array<{ uid: string; displayName: string; email?: string }>;
   weeklyChallenges?: FiftyTwoWeekChallenge[];
   myUserId?: string;
   bills: BillItem[];
@@ -1965,6 +1977,109 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // CREATE A SHARED BILL WITH AN EXISTING CONNECTED PARTNER.
+    if (intent === 'create_shared_bill') {
+      if (!handlers?.onCreateSharedBill) return { text: 'A criação de contas compartilhadas não está disponível.', isInternalCalculation: true };
+      const title = String(d.title || d.name || '').trim();
+      if (!title) return { text: 'Qual é o nome dessa conta compartilhada?', isInternalCalculation: true };
+      const amount = Number(d.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return { text: 'Qual é o valor total da conta compartilhada?', isInternalCalculation: true };
+      const dueDay = Number(d.dueDay);
+      if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return { text: 'Qual é o dia de vencimento dessa conta?', isInternalCalculation: true };
+      const partners = ctx.sharedPartners || [];
+      const partnerName = normalize(d.partnerName || '');
+      const partnerMatches = partners.filter((partner) =>
+        d.partnerId ? partner.uid === d.partnerId : Boolean(partnerName && (
+          normalize(partner.displayName).includes(partnerName) || normalize(partner.email || '').includes(partnerName)
+        ))
+      );
+      const partner = d.partnerId ? partnerMatches[0] : partnerName ? (partnerMatches.length === 1 ? partnerMatches[0] : undefined) : partners.length === 1 ? partners[0] : undefined;
+      if (!partner) {
+        return { text: partners.length > 1 ? 'Com qual pessoa conectada você quer compartilhar essa conta?' : 'Você ainda não tem uma pessoa conectada em Contas Compartilhadas. Primeiro conecte a pessoa no SisFinz.', isInternalCalculation: true };
+      }
+      const previous = (ctx.sharedBills || [])
+        .filter((bill) => bill.members.includes(ctx.myUserId || '') && bill.members.includes(partner.uid))
+        .sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt))[0];
+      const myPercentage = Number.isFinite(Number(d.myPercentage))
+        ? Number(d.myPercentage)
+        : Number(previous?.percentages?.[ctx.myUserId || ''] ?? 50);
+      const partnerPercentage = Number.isFinite(Number(d.partnerPercentage))
+        ? Number(d.partnerPercentage)
+        : 100 - myPercentage;
+      if (myPercentage < 0 || partnerPercentage < 0 || myPercentage + partnerPercentage !== 100) {
+        return { text: 'Como você quer dividir a conta em porcentagens? A soma precisa ser 100%.', isInternalCalculation: true };
+      }
+      const splitMethod: SplitMethod = myPercentage === 50 && partnerPercentage === 50 ? 'fifty_fifty' : 'custom_percentage';
+      const startMonth = d.targetMonth || currentMonthStr;
+      const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
+      try {
+        await handlers.onCreateSharedBill({
+          title, amount, dueDate, dueDay, category: d.category || 'Outros',
+          ...(d.notes ? { notes: d.notes } : {}),
+          partnerId: partner.uid, splitMethod, myPercentage, partnerPercentage,
+          recurrence: d.isRecurring === true ? 'monthly' : 'none',
+          ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
+        });
+        const myShare = Math.round((amount * myPercentage) / 100);
+        return {
+          text: `Criei a conta compartilhada "${title}" de ${formatCurrencySpoken(amount, currency)} com ${partner.displayName}. Sua parte é ${formatCurrencySpoken(myShare, currency)} (${myPercentage}%) e a parte de ${partner.displayName} é ${formatCurrencySpoken(amount - myShare, currency)} (${partnerPercentage}%).`,
+          isInternalCalculation: true, actionExecuted: 'create_shared_bill',
+        };
+      } catch (err: any) {
+        return { text: `Não consegui criar a conta compartilhada: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // UPDATE A SHARED BILL.
+    if (intent === 'update_shared_bill') {
+      if (!handlers?.onUpdateSharedBill) return { text: 'A edição de contas compartilhadas não está disponível.', isInternalCalculation: true };
+      const target = normalize(d.name || d.title || '');
+      const matches = (ctx.sharedBills || []).filter((bill) =>
+        d.matchedId ? bill.id === d.matchedId : Boolean(target && normalize(bill.title).includes(target))
+      );
+      if (matches.length !== 1) return { text: matches.length > 1 ? 'Encontrei mais de uma conta compartilhada com esse nome. Qual delas?' : 'Qual conta compartilhada você quer alterar?', isInternalCalculation: true };
+      const bill = matches[0];
+      const myId = ctx.myUserId || '';
+      const partnerId = bill.members.find((memberId) => memberId !== myId);
+      const myPercentage = Number.isFinite(Number(d.myPercentage)) ? Number(d.myPercentage) : Number(bill.percentages[myId] ?? 50);
+      const partnerPercentage = Number.isFinite(Number(d.partnerPercentage)) ? Number(d.partnerPercentage) : 100 - myPercentage;
+      if (myPercentage < 0 || partnerPercentage < 0 || myPercentage + partnerPercentage !== 100) {
+        return { text: 'As porcentagens da divisão precisam somar 100%. Como você quer dividir?', isInternalCalculation: true };
+      }
+      const dueDay = Number(d.dueDay || bill.dueDay);
+      const dueDate = d.dueDate || getEffectiveDateForMonth(d.targetMonth || bill.month, dueDay);
+      try {
+        await handlers.onUpdateSharedBill(bill.id, {
+          title: String(d.newName || d.title || bill.title),
+          amount: Number(d.newAmount || d.amount || bill.amount),
+          dueDate, dueDay,
+          category: d.category || bill.category || 'Outros',
+          ...(d.notes !== undefined ? { notes: d.notes } : { notes: bill.notes }),
+          splitMethod: myPercentage === 50 && partnerPercentage === 50 ? 'fifty_fifty' : 'custom_percentage',
+          myPercentage, partnerPercentage,
+        });
+        return { text: `Atualizei a conta compartilhada "${bill.title}".`, isInternalCalculation: true, actionExecuted: 'update_shared_bill' };
+      } catch (err: any) {
+        return { text: `Não consegui atualizar a conta compartilhada: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // DELETE A SHARED BILL. Mone's chat confirmation replaces the browser confirm dialog.
+    if (intent === 'delete_shared_bill') {
+      if (!handlers?.onDeleteSharedBill) return { text: 'A exclusão de contas compartilhadas não está disponível.', isInternalCalculation: true };
+      const target = normalize(d.name || d.title || '');
+      const matches = (ctx.sharedBills || []).filter((bill) =>
+        d.matchedId ? bill.id === d.matchedId : Boolean(target && normalize(bill.title).includes(target))
+      );
+      if (matches.length !== 1) return { text: matches.length > 1 ? 'Encontrei mais de uma conta compartilhada com esse nome. Qual delas?' : 'Qual conta compartilhada você quer excluir?', isInternalCalculation: true };
+      try {
+        await handlers.onDeleteSharedBill(matches[0].id);
+        return { text: `A conta compartilhada "${matches[0].title}" foi excluída ou ocultada da sua lista.`, isInternalCalculation: true, actionExecuted: 'delete_shared_bill' };
+      } catch (err: any) {
+        return { text: `Não consegui excluir a conta compartilhada: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // QUERY THE USER'S OWN SHARE OF SHARED BILLS.
     if (intent === 'query_shared_bills') {
       const targetMonth = d.targetMonth || currentMonthStr;
@@ -2831,6 +2946,7 @@ REGRAS:
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
 - Contas: consulte com "query_accounts"; crie com "create_account"; edite com "update_account"; exclua com "delete_account"; ative/desative com "toggle_account_active". Use o ID/nome exato, moeda e saldo informados.
+- Contas compartilhadas: consulte com "query_shared_bills"; crie com "create_shared_bill"; edite com "update_shared_bill"; exclua com "delete_shared_bill". Use uma conexão ativa, confirme parceiro, valor, vencimento e porcentagens (soma 100%).
 - Categorias: consulte com "query_categories"; crie com "create_category"; edite com "update_category"; exclua com "delete_category". Use o nome/ID exato e o escopo bill, income, expense ou all.
 - Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; edite com "update_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
@@ -2840,7 +2956,7 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "create_shared_bill" | "update_shared_bill" | "delete_shared_bill" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string, "accountId": string,
