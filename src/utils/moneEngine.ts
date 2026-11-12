@@ -819,11 +819,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   }
 
   if (asksBills) {
+    if (targetMonth !== currentMonthStr && handlers?.onViewForecastMonth) await handlers.onViewForecastMonth(targetMonth);
     const billsResult = await executeMoneIntent({ intent: 'query_bills', data: { targetMonth } }, context);
     return billsResult || { text: 'Não consegui consultar as contas desse período agora.', isInternalCalculation: true };
   }
 
   if (asksIncomes) {
+    if (targetMonth !== currentMonthStr && handlers?.onViewForecastMonth) await handlers.onViewForecastMonth(targetMonth);
     const incomesResult = await executeMoneIntent({ intent: 'query_incomes', data: { targetMonth } }, context);
     return incomesResult || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
   }
@@ -1157,7 +1159,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         await handlers.onToggleMySharePaid(target.id, true, targetMonth);
         const share = ctx.myUserId ? target.shares?.[ctx.myUserId]?.amount : undefined;
         return {
-          text: parsed.directResponse || `Pronto. Marquei sua parte de "${target.title}" como paga${typeof share === 'number' ? ` (${formatCurrencySpoken(share, currency)})` : ''}.`,
+          text: `Pronto. Marquei sua parte de "${target.title}" como paga${typeof share === 'number' ? ` (${formatCurrencySpoken(share, currency)})` : ''}.`,
           isInternalCalculation: true,
           actionExecuted: 'mark_shared_share_paid',
         };
@@ -2000,12 +2002,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const previous = (ctx.sharedBills || [])
         .filter((bill) => bill.members.includes(ctx.myUserId || '') && bill.members.includes(partner.uid))
         .sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt))[0];
-      const myPercentage = Number.isFinite(Number(d.myPercentage))
+      const hasMyPercentage = d.myPercentage !== undefined && d.myPercentage !== null && Number.isFinite(Number(d.myPercentage));
+      const hasPartnerPercentage = d.partnerPercentage !== undefined && d.partnerPercentage !== null && Number.isFinite(Number(d.partnerPercentage));
+      const myPercentage = hasMyPercentage
         ? Number(d.myPercentage)
         : Number(previous?.percentages?.[ctx.myUserId || ''] ?? 50);
-      const partnerPercentage = Number.isFinite(Number(d.partnerPercentage))
-        ? Number(d.partnerPercentage)
-        : 100 - myPercentage;
+      const partnerPercentage = hasPartnerPercentage ? Number(d.partnerPercentage) : 100 - myPercentage;
       if (myPercentage < 0 || partnerPercentage < 0 || myPercentage + partnerPercentage !== 100) {
         return { text: 'Como você quer dividir a conta em porcentagens? A soma precisa ser 100%.', isInternalCalculation: true };
       }
@@ -2041,8 +2043,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const bill = matches[0];
       const myId = ctx.myUserId || '';
       const partnerId = bill.members.find((memberId) => memberId !== myId);
-      const myPercentage = Number.isFinite(Number(d.myPercentage)) ? Number(d.myPercentage) : Number(bill.percentages[myId] ?? 50);
-      const partnerPercentage = Number.isFinite(Number(d.partnerPercentage)) ? Number(d.partnerPercentage) : 100 - myPercentage;
+      const myPercentage = d.myPercentage !== undefined && d.myPercentage !== null && Number.isFinite(Number(d.myPercentage))
+        ? Number(d.myPercentage) : Number(bill.percentages[myId] ?? 50);
+      const partnerPercentage = d.partnerPercentage !== undefined && d.partnerPercentage !== null && Number.isFinite(Number(d.partnerPercentage))
+        ? Number(d.partnerPercentage) : 100 - myPercentage;
       if (myPercentage < 0 || partnerPercentage < 0 || myPercentage + partnerPercentage !== 100) {
         return { text: 'As porcentagens da divisão precisam somar 100%. Como você quer dividir?', isInternalCalculation: true };
       }
