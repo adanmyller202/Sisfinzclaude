@@ -329,6 +329,7 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     id: string;
     name: string;
     amount: number;
+    currency: CurrencyCode;
     category: string;
     date: string;
     isCompleted: boolean;
@@ -349,6 +350,7 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
         id: inc.id,
         name: inc.name,
         amount: effAmount,
+        currency: context.currency,
         category: inc.category,
         date: effDate,
         isCompleted,
@@ -371,6 +373,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
         id: bill.id,
         name: bill.name,
         amount: effAmount,
+        // A bill follows the currency of its linked account, not the app default.
+        currency: context.accounts?.find((account) => account.id === (exc?.accountId ?? bill.accountId))?.currency || context.currency,
         category: bill.category,
         date: effDate,
         isCompleted,
@@ -1546,12 +1550,19 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         };
       }
 
-      const pendingTotal = pendingBills.reduce((sum, bill) => sum + bill.amount, 0);
+      // Never add amounts from different currencies. Group totals by linked account currency.
+      const totalsByCurrency = new Map<CurrencyCode, number>();
+      for (const bill of pendingBills) {
+        totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
+      }
+      const totalSummary = [...totalsByCurrency.entries()]
+        .map(([code, amount]) => formatCurrency(amount, code))
+        .join(' + ');
       const lines = pendingBills.map((bill) =>
-        `• ${bill.name}: ${formatCurrency(bill.amount, currency)} (vencimento: ${bill.date})`
+        `• ${bill.name}: ${formatCurrency(bill.amount, bill.currency)} (vencimento: ${bill.date})`
       );
       return {
-        text: `Sim. Você tem ${formatCurrency(pendingTotal, currency)} em contas pendentes para pagar em ${monthName}:\n${lines.join('\n')}`,
+        text: `Sim. Você tem ${totalSummary} em contas pendentes para pagar em ${monthName}:\n${lines.join('\n')}`,
         isInternalCalculation: true,
       };
     }
@@ -2067,9 +2078,16 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
-    let text = `Sim. Você tem ${formatCurrency(data.totalBills, currency)} para pagar em ${monthName}:\n`;
-    data.monthBills.forEach((b) => {
-      text += `• ${b.name}: ${formatCurrency(b.amount, currency)}\n`;
+    const totalsByCurrency = new Map<CurrencyCode, number>();
+    for (const bill of data.monthBills) {
+      totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
+    }
+    const totalSummary = [...totalsByCurrency.entries()]
+      .map(([code, amount]) => formatCurrency(amount, code))
+      .join(' + ');
+    let text = `Sim. Você tem ${totalSummary} para pagar em ${monthName}:\n`;
+    data.monthBills.forEach((bill) => {
+      text += `• ${bill.name}: ${formatCurrency(bill.amount, bill.currency)}\n`;
     });
 
     return {
