@@ -47,7 +47,7 @@ import { GoogleGenAI, Modality, Type, Behavior, StartSensitivity, EndSensitivity
 
 const isFinancialQuestion = (value: string): boolean => {
   const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return /\b(saldo|divid\w*|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|cofrinh\w*|reservas?|poupanc\w*|aporte|resgate|quanto tenho|quanto devo)\b/.test(normalized);
+  return /\b(saldo|divid\w*|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|cofrinh\w*|categorias?|reservas?|poupanc\w*|aporte|resgate|quanto tenho|quanto devo)\b/.test(normalized);
 };
 
 interface ChatMessage {
@@ -61,7 +61,7 @@ const isFinancialMutationRequest = (value: string): boolean => {
   const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const hasMutationVerb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|renome\w*|rename\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(normalized);
   const isDelete = /\b(apag\w*|exclu\w*|delet\w*|remov\w*)\b/i.test(normalized);
-  const hasFinancialTarget = /\b(fatura|conta|despesa|receita|meta|cofrinho|reserva|poupanca|lancamento|registro|valor|data|vencimento|saldo|semana|desafio|dinheiro|transferencia|parcelamento|parcela|isso|esse|essa|ultimo|ultima)\b|\bpara\s+\d/i.test(normalized);
+  const hasFinancialTarget = /\b(fatura|conta|despesa|receita|meta|cofrinho|reserva|poupanca|categoria|lancamento|registro|valor|data|vencimento|saldo|semana|desafio|dinheiro|transferencia|parcelamento|parcela|isso|esse|essa|ultimo|ultima)\b|\bpara\s+\d/i.test(normalized);
   return hasMutationVerb && (isDelete || hasFinancialTarget);
 };
 
