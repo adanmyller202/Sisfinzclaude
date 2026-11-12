@@ -1911,14 +1911,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
-      const expenseSummary = formatCurrencyBreakdown(data.expensesByCurrency, 'nenhuma despesa registrada');
+      const requestedCategory = normalize(d.category || d.categoryName || '');
+      const selectedExpenses = data.monthExpenses.filter((item) =>
+        !requestedCategory || normalize(item.category || '').includes(requestedCategory)
+      );
+      const selectedBills = data.monthBills.filter((item) =>
+        !item.isRefund && !item.isRefunded &&
+        (!requestedCategory || normalize(item.category || '').includes(requestedCategory))
+      );
+      const expenseTotals = new Map<CurrencyCode, number>();
       const billTotals = new Map<CurrencyCode, number>();
-      for (const bill of data.monthBills.filter((item) => !item.isRefund && !item.isRefunded)) {
-        billTotals.set(bill.currency, (billTotals.get(bill.currency) || 0) + bill.amount);
+      for (const item of selectedExpenses) {
+        expenseTotals.set(item.currency, (expenseTotals.get(item.currency) || 0) + item.amount);
       }
+      for (const item of selectedBills) {
+        billTotals.set(item.currency, (billTotals.get(item.currency) || 0) + item.amount);
+      }
+      const expenseSummary = formatCurrencyBreakdown(expenseTotals, 'nenhuma despesa registrada');
       const billSummary = formatCurrencyBreakdown(billTotals, 'nenhuma conta prevista');
+      const categoryLabel = requestedCategory ? ` na categoria ${d.category || d.categoryName}` : '';
       return {
-        text: `Em ${monthName}, você tem ${expenseSummary} em despesas registradas e ${billSummary} em contas previstas.`,
+        text: `Em ${monthName}${categoryLabel}, você tem ${expenseSummary} em despesas registradas e ${billSummary} em contas previstas.`,
         isInternalCalculation: true,
       };
     }
