@@ -116,6 +116,19 @@ app.post('/api/mone/live-token', async (req, res) => {
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             sessionResumption: {},
+            tools: [{
+              functionDeclarations: [{
+                name: 'sisfinz_action',
+                description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: {
+                    request: { type: 'STRING', description: 'Pedido original do usuário em linguagem natural, sem alterar valores ou nomes.' },
+                  },
+                  required: ['request'],
+                },
+              }],
+            }],
           },
         },
       },
