@@ -1497,6 +1497,78 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // QUERY ONE SPECIFIC ACCOUNT BALANCE.
+    if (intent === 'query_account_balance') {
+      const accountName = normalize(d.accountName || d.name || '');
+      const matches = (ctx.accounts || []).filter((account) =>
+        d.accountId ? account.id === d.accountId : Boolean(accountName && normalize(account.name).includes(accountName))
+      );
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? 'Encontrei mais de uma conta com esse nome. Qual delas você quer consultar?'
+            : 'Qual conta você quer consultar? Diga o nome dela como aparece no SisFinz.',
+          isInternalCalculation: true,
+        };
+      }
+      const account = matches[0];
+      return {
+        text: `A conta ${account.name} tem ${formatCurrency(account.currentBalance || 0, account.currency)} disponíveis.`,
+        isInternalCalculation: true,
+      };
+    }
+
+    // QUERY THE USER'S OWN SHARE OF SHARED BILLS.
+    if (intent === 'query_shared_bills') {
+      const targetMonth = d.targetMonth || currentMonthStr;
+      const name = normalize(d.name || '');
+      const shared = (ctx.sharedBills || []).filter((bill) => {
+        const inMonth = bill.month === targetMonth || (bill.dueDate || '').startsWith(targetMonth);
+        const nameMatches = !name || normalize(bill.title).includes(name);
+        return inMonth && nameMatches && (!ctx.myUserId || bill.members.includes(ctx.myUserId));
+      });
+      if (!shared.length) {
+        return { text: 'Não encontrei contas compartilhadas suas para esse período.', isInternalCalculation: true };
+      }
+      const lines = shared.map((bill) => {
+        const share = ctx.myUserId ? bill.shares?.[ctx.myUserId] : undefined;
+        return `• ${bill.title}: sua parte ${formatCurrency(share?.amount || 0, currency)} — ${share?.status === 'paid' ? 'paga' : 'pendente'}`;
+      });
+      return {
+        text: `Suas contas compartilhadas em ${targetMonth}:\n${lines.join('\n')}`,
+        isInternalCalculation: true,
+      };
+    }
+
+    // QUERY SAVINGS CHALLENGE PROGRESS.
+    if (intent === 'query_weekly_challenge') {
+      const challengeName = normalize(d.challengeName || d.name || '');
+      const matches = (ctx.weeklyChallenges || []).filter((challenge) =>
+        d.challengeId ? challenge.id === d.challengeId : Boolean(challengeName && normalize(challenge.title).includes(challengeName))
+      );
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? 'Encontrei mais de um desafio semanal. Qual deles você quer consultar?'
+            : 'Qual desafio semanal você quer consultar? Diga o nome do plano.',
+          isInternalCalculation: true,
+        };
+      }
+      const challenge = matches[0];
+      const totalWeeks = Math.max(1, Math.floor(challenge.totalWeeks || 52));
+      const completed = [...(challenge.completedWeeks || [])].sort((a, b) => a - b);
+      const fixedWeeklyAmount = Math.round((challenge.totalTarget / totalWeeks) * 100) / 100;
+      const saved = (challenge.savingMode || 'progressive') === 'fixed'
+        ? completed.reduce((sum, week) => sum + (week === totalWeeks
+            ? Math.round((challenge.totalTarget - fixedWeeklyAmount * (totalWeeks - 1)) * 100) / 100
+            : fixedWeeklyAmount), 0)
+        : completed.reduce((sum, week) => sum + challenge.initialAmount * week, 0);
+      return {
+        text: `O desafio "${challenge.title}" está em ${completed.length} de ${totalWeeks} semanas. Você já separou ${formatCurrency(saved, challenge.currency || currency)} e faltam ${totalWeeks - completed.length} semanas.`,
+        isInternalCalculation: true,
+      };
+    }
+
     // 12. DIRECT RESPONSE / CLARIFICATION
     if (parsed.directResponse) {
       return {
