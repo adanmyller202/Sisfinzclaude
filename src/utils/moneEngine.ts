@@ -817,7 +817,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   }
 
   const asksSavings =
-    /\b(?:cofrinho|cofrinhos|reserva|reservas|poupanca|poupancas|dinheiro\s+guardado|valor\s+guardado)\b/i.test(norm) &&
+    /\b(?:cofrinho|cofrinhos|reserva|reservas|poupanca|poupancas|guardad\w*|poupad\w*|dinheiro\s+guardado|valor\s+guardado)\b/i.test(norm) &&
     /\b(?:quanto|total|tenho|guardado|poupado|saldo|progresso|historico|hist[oó]rico|falta)\b/i.test(norm);
   if (asksSavings) {
     const savingsResult = await executeMoneIntent({
