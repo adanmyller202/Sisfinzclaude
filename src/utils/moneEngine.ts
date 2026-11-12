@@ -26,7 +26,6 @@ import {
   formatMonthName,
   doesItemOccurInMonth,
   getEffectiveDateForMonth,
-  getMonthDiff,
 } from './finance';
 import { formatCurrencySpoken } from './currency';
 import { getLocaleForLanguage } from './i18n';
@@ -371,8 +370,6 @@ function resolveMoneAccount(
  */
 export function calculateMonthFinancials(context: MoneContext, targetMonthStr: string) {
   const { currentBalance, bills, incomes, expenses, statusRecords } = context;
-  const currentMonthStr = getCurrentMonthStr();
-
   const statusMap = new Map<string, MonthlyStatusRecord>();
   for (const rec of statusRecords) {
     statusMap.set(rec.id, rec);
