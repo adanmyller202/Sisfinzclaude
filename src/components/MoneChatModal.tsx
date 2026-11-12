@@ -275,7 +275,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const livePlaybackTimeRef = useRef(0);
   const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const pendingVoiceActionRef = useRef<string | null>(null);
-  const pendingVoiceActionRef = useRef<string | null>(null);
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
