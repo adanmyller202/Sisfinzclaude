@@ -611,7 +611,7 @@ export function findMatchingIncome(
  * Truly intelligent natural language processing with conversational memory,
  * direct database execution, and concise responses.
  */
-export async function askMone(question: string, context: MoneContext): Promise<MoneResponse> {
+export async function askMone(question: string, context: MoneContext, audio?: { data: string; mimeType: string }): Promise<MoneResponse> {
   const norm = normalize(question);
   const { currentBalance, currency, language, goals, bills, incomes, expenses, handlers, lastActionItem } = context;
   const currentMonthStr = getCurrentMonthStr();
@@ -619,7 +619,7 @@ export async function askMone(question: string, context: MoneContext): Promise<M
   const locale = getLocaleForLanguage(language);
 
   // 1. Math queries (e.g. "Quanto é 50.000 + 50.000?" -> "100.000.")
-  const mathResult = trySolveMath(question);
+  const mathResult = audio ? null : trySolveMath(question);
   if (mathResult !== null) {
     return {
       text: mathResult,
@@ -1587,7 +1587,7 @@ export async function askMone(question: string, context: MoneContext): Promise<M
   // =========================================================================
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    const timeoutId = setTimeout(() => controller.abort(), audio ? 15000 : 6500);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (auth.currentUser) {
@@ -1604,7 +1604,8 @@ export async function askMone(question: string, context: MoneContext): Promise<M
       headers,
       signal: controller.signal,
       body: JSON.stringify({
-        message: question,
+        message: question || (audio ? 'Interprete o áudio enviado pelo usuário e execute a intenção.' : ''),
+        ...(audio ? { audio: audio.data, audioMimeType: audio.mimeType } : {}),
         history: context.history || [],
         persona: context.persona || 'direto',
         context: {
