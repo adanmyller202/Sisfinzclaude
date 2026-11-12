@@ -194,7 +194,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         if (Array.isArray(saved)) {
           const restored = saved
             .filter((item: any) => item && (item.sender === 'user' || item.sender === 'mone') && typeof item.text === 'string')
-            .slice(-60)
+            .slice(-100)
             .map((item: any, index: number) => ({
               id: typeof item.id === 'string' ? item.id : 'restored_' + index,
               sender: item.sender,
@@ -221,7 +221,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     if (!isOpen || !memoryReady || !memoryOwnerUid || auth.currentUser?.uid !== memoryOwnerUid) return;
     const timeout = window.setTimeout(async () => {
       try {
-        const compactMessages = messages.slice(-60).map((item) => ({
+        const compactMessages = messages.slice(-100).map((item) => ({
           id: item.id,
           sender: item.sender,
           text: item.text.slice(0, 4000),
@@ -583,7 +583,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         })).slice(0, 2500) + '.',
         'Contas compartilhadas: ' + JSON.stringify(sharedBills.map((b) => ({ id: b.id, title: b.title, amount: b.amount, month: b.month, dueDate: b.dueDate, myShare: myUserId ? b.shares?.[myUserId]?.amount : undefined, myShareStatus: myUserId ? b.shares?.[myUserId]?.status : undefined }))).slice(0, 2500) + '.',
         'Desafios semanais: ' + JSON.stringify(weeklyChallenges.map((challenge) => ({ id: challenge.id, title: challenge.title, initialAmount: challenge.initialAmount, totalWeeks: challenge.totalWeeks || 52, totalTarget: challenge.totalTarget, completedWeeks: challenge.completedWeeks, status: challenge.status, savingMode: challenge.savingMode }))).slice(0, 2500) + '.',
-        'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 5000) + '.',
+        'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
