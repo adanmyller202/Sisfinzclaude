@@ -872,6 +872,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Fazer aporte: intent "deposit_to_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
    - Fazer resgate: intent "withdraw_from_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
    - Excluir cofrinho: intent "delete_saving_goal", savingId ou savingName exato; nunca exclua se houver mais de uma correspondência.
+   - Editar cofrinho: intent "update_saving_goal", savingId ou savingName exato e newName, targetAmount, hasTarget, deadline ou notes conforme solicitado.
    - Editar uma meta de economia (ex: "renomeie minha meta da moto para viagem"):
      intent: "update_goal"
      goalId: id exato da meta
