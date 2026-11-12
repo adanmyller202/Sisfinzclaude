@@ -858,6 +858,33 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     return incomesResult || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
   }
 
+  // Deterministic same-currency transfers: match the two real account names and preserve their order.
+  const requestsTransfer = /\b(?:transfer\w*|mover|movimentar|passar\s+dinheiro)\b/i.test(norm);
+  const hasTransferDirection = /\b(?:da|do|de|desde)\b.+\b(?:para|pra|a)\b/i.test(norm);
+  if (requestsTransfer && hasTransferDirection) {
+    const mentionedAccounts = (context.accounts || [])
+      .filter((account) => account.isActive !== false && normalize(account.name).length > 1 && norm.includes(normalize(account.name)))
+      .sort((a, b) => norm.indexOf(normalize(a.name)) - norm.indexOf(normalize(b.name)));
+    if (mentionedAccounts.length === 2) {
+      const amount = parseAmountFromText(question);
+      if (!amount || amount <= 0) {
+        return { text: 'Qual valor você quer transferir?', isInternalCalculation: true };
+      }
+      const currencyMention = /\b(?:usd|d[oó]lares?)\b/i.test(norm) ? 'USD'
+        : /\b(?:ars|pesos?)\b/i.test(norm) ? 'ARS'
+        : /\b(?:brl|reais?)\b/i.test(norm) ? 'BRL'
+        : /\b(?:eur|euros?)\b/i.test(norm) ? 'EUR'
+        : undefined;
+      const [fromAccount, toAccount] = mentionedAccounts;
+      if (fromAccount.currency === toAccount.currency && (!currencyMention || currencyMention === fromAccount.currency)) {
+        return await executeMoneIntent({
+          intent: 'transfer_between_accounts',
+          data: { amount, fromAccountId: fromAccount.id, toAccountId: toAccount.id },
+        }, context);
+      }
+    }
+  }
+
   const asksSavings =
     /\b(?:cofrinho|cofrinhos|reserva|reservas|poupanca|poupancas|guardad\w*|poupad\w*|dinheiro\s+guardado|valor\s+guardado)\b/i.test(norm) &&
     /\b(?:quanto|total|tenho|guardado|poupado|saldo|progresso|historico|hist[oó]rico|falta)\b/i.test(norm);
