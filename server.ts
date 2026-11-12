@@ -5,7 +5,7 @@
 
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { GoogleGenAI, Behavior, Modality, Type } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -119,7 +119,7 @@ app.post('/api/mone/live-token', async (req, res) => {
             tools: [{
               functionDeclarations: [{
                 name: 'sisfinz_action',
-                behavior: 'BLOCKING',
+                behavior: Behavior.BLOCKING,
                 description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
                 parameters: {
                   type: Type.OBJECT,
