@@ -112,7 +112,9 @@ app.post('/api/mone/live-token', async (req, res) => {
         liveConnectConstraints: {
           model: 'gemini-3.1-flash-live-preview',
           config: {
-            responseModalities: ['AUDIO', 'TEXT'],
+            responseModalities: ['AUDIO'],
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             sessionResumption: {},
           },
         },
