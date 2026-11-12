@@ -117,6 +117,8 @@ export default function App() {
 
   // Hook into finance data for Mone assistant
   const {
+    selectedMonth,
+    setSelectedMonth,
     bills,
     monthBills,
     incomes,
@@ -1103,6 +1105,10 @@ export default function App() {
         onNavigateToSection={(section) => {
           setCurrentView(section);
           setIsMoneChatOpen(false);
+        }}
+        onViewForecastMonth={(month) => {
+          setSelectedMonth(month);
+          setCurrentView('planejar');
         }}
         onAddCategory={(name, scope) => addCategory(name, scope)}
         onUpdateCategory={(categoryId, updates) => updateCategory(categoryId, updates)}
