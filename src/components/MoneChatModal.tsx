@@ -207,6 +207,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const liveProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const liveSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const livePlaybackTimeRef = useRef(0);
+  const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -389,6 +390,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     try { liveSourceRef.current?.disconnect(); } catch {}
     liveStreamRef.current?.getTracks().forEach((track) => track.stop());
     liveSessionRef.current?.close?.();
+    liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
+    liveAudioSourcesRef.current = [];
     liveSessionRef.current = null;
     liveProcessorRef.current = null;
     liveSourceRef.current = null;
@@ -433,6 +436,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     source.buffer = buffer;
     source.connect(context.destination);
     const startAt = Math.max(context.currentTime + 0.025, livePlaybackTimeRef.current);
+    source.onended = () => {
+      liveAudioSourcesRef.current = liveAudioSourcesRef.current.filter((item) => item !== source);
+    };
+    liveAudioSourcesRef.current.push(source);
     source.start(startAt);
     livePlaybackTimeRef.current = startAt + buffer.duration;
   };
@@ -526,6 +533,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               }
             });
             if (content?.interrupted) {
+              liveAudioSourcesRef.current.forEach((source) => {
+                try { source.stop(); } catch {}
+              });
+              liveAudioSourcesRef.current = [];
               livePlaybackTimeRef.current = liveOutputContextRef.current?.currentTime || 0;
               setLiveStatus('listening');
             }
