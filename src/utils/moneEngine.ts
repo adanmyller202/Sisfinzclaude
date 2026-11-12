@@ -3000,7 +3000,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 7. Balance query: resolve a named account first, otherwise report active balances by currency.
   const asksBalance = /\b(?:saldo|quanto\s+tenho|quanto\s+tem|disponivel|balance)\b/i.test(norm);
-  const asksAllAccounts = /\b(?:total|geral|todas\s+as\s+contas|somad\w*)\b/i.test(norm);
+  const asksAllAccounts = /\b(?:todas\s+as\s+contas|total\s+das\s+contas|saldo\s+geral|total\s+geral|somad\w*)\b/i.test(norm);
   if (asksBalance && !asksAllAccounts) {
     const mentionedAccounts = (context.accounts || []).filter((account) => {
       const tokens = normalize(account.name).split(/\s+/).filter((token) =>
