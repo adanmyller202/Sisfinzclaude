@@ -1068,6 +1068,13 @@ export default function App() {
         onDeleteBill={deleteBill}
         onToggleBillPaid={toggleBillPaid}
         onAddIncome={addIncome}
+        onAddIncomeAsReceived={async (incomeData, receivedMonth) => {
+          const created = await addIncomeAsReceived(incomeData, receivedMonth);
+          if (incomeData.accountId) {
+            await adjustAccountBalanceForFinancialItem(incomeData.accountId, incomeData.amount);
+          }
+          return created;
+        }}
         onUpdateIncome={updateIncome}
         onDeleteIncome={deleteIncome}
         onToggleIncomeReceived={toggleIncomeReceived}
