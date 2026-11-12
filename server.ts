@@ -477,7 +477,7 @@ app.post('/api/mone', async (req, res) => {
     // Fast conversational lane: casual/general messages do not need the full financial
     // context or the structured-action prompt. This avoids turning greetings into commands
     // and reduces latency and token usage for ordinary conversation.
-        const financialIntentPattern = /\b(saldo|balances?|contas?|cuentas?|accounts?|account|faturas?|facturas?|faturas?|bills?|bill|invoices?|invoice|despesas?|gastos?|expenses?|expense|gastar|gastei|receitas?|ingresos?|income|salary|sueldo|sal[aá]rio|renda|finan[cç]as?|financeir[oa]s?|economia|economiz|ahorro|ahorros|saving|savings|poup|cofrinh\w*|guardad\w*|poupad\w*|categorias?|planej\w*|calend[aá]rio|calendar|relat[oó]rios?|report|liberdade|freedom|ritmo|metas?|objetivos?|goals?|goal|budget|presupuesto|or[cç]amento|sobrou|sobra|previs[aã]o|proyecci[oó]n|proje[cç][aã]o|desafio|desaf[ií]o|challenge|semanas?|weekly|pagar|paguei|pagamento|payment|pay|receber|recebi|receive|received|invest|cart[aã]o|tarjeta|banco|bank|transfer[eê]ncia|transferencia|transfer|d[oó]lar|dollar|pesos?|reais|currency|cot[aã]ç[aã]o|parcelas?|cuotas?|vencimento|vencimiento|due|boleto|comprar|compra|purchase|consigo|cabe no|moto|carro|financiar|d[ií]vida|deuda|debt|compartilh|compartid|my share|mi parte|minha parte|quanto tenho|cuanto tengo|how much do i have|na conta|en la cuenta|in my account|no banco|en el banco)\b/i;
+        const financialIntentPattern = /\b(saldo|balances?|contas?|cuentas?|accounts?|account|faturas?|facturas?|faturas?|bills?|bill|invoices?|invoice|despesas?|gastos?|expenses?|expense|gastar|gastei|receitas?|ingresos?|income|salary|sueldo|sal[aá]rio|renda|finan[cç]as?|financeir[oa]s?|economia|economiz|ahorro|ahorros|saving|savings|poup|cofrinh\w*|guardad\w*|poupad\w*|convid\w*|convites?|aceit\w*|recus\w*|categorias?|planej\w*|calend[aá]rio|calendar|relat[oó]rios?|report|liberdade|freedom|ritmo|metas?|objetivos?|goals?|goal|budget|presupuesto|or[cç]amento|sobrou|sobra|previs[aã]o|proyecci[oó]n|proje[cç][aã]o|desafio|desaf[ií]o|challenge|semanas?|weekly|pagar|paguei|pagamento|payment|pay|receber|recebi|receive|received|invest|cart[aã]o|tarjeta|banco|bank|transfer[eê]ncia|transferencia|transfer|d[oó]lar|dollar|pesos?|reais|currency|cot[aã]ç[aã]o|parcelas?|cuotas?|vencimento|vencimiento|due|boleto|comprar|compra|purchase|consigo|cabe no|moto|carro|financiar|d[ií]vida|deuda|debt|compartilh|compartid|my share|mi parte|minha parte|quanto tenho|cuanto tengo|how much do i have|na conta|en la cuenta|in my account|no banco|en el banco)\b/i;
     const accountNamesInContext = Array.isArray(req.body?.context?.accounts)
       ? req.body.context.accounts.map((account: any) => String(account?.name || '').trim().toLowerCase()).filter(Boolean)
       : [];
@@ -538,6 +538,7 @@ Mensagem atual do usuário: ${message.trim()}`;
       categories = [],
       sharedBills = [],
       sharedPartners = [],
+      sharedInvitations = [],
       weeklyChallenges = [],
       lastActionItem = null,
     } = context;
@@ -653,6 +654,14 @@ Mensagem atual do usuário: ${message.trim()}`;
       note: tx.note || '',
     }));
 
+    const sharedInvitationsSummary = (sharedInvitations || [])
+      .filter((invitation: any) => invitation.status === 'pending')
+      .map((invitation: any) => ({
+        id: invitation.id,
+        fromUserName: invitation.fromUserName,
+        fromUserEmail: invitation.fromUserEmail,
+        createdAt: invitation.createdAt,
+      }));
     const sharedPartnersSummary = (sharedPartners || []).map((partner: any) => ({
       uid: partner.uid,
       displayName: partner.displayName,
@@ -740,6 +749,7 @@ Contexto financeiro do usuário:
 - Categorias disponíveis e seus escopos: ${JSON.stringify(categoriesSummary)}
 - Histórico de aportes e resgates: ${JSON.stringify(savingTransactionsSummary)}
 - Pessoas conectadas para compartilhar contas: ${JSON.stringify(sharedPartnersSummary)}
+- Convites pendentes recebidos: ${JSON.stringify(sharedInvitationsSummary)}
 - Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
 - Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
 
@@ -875,6 +885,9 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      intent: "query_account_balance"
      accountId: id exato da conta
      accountName: nome exato da conta
+   - Consultar pessoas conectadas e convites pendentes: intent "query_shared_partners".
+   - Enviar convite: intent "send_shared_invitation", email do destinatário.
+   - Aceitar ou recusar convite: intent "respond_shared_invitation", invitationId ou invitationName e accept true/false. Só responda quando o usuário pedir explicitamente.
    - Consultar contas compartilhadas (ex: "quanto falta pagar da minha parte?"):
      intent: "query_shared_bills"
      name: título da conta, se o usuário citar uma
