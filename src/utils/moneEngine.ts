@@ -972,28 +972,30 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       (normalize(item.category || '') === normalize(targetCat) ||
         (!item.category && inferCategory(item.name, 'bill') === targetCat))
     );
-    const totals = new Map<CurrencyCode, number>();
+    const expenseTotals = new Map<CurrencyCode, number>();
+    const billTotals = new Map<CurrencyCode, number>();
     for (const item of catExpenses) {
       const distributions = (item as any).accountDistributions as { accountId: string; amount: number }[] | undefined;
       if (distributions?.length) {
         for (const distribution of distributions) {
           const linkedAccount = context.accounts?.find((account) => account.id === distribution.accountId);
           const code = linkedAccount?.currency || currency;
-          totals.set(code, (totals.get(code) || 0) + distribution.amount);
+          expenseTotals.set(code, (expenseTotals.get(code) || 0) + distribution.amount);
         }
       } else {
         const linkedAccount = context.accounts?.find((account) => account.id === (item as any).accountId);
         const code = linkedAccount?.currency || currency;
-        totals.set(code, (totals.get(code) || 0) + item.amount);
+        expenseTotals.set(code, (expenseTotals.get(code) || 0) + item.amount);
       }
     }
     for (const item of catBills) {
-      totals.set(item.currency, (totals.get(item.currency) || 0) + item.amount);
+      billTotals.set(item.currency, (billTotals.get(item.currency) || 0) + item.amount);
     }
 
-    const totalSummary = formatCurrencyBreakdown(totals, 'nenhum gasto ou conta prevista');
+    const expenseSummary = formatCurrencyBreakdown(expenseTotals, 'nenhuma despesa registrada');
+    const billSummary = formatCurrencyBreakdown(billTotals, 'nenhuma conta prevista');
     return {
-      text: `Na categoria ${targetCat}, em ${monthName}, você tem ${totalSummary} em despesas registradas e contas previstas.`,
+      text: `Na categoria ${targetCat}, em ${monthName}, você registrou ${expenseSummary} em despesas e tem ${billSummary} em contas previstas.`,
       isInternalCalculation: true,
     };
   }
