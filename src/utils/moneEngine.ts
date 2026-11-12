@@ -953,8 +953,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     /\b(?:para|por|em)\s+\d/i.test(norm) &&
     /\b(?:seguro|residencial|aluguel|internet|luz|agua|g[aá]s|academia|plano|fatura|conta|valor)\b/i.test(norm);
   if (requestsBillValueChange && handlers?.onUpdateBill) {
-    const lastPara = Math.max(norm.lastIndexOf(' para '), norm.lastIndexOf(' por '), norm.lastIndexOf(' em '));
-    const newAmount = lastPara >= 0 ? parseAmountFromText(question.slice(lastPara + 4)) : null;
+    const newAmountMatch = question.match(/\b(?:para|por|em)\s+(.+)$/i);
+    const newAmount = newAmountMatch ? parseAmountFromText(newAmountMatch[1]) : null;
     if (newAmount !== null && newAmount > 0) {
       const billSearch = findMatchingBill(bills, undefined, undefined, question);
       if (billSearch.ambiguous?.length) {
