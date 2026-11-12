@@ -162,6 +162,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   ]);
   const [memoryOwnerUid, setMemoryOwnerUid] = useState<string | null>(null);
   const [memoryReady, setMemoryReady] = useState(false);
+  const [lastActionItem, setLastActionItem] = useState<MoneActionItem | null>(null);
 
   useEffect(() => {
     if (!isOpen) pendingTextActionRef.current = null;
@@ -176,6 +177,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       const sequence = ++loadSequence;
       setMemoryReady(false);
       setMemoryOwnerUid(user?.uid || null);
+      setLastActionItem(null);
       setMessages([{
         id: 'welcome_' + Date.now(),
         sender: 'mone',
@@ -190,7 +192,12 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         const memoryRef = doc(db, 'users', user.uid, 'mone_memory', 'conversation');
         const snapshot = await getDoc(memoryRef);
         if (cancelled || sequence !== loadSequence) return;
-        const saved = snapshot.exists() ? snapshot.data().messages : null;
+        const memoryData = snapshot.exists() ? snapshot.data() : {};
+        const saved = memoryData.messages;
+        const savedAction = memoryData.lastActionItem;
+        if (savedAction && ['expense', 'bill', 'income'].includes(savedAction.type) && typeof savedAction.id === 'string' && typeof savedAction.name === 'string') {
+          setLastActionItem(savedAction as MoneActionItem);
+        }
         if (Array.isArray(saved)) {
           const restored = saved
             .filter((item: any) => item && (item.sender === 'user' || item.sender === 'mone') && typeof item.text === 'string')
@@ -229,7 +236,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         }));
         await setDoc(
           doc(db, 'users', memoryOwnerUid, 'mone_memory', 'conversation'),
-          { messages: compactMessages, updatedAt: new Date().toISOString(), version: 1 },
+          { messages: compactMessages, lastActionItem, updatedAt: new Date().toISOString(), version: 2 },
           { merge: true }
         );
       } catch (error) {
@@ -237,9 +244,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       }
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, memoryReady, memoryOwnerUid, messages]);
+  }, [isOpen, memoryReady, memoryOwnerUid, messages, lastActionItem]);
 
-  const [lastActionItem, setLastActionItem] = useState<MoneActionItem | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
