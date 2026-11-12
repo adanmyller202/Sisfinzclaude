@@ -417,6 +417,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     category: string;
     date: string;
     isCompleted: boolean;
+    isRefund?: boolean;
+    isRefunded?: boolean;
   }
 
   const monthIncomes: OccItem[] = [];
@@ -442,6 +444,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
             category: inc.category,
             date: effDate,
             isCompleted,
+            isRefund: inc.isRefund,
+            isRefunded: inc.isRefunded,
           });
         }
       } else {
@@ -455,6 +459,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
           category: inc.category,
           date: effDate,
           isCompleted,
+          isRefund: inc.isRefund,
+          isRefunded: inc.isRefunded,
         });
       }
     }
@@ -482,6 +488,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
             category: bill.category,
             date: effDate,
             isCompleted,
+            isRefund: bill.isRefund,
+            isRefunded: bill.isRefunded,
           });
         }
       } else {
@@ -495,6 +503,8 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
           category: bill.category,
           date: effDate,
           isCompleted,
+          isRefund: bill.isRefund,
+          isRefunded: bill.isRefunded,
         });
       }
     }
@@ -532,22 +542,24 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     expense.date && expense.date.startsWith(targetMonthStr) && !expense.isRefund && !expense.isRefunded
   );
 
-  const totalIncomes = monthIncomes.reduce((acc, item) => acc + item.amount, 0);
-  const totalBills = monthBills.reduce((acc, item) => acc + item.amount, 0);
+  const validIncomes = monthIncomes.filter((item) => !item.isRefund && !item.isRefunded);
+  const validBills = monthBills.filter((item) => !item.isRefund && !item.isRefunded);
+  const totalIncomes = validIncomes.reduce((acc, item) => acc + item.amount, 0);
+  const totalBills = validBills.reduce((acc, item) => acc + item.amount, 0);
   const totalOneOffExpenses = monthExpenses.reduce((acc, item) => acc + item.amount, 0);
 
-  const receivedIncomes = monthIncomes.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
-  const pendingIncomes = monthIncomes.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
-  const paidBills = monthBills.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
-  const pendingBills = monthBills.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const receivedIncomes = validIncomes.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const pendingIncomes = validIncomes.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const paidBills = validBills.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const pendingBills = validBills.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
 
   const pendingIncomesByCurrency = new Map<CurrencyCode, number>();
   const pendingBillsByCurrency = new Map<CurrencyCode, number>();
   const expensesByCurrency = new Map<CurrencyCode, number>();
-  for (const item of monthIncomes.filter((entry) => !entry.isCompleted)) {
+  for (const item of validIncomes.filter((entry) => !entry.isCompleted)) {
     pendingIncomesByCurrency.set(item.currency, (pendingIncomesByCurrency.get(item.currency) || 0) + item.amount);
   }
-  for (const item of monthBills.filter((entry) => !entry.isCompleted)) {
+  for (const item of validBills.filter((entry) => !entry.isCompleted)) {
     pendingBillsByCurrency.set(item.currency, (pendingBillsByCurrency.get(item.currency) || 0) + item.amount);
   }
   for (const expense of monthExpenses) {
@@ -1802,7 +1814,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
-      const pendingBills = data.monthBills.filter((bill) => !bill.isCompleted);
+      const pendingBills = data.monthBills.filter((bill) => !bill.isCompleted && !bill.isRefund && !bill.isRefunded);
 
       if (pendingBills.length === 0) {
         return {
@@ -1901,7 +1913,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
       const expenseSummary = formatCurrencyBreakdown(data.expensesByCurrency, 'nenhuma despesa registrada');
       const billTotals = new Map<CurrencyCode, number>();
-      for (const bill of data.monthBills) {
+      for (const bill of data.monthBills.filter((item) => !item.isRefund && !item.isRefunded)) {
         billTotals.set(bill.currency, (billTotals.get(bill.currency) || 0) + bill.amount);
       }
       const billSummary = formatCurrencyBreakdown(billTotals, 'nenhuma conta prevista');
@@ -1931,7 +1943,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const totalsByCurrency = new Map<CurrencyCode, number>();
-      for (const income of data.monthIncomes) {
+      for (const income of data.monthIncomes.filter((item) => !item.isCompleted && !item.isRefund && !item.isRefunded)) {
         totalsByCurrency.set(income.currency, (totalsByCurrency.get(income.currency) || 0) + income.amount);
       }
       const summary = [...totalsByCurrency.entries()]
