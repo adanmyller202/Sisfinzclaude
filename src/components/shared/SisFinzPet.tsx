@@ -15,6 +15,7 @@ interface SisFinzPetProps {
 }
 
 export const SisFinzPet: React.FC<SisFinzPetProps> = ({
+  onClick,
   size = 56,
   className = '',
 }) => {
@@ -100,6 +101,7 @@ export const SisFinzPet: React.FC<SisFinzPetProps> = ({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     resetIdleTimer();
+    onClick?.();
 
     // Increment quick touch count for anger detection
     setTouchCount((prev) => {
@@ -149,7 +151,7 @@ export const SisFinzPet: React.FC<SisFinzPetProps> = ({
       onTouchEnd={handleMouseLeaveOrTouchEnd}
       className={`relative cursor-pointer select-none group flex items-center justify-center ${className}`}
       style={{ width: size, height: size }}
-      title="Finzy (IA & Perfil)"
+      title="Abrir assistente SisFinz"
     >
       {/* Floating & Breathing Animation Wrapper */}
       <motion.div
