@@ -228,6 +228,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const liveSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const livePlaybackTimeRef = useRef(0);
   const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const pendingVoiceActionRef = useRef<string | null>(null);
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -418,6 +419,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     try { liveSourceRef.current?.disconnect(); } catch {}
     liveStreamRef.current?.getTracks().forEach((track) => track.stop());
     liveSessionRef.current?.close?.();
+    pendingVoiceActionRef.current = null;
     liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
     liveAudioSourcesRef.current = [];
     liveSessionRef.current = null;
@@ -523,14 +525,32 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
                 const destructiveRequest = /\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|edita|editar|corrige|corrigir|corrija)\b/i.test(request);
+                const normalizedReply = request.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
+                const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
+                const isVoiceCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
                 if (!request) {
                   return { id: call.id, name: call.name, response: { error: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
                 }
-                if (destructiveRequest) {
-                  return { id: call.id, name: call.name, response: { result: 'Esta operação de alteração ou exclusão ainda não está habilitada na voz. Não foi feita nenhuma mudança. Oriente o usuário a usar a conversa por texto até essa proteção ser implementada.' } };
+                let actionRequest = request;
+                if (pendingVoiceActionRef.current && isVoiceConfirmation) {
+                  actionRequest = pendingVoiceActionRef.current;
+                  pendingVoiceActionRef.current = null;
+                } else if (pendingVoiceActionRef.current && isVoiceCancellation) {
+                  pendingVoiceActionRef.current = null;
+                  return { id: call.id, name: call.name, response: { result: 'Ação cancelada. Nenhuma alteração foi feita.' } };
+                } else if (pendingVoiceActionRef.current) {
+                  pendingVoiceActionRef.current = null;
+                }
+                if (destructiveRequest && actionRequest === request) {
+                  pendingVoiceActionRef.current = request;
+                  return {
+                    id: call.id,
+                    name: call.name,
+                    response: { result: 'Ainda não execute essa alteração ou exclusão. Diga ao usuário exatamente o pedido que ele fez e pergunte: “Você confirma que devo fazer isso?”. Aguarde um “sim” claro antes de chamar a ferramenta novamente. Se ele disser não, não execute nada.' },
+                  };
                 }
                 try {
-                  const result = await askMone(request, moneContext);
+                  const result = await askMone(actionRequest, moneContext);
                   if (result.createdItem) setLastActionItem(result.createdItem);
                   return {
                     id: call.id,
@@ -651,7 +671,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       session.sendRealtimeInput({
-        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir uma semana de desafio semanal usando uma conta escolhida pelo usuário, transferir dinheiro entre contas próprias ou consultar dados, use a ferramenta sisfinz_action. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Alterações e exclusões ainda não estão liberadas nesta interface de voz; nesses casos explique que não fez nenhuma mudança. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
+        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir uma semana de desafio semanal usando uma conta escolhida pelo usuário, transferir dinheiro entre contas próprias ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, use a ferramenta, mas peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
       });
     } catch (error: any) {
       console.error('[Mone Live] Start failed:', error);
