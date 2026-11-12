@@ -2001,7 +2001,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const validTypes: AccountType[] = ['bank', 'wallet', 'cash', 'safe', 'other'];
       const type = validTypes.includes(d.type) ? d.type : 'bank';
       const code = (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency) ? d.currency : currency) as CurrencyCode;
-      const initialBalance = Number(d.initialBalance ?? d.currentBalance ?? 0);
+      if (d.initialBalance === undefined && d.currentBalance === undefined) {
+        return { text: 'Qual é o saldo inicial dessa conta? Se ela estiver zerada, pode me dizer zero.', isInternalCalculation: true };
+      }
+      const initialBalance = Number(d.initialBalance ?? d.currentBalance);
       if (!Number.isFinite(initialBalance) || initialBalance < 0) return { text: 'Qual é o saldo inicial dessa conta?', isInternalCalculation: true };
       try {
         await handlers.onAddAccount({ name, type, currency: code, initialBalance, currentBalance: initialBalance, ...(d.notes ? { notes: d.notes } : {}) });
@@ -2028,8 +2031,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         }
         if (intent === 'toggle_account_active') {
           if (!handlers?.onToggleAccountActive) return { text: 'A alteração do status da conta não está disponível.', isInternalCalculation: true };
+          const desiredActive = typeof d.isActive === 'boolean' ? d.isActive : undefined;
+          const currentlyActive = account.isActive !== false;
+          if (desiredActive !== undefined && desiredActive === currentlyActive) {
+            return { text: `A conta "${account.name}" já está ${currentlyActive ? 'ativa' : 'inativa'}.`, isInternalCalculation: true };
+          }
           await handlers.onToggleAccountActive(account.id);
-          return { text: `Atualizei o status da conta "${account.name}".`, isInternalCalculation: true, actionExecuted: 'toggle_account_active' };
+          return { text: `A conta "${account.name}" agora está ${currentlyActive ? 'inativa' : 'ativa'}.`, isInternalCalculation: true, actionExecuted: 'toggle_account_active' };
         }
         if (!handlers?.onUpdateAccount) return { text: 'A edição de contas não está disponível.', isInternalCalculation: true };
         const updates: Partial<AccountItem> & { currentBalance?: number } = {};
@@ -2096,9 +2104,18 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // SAVINGS JARS: read actual savings goals and transaction history.
     if (intent === 'query_savings' || intent === 'query_saving_transactions') {
-      const savingGoals = ctx.savings || [];
+      const requestedSavingName = normalize(d.savingName || d.name || '');
+      const matchedSavings = (ctx.savings || []).filter((goal) =>
+        d.savingId ? goal.id === d.savingId : !requestedSavingName || normalize(goal.name).includes(requestedSavingName)
+      );
+      if (requestedSavingName && matchedSavings.length !== 1) {
+        return { text: matchedSavings.length > 1 ? 'Encontrei mais de um cofrinho com esse nome. Qual deles?' : 'Não encontrei esse cofrinho. Quer consultar a lista de todos?', isInternalCalculation: true };
+      }
+      const savingGoals = requestedSavingName || d.savingId ? matchedSavings : (ctx.savings || []);
       if (intent === 'query_saving_transactions') {
-        const history = (ctx.savingTransactions || []).slice(0, 12);
+        const history = (ctx.savingTransactions || [])
+          .filter((tx) => !savingGoals.length || savingGoals.some((goal) => goal.id === tx.savingId))
+          .slice(0, 12);
         if (!history.length) return { text: 'Ainda não há movimentações registradas nos seus cofrinhos.', isInternalCalculation: true };
         const lines = history.map((tx) =>
           `• ${tx.type === 'deposit' ? 'Aporte' : 'Resgate'} — ${tx.savingName}: ${formatCurrencySpoken(tx.amount, tx.currency || currency)} em ${tx.date}`
