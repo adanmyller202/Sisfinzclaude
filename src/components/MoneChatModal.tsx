@@ -99,6 +99,7 @@ interface MoneChatModalProps {
   }) => Promise<any> | void;
   onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
+  onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -136,6 +137,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onTransferBetweenAccounts,
   onToggleMySharePaid,
   onCompleteChallengeWeek,
+  onUndoChallengeWeek,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -355,6 +357,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onTransferBetweenAccounts,
       onToggleMySharePaid,
       onCompleteChallengeWeek,
+      onUndoChallengeWeek,
     },
   };
 
