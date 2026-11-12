@@ -663,7 +663,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       liveInputContextRef.current = inputContext;
       liveOutputContextRef.current = outputContext;
       const source = inputContext.createMediaStreamSource(stream);
-      const processor = inputContext.createScriptProcessor(4096, 1, 1);
+      const processor = inputContext.createScriptProcessor(2048, 1, 1);
       const silentGain = inputContext.createGain();
       silentGain.gain.value = 0;
       source.connect(processor);
