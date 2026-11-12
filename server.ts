@@ -744,22 +744,33 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      installmentsCount: 5
      amount: 40000
      dueDay: 17
-     directResponse: "Pronto. Compra de tênis criada em 5 parcelas de 40.000 na moeda da conta, todo dia 17."
+     accountName: nome da conta, se citada; se houver várias contas e nenhuma for indicada, pergunte qual conta
+     directResponse: confirmação natural somente após a gravação.
    - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
      intent: "add_expense"
      name: "Uber"
      amount: 2500
      category: "Transporte"
-     directResponse: "Despesa de Uber de 2.500 na moeda da conta adicionada."
+     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta foi o gasto
+     directResponse: confirmação natural somente após a gravação.
    - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
      intent: "add_income"
      name: "Salário"
      amount: 50000
-     isRecurring: true se salário
-     directResponse: "Receita de Salário de 50.000 na moeda do registro adicionada."
-   - Conta regular (ex: "minha internet vence todo dia 10"):
-     Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
-     Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de 120 na moeda da conta criada para todo dia 10."
+     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta entra o dinheiro
+     isReceived: true somente se o usuário disser que já recebeu/caiu; caso contrário false
+     isRecurring: true se pediu repetição mensal; salário pode ser mensal por padrão, exceto se disser "sem repetição", "uma vez" ou "avulso"
+     directResponse: confirmação natural somente após a gravação.
+   - Conta/fatura (ex: "crie uma conta de internet de 80 mil para dia 10, repetindo todo mês", ou "crie uma fatura de 80 mil sem repetição"):
+     intent: "add_bill"
+     name: "Internet"
+     amount: 80000
+     dueDay: 10
+     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta vincular
+     isRecurring: true para repetição mensal; false quando disser "sem repetição", "uma vez" ou "avulso"
+     targetMonth: mês inicial solicitado ou mês atual
+     Se faltar valor ou vencimento essencial, use "ask_clarification" e pergunte apenas o dado que falta.
+   - Despesa com repetição: cadastre como "add_bill" recorrente, nunca como uma despesa avulsa.
 7. OUTRAS AÇÕES:
    - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
      intent: "transfer_between_accounts"
