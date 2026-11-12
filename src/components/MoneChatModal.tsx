@@ -84,6 +84,13 @@ interface MoneChatModalProps {
     currency: CurrencyCode;
     notes?: string;
   }) => Promise<any> | void;
+  onTransferBetweenAccounts?: (params: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    date: string;
+    notes?: string;
+  }) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -115,6 +122,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onToggleIncomeReceived,
   onUpdateCurrentBalance,
   onCreateGoal,
+  onTransferBetweenAccounts,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -305,6 +313,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onToggleIncomeReceived,
       onUpdateCurrentBalance,
       onCreateGoal,
+      onTransferBetweenAccounts,
     },
   };
 
