@@ -793,8 +793,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           isInternalCalculation: true,
         };
       }
+      const fixedWeeklyAmount = Math.round((challenge.totalTarget / totalWeeks) * 100) / 100;
       const amount = (challenge.savingMode || 'progressive') === 'fixed'
-        ? Math.round((challenge.totalTarget / totalWeeks) * 100) / 100
+        ? (weekNumber === totalWeeks
+            ? Math.round((challenge.totalTarget - fixedWeeklyAmount * (totalWeeks - 1)) * 100) / 100
+            : fixedWeeklyAmount)
         : Math.round(challenge.initialAmount * weekNumber * 100) / 100;
       try {
         await handlers.onCompleteChallengeWeek(challenge.id, weekNumber, accountMatches[0].id);
