@@ -19,7 +19,7 @@ import {
   FiftyTwoWeekChallenge,
 } from '../types';
 import { SisFinzPet } from './shared/SisFinzPet';
-import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
+import { askMone, MoneContext, MoneResponse, MoneActionItem, MoneNavigationSection } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import { auth, db } from '../firebase/config';
@@ -119,6 +119,7 @@ interface MoneChatModalProps {
   onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
+  onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -160,6 +161,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onToggleMySharePaid,
   onCompleteChallengeWeek,
   onUndoChallengeWeek,
+  onNavigateToSection,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -401,6 +403,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onToggleMySharePaid,
       onCompleteChallengeWeek,
       onUndoChallengeWeek,
+      onNavigateToSection,
     },
   };
   const moneContextRef = useRef<MoneContext>(moneContext);
