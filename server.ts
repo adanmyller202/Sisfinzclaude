@@ -482,7 +482,7 @@ app.post('/api/mone', async (req, res) => {
 
     if (isGeneralConversation) {
       const recentHistory = Array.isArray(history)
-        ? history.slice(-8).map((item: any) => ({
+        ? history.slice(-24).map((item: any) => ({
             role: item?.sender === 'mone' ? 'Mone' : 'Usuário',
             text: typeof item?.text === 'string' ? item.text.slice(0, 1200) : '',
           })).filter((item: any) => item.text)
