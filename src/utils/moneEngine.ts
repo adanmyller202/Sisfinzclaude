@@ -1209,7 +1209,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
 
     // 1. ADD EXPENSE
-    if (intent === 'add_expense' && d.amount && handlers?.onAddExpense) {
+    if (intent === 'add_expense' && handlers?.onAddExpense) {
+      if (!Number(d.amount) || Number(d.amount) <= 0) {
+        return { text: 'Qual é o valor do gasto que você quer registrar?', isInternalCalculation: true };
+      }
       try {
         const expName = d.name || 'Despesa';
         const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
@@ -1241,7 +1244,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
 
     // 2. ADD INSTALLMENT BILL
-    if (intent === 'add_installment_bill' && (d.amount || d.totalAmount) && handlers?.onAddBill) {
+    if (intent === 'add_installment_bill' && handlers?.onAddBill) {
+      if (!Number(d.amount || d.totalAmount) || Number(d.amount || d.totalAmount) <= 0) {
+        return { text: 'Qual é o valor total dessa compra parcelada?', isInternalCalculation: true };
+      }
+      if (!Number(d.installmentsCount) || Number(d.installmentsCount) < 2) {
+        return { text: 'Em quantas parcelas você quer dividir essa compra?', isInternalCalculation: true };
+      }
       try {
         const installments = d.installmentsCount || 1;
         const instAmount = d.amount || (d.totalAmount ? Math.round((d.totalAmount / installments) * 100) / 100 : 0);
@@ -1331,7 +1340,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
 
     // 4. ADD INCOME
-    if (intent === 'add_income' && d.amount && handlers?.onAddIncome) {
+    if (intent === 'add_income' && handlers?.onAddIncome) {
+      if (!Number(d.amount) || Number(d.amount) <= 0) {
+        return { text: 'Qual é o valor da receita que você quer registrar?', isInternalCalculation: true };
+      }
       try {
         const incName = d.name || 'Receita';
         const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
