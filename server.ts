@@ -662,6 +662,12 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      name: nome da conta
      matchedBillId: id correspondente
      directResponse: "Pronto. Academia marcada como paga."
+   - Marcar receita recebida (ex: "recebi meu salário", "marque a receita de freelance como recebida"):
+     intent: "mark_income_received"
+     name: nome da receita correspondente
+     matchedId: id da receita correspondente
+     targetMonth: mês de referência "YYYY-MM"
+     directResponse: "Pronto. Receita marcada como recebida."
    - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
      intent: "correct_last_item"
      newAmount: 3000
@@ -682,7 +688,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "correct_last_item" | "delete_item" | "create_goal" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
@@ -695,6 +701,7 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "category": "string",
     "matchedId": "string",
     "matchedBillId": "string",
+    "matchedIncomeId": "string",
     "itemType": "expense" | "bill" | "income",
     "newAmount": number,
     "newName": "string"
