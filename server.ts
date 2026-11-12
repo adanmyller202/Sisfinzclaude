@@ -725,6 +725,14 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      accountId: id exato da conta de onde sairá o dinheiro
      accountName: nome da conta
      directResponse: confirmação natural somente se a ação for executada
+   - Desfazer uma semana já concluída de um desafio semanal e devolver o dinheiro para uma conta escolhida:
+     intent: "undo_challenge_week"
+     challengeId: id exato do desafio
+     challengeName: nome do desafio
+     weekNumber: número inteiro da semana já concluída
+     accountId: id exato da conta que receberá a devolução
+     accountName: nome da conta de destino
+     directResponse: confirmação natural somente se a ação for executada
    - Marcar somente minha parte de conta compartilhada como paga (ex: "marque minha parte do aluguel compartilhado como paga"):
      intent: "mark_shared_share_paid"
      name: título exato da conta compartilhada
@@ -774,7 +782,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "undo_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
