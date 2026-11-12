@@ -657,6 +657,12 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      Se faltar o valor e não existir conta: intent: "ask_clarification", directResponse: "Qual é o valor da sua conta de internet?"
      Se tiver valor: intent: "add_bill", name: "Internet", amount: 120, dueDay: 10, directResponse: "Pronto. Conta Internet de $ 120 criada para todo dia 10."
 7. OUTRAS AÇÕES:
+   - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
+     intent: "transfer_between_accounts"
+     fromAccountId: id exato da conta de origem na lista de contas
+     toAccountId: id exato da conta de destino na lista de contas
+     amount: valor numérico exato
+     directResponse: confirmação natural somente se a ação for executada
    - Marcar como pago (ex: "paguei a academia", "marca a sapatilha como paga"):
      intent: "mark_bill_paid"
      name: nome da conta
@@ -688,7 +694,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
@@ -704,7 +710,13 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "matchedIncomeId": "string",
     "itemType": "expense" | "bill" | "income",
     "newAmount": number,
-    "newName": "string"
+    "newName": "string",
+    "fromAccountId": "string",
+    "toAccountId": "string",
+    "fromAccountName": "string",
+    "toAccountName": "string",
+    "date": "YYYY-MM-DD",
+    "notes": "string"
   },
   "directResponse": "string"
 }`;
