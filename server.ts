@@ -102,7 +102,7 @@ app.post('/api/mone/live-token', async (req, res) => {
       return;
     }
 
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey, httpOptions: { apiVersion: 'v1alpha' } });
     const now = Date.now();
     const token = await ai.authTokens.create({
       config: {
