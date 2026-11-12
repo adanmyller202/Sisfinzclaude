@@ -674,6 +674,46 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const todayStr = getTodayStr();
   const locale = getLocaleForLanguage(language);
 
+  // Mone identity is deterministic: never expose the underlying AI model name.
+  if (/\b(?:qual\s+(?:e|é|eh)\s+(?:o\s+)?seu\s+nome|como\s+voce\s+se\s+chama|quem\s+e\s+voce|seu\s+nome)\b/i.test(norm)) {
+    return { text: 'Meu nome é Mone. Sou a inteligência integrada ao SisFinz e estou aqui para conversar e cuidar das suas finanças com você.', isInternalCalculation: true };
+  }
+
+  // Route core financial questions directly to real SisFinz data before asking an LLM.
+  const targetMonth = extractTargetMonth(question, currentMonthStr);
+  const asksForecast = /\b(?:quanto\s+(?:vai\s+)?sobr\w*|quanto\s+(?:me\s+)?rest\w*|previs[aã]o|proje[cç][aã]o|saldo\s+(?:final|no\s+fim)|fim\s+do\s+m[eê]s|fechamento\s+do\s+m[eê]s)\b/i.test(norm);
+  const asksBills = /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) && /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm);
+  const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
+
+  if (asksForecast) {
+    let projected = typeof context.forecastBalance === 'number' ? context.forecastBalance : currentBalance;
+    if (targetMonth !== currentMonthStr) {
+      const monthDiff = getMonthDiff(currentMonthStr, targetMonth);
+      if (monthDiff > 0) {
+        for (let offset = 1; offset <= monthDiff; offset++) {
+          const month = shiftMonthStr(currentMonthStr, offset);
+          const monthData = calculateMonthFinancials(context, month);
+          projected += monthData.totalIncomes - monthData.totalBills - monthData.totalOneOffExpenses;
+        }
+      } else {
+        const monthData = calculateMonthFinancials(context, targetMonth);
+        projected = monthData.projectedBalance;
+      }
+    }
+    const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+    return { text: `A previsão de saldo no fim de ${monthName} é de ${formatCurrencySpoken(projected, currency)}.`, isInternalCalculation: true };
+  }
+
+  if (asksBills) {
+    return executeMoneIntent({ intent: 'query_bills', data: { targetMonth } }, context)
+      || { text: 'Não consegui consultar as contas desse período agora.', isInternalCalculation: true };
+  }
+
+  if (asksIncomes) {
+    return executeMoneIntent({ intent: 'query_incomes', data: { targetMonth } }, context)
+      || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
+  }
+
   // 1. Math queries (e.g. "Quanto é 50.000 + 50.000?" -> "100.000.")
   const mathResult = audio ? null : trySolveMath(question);
   if (mathResult !== null) {
@@ -1711,10 +1751,17 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // 11. QUERY BALANCE
     if (intent === 'query_balance') {
-      return {
-        text: `Seu saldo atual é de ${formatCurrencySpoken(currentBalance, currency)}.`,
-        isInternalCalculation: true,
-      };
+      const activeAccounts = (ctx.accounts || []).filter((account) => account.isActive !== false);
+      if (activeAccounts.length) {
+        const totals = new Map<CurrencyCode, number>();
+        for (const account of activeAccounts) {
+          const amount = Number(account.currentBalance ?? (account as any).balance ?? account.initialBalance ?? 0) || 0;
+          totals.set(account.currency, (totals.get(account.currency) || 0) + amount);
+        }
+        const summary = [...totals.entries()].map(([code, amount]) => formatCurrencySpoken(amount, code)).join(' + ');
+        return { text: `Seu saldo atual nas contas do SisFinz é ${summary}.`, isInternalCalculation: true };
+      }
+      return { text: `Seu saldo atual é de ${formatCurrencySpoken(currentBalance, currency)}.`, isInternalCalculation: true };
     }
 
     // QUERY ONE SPECIFIC ACCOUNT BALANCE.
@@ -2138,7 +2185,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   }
 
   // 6. Income query (e.g. "Quanto vou receber em novembro?")
-  if (norm.includes('receber') || norm.includes('receitas')) {
+  if (norm.includes('receber') || norm.includes('receitas') || norm.includes('ingresso') || norm.includes('entradas')) {
     const targetMonth = extractTargetMonth(question, currentMonthStr);
     const data = calculateMonthFinancials(context, targetMonth);
     const totalsByCurrency = new Map<CurrencyCode, number>();
