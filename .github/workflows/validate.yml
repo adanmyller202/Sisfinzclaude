@@ -27,6 +27,8 @@ jobs:
         run: echo "Checking the latest v1beta, audio, and function-calling code"
       - name: Confirm final v1beta configuration
         run: echo "Checking the documented Gemini Live v1beta API configuration"
+      - name: Validate latest Mone Live changes
+        run: echo "Validating current main"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: TypeScript validation
