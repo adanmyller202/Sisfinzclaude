@@ -884,6 +884,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Excluir conta compartilhada: intent "delete_shared_bill", name ou matchedId exato.
    - Use somente pessoas em "Pessoas conectadas para compartilhar contas". Se houver mais de uma e não for indicada, pergunte quem é o parceiro. Se não houver conexão, explique que precisa conectar a pessoa primeiro.
    - Se o usuário não informar percentuais, reutilize a divisão da última conta compartilhada com essa pessoa; se não houver histórico, use 50/50. As porcentagens devem somar 100%.
+   - Se o usuário disser apenas "60/40" sem deixar claro qual percentual é dele e qual é do parceiro, pergunte antes de criar ou alterar. Nunca inverta nem adivinhe as partes.
    - Consultar progresso do desafio semanal (ex: "como está meu desafio da moto?"):
      intent: "query_weekly_challenge"
      challengeId: id exato do desafio
