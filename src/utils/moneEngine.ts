@@ -747,8 +747,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // Deterministic debt/bill queries: financial facts must come only from SisFinz records.
   const isPendingBillsQuestion =
-    /\b(tenho|tem|existe|existem|quais|quanto|alguma|algum|falta|faltam|devo|dividas?|divida|contas?\s+(?:a|para)\s+pagar|a\s+pagar|pendentes?|pendencia|pendencias|bills?|debts?)\b/.test(norm) &&
-    /\b(dividas?|divida|devo|pagar|pagamento|contas?|faturas?|pendentes?|pendencia|pendencias|bills?|debts?)\b/.test(norm);
+    /\b(tenho|tem|existe|existem|quais|quanto|alguma|algum|falta|faltam|devo|divid\\w*|contas?\s+(?:a|para)\s+pagar|a\s+pagar|pendentes?|pendencia|pendencias|bills?|debts?)\b/.test(norm) &&
+    /\b(divid\\w*|devo|pagar|pagamento|contas?|faturas?|pendentes?|pendencia|pendencias|bills?|debts?)\b/.test(norm);
 
   if (isPendingBillsQuestion) {
     const targetMonth = extractTargetMonth(question, currentMonthStr);
