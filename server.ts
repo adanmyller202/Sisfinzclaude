@@ -406,27 +406,31 @@ app.post('/api/mone', async (req, res) => {
       return;
     }
 
-    // Cryptographic token verification on Google Identity Toolkit
-    const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKeyConfig}`;
-    const verifyResp = await fetch(verifyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
-    });
+    // Reuse a recently verified Firebase UID for this exact ID token to avoid
+    // an extra Identity Toolkit round-trip on every chat turn (5-minute TTL).
+    let verifiedUid = getCachedUid(idToken);
+    if (!verifiedUid) {
+      const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKeyConfig}`;
+      const verifyResp = await fetch(verifyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
 
-    if (!verifyResp.ok) {
-      res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' });
-      return;
+      if (!verifyResp.ok) {
+        res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' });
+        return;
+      }
+
+      const verifyData: any = await verifyResp.json();
+      const verifiedUser = verifyData.users?.[0];
+      if (!verifiedUser || !verifiedUser.localId) {
+        res.status(401).json({ error: 'Falha ao identificar usuário autenticado a partir do token.' });
+        return;
+      }
+      verifiedUid = verifiedUser.localId;
+      setCachedUid(idToken, verifiedUid);
     }
-
-    const verifyData: any = await verifyResp.json();
-    const verifiedUser = verifyData.users?.[0];
-    if (!verifiedUser || !verifiedUser.localId) {
-      res.status(401).json({ error: 'Falha ao identificar usuário autenticado a partir do token.' });
-      return;
-    }
-
-    const verifiedUid = verifiedUser.localId;
     const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
 
     if (!checkRateLimit(`mone_ip:${clientIp}`) || !checkRateLimit(`mone_uid:${verifiedUid}`)) {
