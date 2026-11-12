@@ -862,9 +862,18 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const requestsTransfer = /\b(?:transfer\w*|mover|movimentar|passar\s+dinheiro)\b/i.test(norm);
   const hasTransferDirection = /\b(?:da|do|de|desde)\b.+\b(?:para|pra|a)\b/i.test(norm);
   if (requestsTransfer && hasTransferDirection) {
+    const accountMentionPosition = (account: AccountItem) => {
+      const tokens = normalize(account.name).split(/\s+/).filter((token) =>
+        token.length > 2 && !['banco', 'bank', 'conta', 'cuenta', 'account'].includes(token)
+      );
+      const positions = (tokens.length ? tokens : [normalize(account.name)])
+        .map((token) => norm.indexOf(token))
+        .filter((position) => position >= 0);
+      return positions.length ? Math.min(...positions) : -1;
+    };
     const mentionedAccounts = (context.accounts || [])
-      .filter((account) => account.isActive !== false && normalize(account.name).length > 1 && norm.includes(normalize(account.name)))
-      .sort((a, b) => norm.indexOf(normalize(a.name)) - norm.indexOf(normalize(b.name)));
+      .filter((account) => account.isActive !== false && accountMentionPosition(account) >= 0)
+      .sort((a, b) => accountMentionPosition(a) - accountMentionPosition(b));
     if (mentionedAccounts.length === 2) {
       const amount = parseAmountFromText(question);
       if (!amount || amount <= 0) {
