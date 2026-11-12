@@ -646,8 +646,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const isCorrection =
     /\bna verdade\b.*\b(?:foi|era|para)\s+\d/i.test(norm) ||
     /\b(?:corrige|corrigir|corrija|mude o valor|muda para|mudar para|troque|trocar|altere|alterar)\b.*\b(?:para|em)\s+\d/i.test(norm) ||
-    /\b(?:foi|era)\s+\d/i.test(norm) ||
-    (norm.startsWith('nao') && /\b(?:foi|era)\s+\d/i.test(norm));
+    (/^nao\b/.test(norm) && /\b(?:foi|era)\s+\d/i.test(norm));
 
   if (isCorrection && lastActionItem) {
     // Extract new amount
