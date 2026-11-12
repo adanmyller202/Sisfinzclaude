@@ -21,6 +21,9 @@ import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import {
   Send,
+  Mic,
+  Square,
+  Volume2,
   X,
   Bot,
   User,
@@ -127,6 +130,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [lastActionItem, setLastActionItem] = useState<MoneActionItem | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isVoiceReplyEnabled, setIsVoiceReplyEnabled] = useState(true);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -200,9 +207,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     },
   };
 
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string, audio?: { data: string; mimeType: string }) => {
     const query = (textToSend || inputValue).trim();
-    if (!query || isLoading) return;
+    if ((!query && !audio) || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
@@ -240,11 +247,11 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         text: m.text,
       }));
 
-      const response: MoneResponse = await askMone(query, {
+      const response: MoneResponse = await askMone(query || 'Comando por voz', {
         ...moneContext,
         history: historyItems,
         lastActionItem,
-      });
+      }, audio);
 
       if (response.createdItem) {
         setLastActionItem(response.createdItem);
@@ -258,6 +265,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       };
 
       setMessages((prev) => [...prev, moneMsg]);
+      if (audio && isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(response.text);
+        utterance.lang = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-AR' : 'en-US';
+        utterance.rate = 1.08;
+        window.speechSynthesis.speak(utterance);
+      }
     } catch (err) {
       console.error('Error asking Mone:', err);
       const errorMsg: ChatMessage = {
@@ -271,6 +285,52 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       setIsLoading(false);
     }
   };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  };
+
+  const startRecording = async () => {
+    if (isRecording || isLoading) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setMessages((prev) => [...prev, { id: 'voice_unsupported_' + Date.now(), sender: 'mone', text: 'Este navegador não oferece gravação de áudio compatível. Você ainda pode conversar por texto.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const preferred = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+      const mimeType = preferred.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (!blob.size) return;
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const dataUrl = String(reader.result || '');
+          const data = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+          if (!data) return;
+          await handleSendMessage('Comando enviado por voz. Interprete exatamente o que foi dito, inclusive expressões informais.', { data, mimeType: blob.type || 'audio/webm' });
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.start(250);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Mone microphone error:', error);
+      setMessages((prev) => [...prev, { id: 'voice_error_' + Date.now(), sender: 'mone', text: 'Não consegui acessar o microfone. Verifique a permissão do navegador e tente novamente.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    }
+  };
+
+  useEffect(() => () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, []);
 
   const handleClearChat = () => {
     setMessages([
@@ -464,6 +524,12 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
             {/* Bottom Section */}
             <div className="p-4 bg-white/40 border-t border-slate-200/60 space-y-4">
+              <div className="flex items-center justify-between -mb-2 px-1">
+                <span className="text-[10px] font-semibold text-slate-500">{isRecording ? 'Estou ouvindo… toque no botão para enviar' : 'Toque no microfone e fale naturalmente'}</span>
+                <button type="button" onClick={() => setIsVoiceReplyEnabled((value) => !value)} className="flex items-center gap-1 text-[10px] font-bold text-emerald-700" aria-label="Alternar resposta falada">
+                  <Volume2 className="w-3.5 h-3.5" /> {isVoiceReplyEnabled ? 'Voz ativada' : 'Voz desativada'}
+                </button>
+              </div>
               {/* Quick Suggestions */}
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                 {quickSuggestions.map((sug, idx) => (
@@ -493,8 +559,17 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   className="flex-1 h-14 bg-white/80 border border-slate-200/80 rounded-3xl px-6 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/60 transition-all shadow-xs"
                   disabled={isLoading}
                 />
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isLoading}
+                  aria-label={isRecording ? 'Finalizar gravação' : 'Falar com Mone'}
+                  className={`w-14 h-14 rounded-3xl flex items-center justify-center shrink-0 transition-all border ${isRecording ? 'bg-rose-500 text-white border-rose-400 animate-pulse' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'} disabled:opacity-40`}
+                >
+                  {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
+                </button>
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 1.05 }
                   whileTap={{ scale: 0.95 }}
                   type="submit"
                   disabled={!inputValue.trim() || isLoading}
