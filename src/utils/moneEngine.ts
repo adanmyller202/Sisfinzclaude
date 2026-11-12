@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 import { auth } from '../firebase/config';
 import {
   BillItem,
+  AccountItem,
   IncomeItem,
   ExpenseItem,
   ChallengeGoal,
@@ -60,6 +61,8 @@ export interface MoneActionHandlers {
 
 export interface MoneContext {
   currentBalance: number;
+  forecastBalance?: number;
+  accounts?: AccountItem[];
   bills: BillItem[];
   incomes: IncomeItem[];
   expenses: ExpenseItem[];
@@ -1616,6 +1619,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         persona: context.persona || 'direto',
         context: {
           currentBalance,
+          forecastBalance: context.forecastBalance ?? currentBalance,
+          accounts: context.accounts || [],
+          statusRecords: context.statusRecords || [],
           currency,
           language,
           bills,
