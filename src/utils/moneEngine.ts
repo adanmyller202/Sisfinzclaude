@@ -1872,6 +1872,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           currentBalance,
           forecastBalance: context.forecastBalance ?? currentBalance,
           accounts: context.accounts || [],
+          sharedBills: context.sharedBills || [],
+          weeklyChallenges: context.weeklyChallenges || [],
           statusRecords: context.statusRecords || [],
           currency,
           language,
