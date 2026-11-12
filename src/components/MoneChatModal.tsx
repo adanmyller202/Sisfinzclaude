@@ -15,6 +15,7 @@ import {
   MoneStyle,
   MoneMood,
   AccountItem,
+  SharedBill,
 } from '../types';
 import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
@@ -53,6 +54,8 @@ interface MoneChatModalProps {
   currentBalance: number;
   forecastBalance?: number;
   accounts?: AccountItem[];
+  sharedBills?: SharedBill[];
+  myUserId?: string;
   bills: BillItem[];
   incomes: IncomeItem[];
   expenses: ExpenseItem[];
@@ -91,6 +94,7 @@ interface MoneChatModalProps {
     date: string;
     notes?: string;
   }) => Promise<any> | void;
+  onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -99,6 +103,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   currentBalance,
   forecastBalance = currentBalance,
   accounts = [],
+  sharedBills = [],
+  myUserId,
   bills,
   incomes,
   expenses,
@@ -123,6 +129,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onUpdateCurrentBalance,
   onCreateGoal,
   onTransferBetweenAccounts,
+  onToggleMySharePaid,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -289,6 +296,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     currentBalance,
     forecastBalance,
     accounts,
+    sharedBills,
+    myUserId,
     bills,
     incomes,
     expenses,
@@ -314,6 +323,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onUpdateCurrentBalance,
       onCreateGoal,
       onTransferBetweenAccounts,
+      onToggleMySharePaid,
     },
   };
 
