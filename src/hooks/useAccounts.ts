@@ -17,7 +17,6 @@ import {
   orderBy,
   getDocs,
   writeBatch,
-  runTransaction,
 } from 'firebase/firestore';
 
 function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
@@ -386,43 +385,27 @@ export function useAccounts() {
       const fromRef = doc(db, 'users', user.uid, 'accounts', fromAccountId);
       const toRef = doc(db, 'users', user.uid, 'accounts', toAccountId);
       const transferRef = doc(db, 'users', user.uid, 'account_transfers', transferId);
-      let committedFromBalance = 0;
-      let committedToBalance = 0;
+      const committedFromBalance = (fromAcc.currentBalance || 0) - amount;
+      const committedToBalance = (toAcc.currentBalance || 0) + amount;
 
-      // Commit both balance changes and the transfer record atomically.
-      await runTransaction(db, async (tx) => {
-        const [fromSnapshot, toSnapshot] = await Promise.all([tx.get(fromRef), tx.get(toRef)]);
-        if (!fromSnapshot.exists() || !toSnapshot.exists()) {
-          throw new Error('Uma das contas não existe mais. Atualize a tela e tente novamente.');
-        }
-        const fromData = fromSnapshot.data() as AccountItem;
-        const toData = toSnapshot.data() as AccountItem;
-        if (fromData.isActive === false || toData.isActive === false) {
-          throw new Error('As duas contas precisam estar ativas.');
-        }
-        if (fromData.currency !== toData.currency) {
-          throw new Error('Não é possível transferir diretamente entre contas de moedas diferentes.');
-        }
-
-        const fromBalance = Number(fromData.currentBalance) || 0;
-        const toBalance = Number(toData.currentBalance) || 0;
-        committedFromBalance = fromBalance - amount;
-        committedToBalance = toBalance + amount;
-        tx.update(fromRef, { currentBalance: committedFromBalance, updatedAt: now });
-        tx.update(toRef, { currentBalance: committedToBalance, updatedAt: now });
-        tx.set(transferRef, sanitizeFirestorePayload({
-          id: transferId,
-          userId: user.uid,
-          fromAccountId,
-          fromAccountName: fromData.name || fromAcc.name,
-          toAccountId,
-          toAccountName: toData.name || toAcc.name,
-          amount,
-          date,
-          ...(notes?.trim() ? { notes: notes.trim() } : {}),
-          createdAt: now,
-        }));
-      });
+      // One atomic batch keeps both balances and the transfer log consistent,
+      // while still allowing Firestore's offline persistence to queue the write.
+      const batch = writeBatch(db);
+      batch.set(fromRef, { currentBalance: committedFromBalance, updatedAt: now }, { merge: true });
+      batch.set(toRef, { currentBalance: committedToBalance, updatedAt: now }, { merge: true });
+      batch.set(transferRef, sanitizeFirestorePayload({
+        id: transferId,
+        userId: user.uid,
+        fromAccountId,
+        fromAccountName: fromAcc.name,
+        toAccountId,
+        toAccountName: toAcc.name,
+        amount,
+        date,
+        ...(notes?.trim() ? { notes: notes.trim() } : {}),
+        createdAt: now,
+      }));
+      await batch.commit();
 
       setAccounts((prev) => {
         const list = prev.map((account) => {
