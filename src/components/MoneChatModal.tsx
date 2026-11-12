@@ -633,9 +633,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
                 const destructiveRequest = isFinancialMutationRequest(request);
-                const normalizedReply = request.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
-                const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
-                const isVoiceCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
+                const normalizedReply = request.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[,.!?]+/g, ' ').replace(/\s+/g, ' ').trim();
+                const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)(?:\s+(?:por favor|sim|confirmo|please))?$/.test(normalizedReply);
+                const isVoiceCancellation = /^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
                 if (!request) {
                   return { id: call.id, name: call.name, response: { error: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
                 }
