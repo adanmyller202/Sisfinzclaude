@@ -104,7 +104,16 @@ export default function App() {
   const { getCategoriesFor, addCategory, allDisplayCategories, updateCategory, deleteCategory, resetPredefinedCategories } = useCategories();
   const sharedAccounts = useSharedAccounts();
   const fiftyTwoChallenge = useFiftyTwoWeekChallenge();
-  const { accounts, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem, transferBetweenAccounts } = useAccounts();
+  const {
+    accounts,
+    totalBalance: accountsTotalBalance,
+    adjustAccountBalanceForFinancialItem,
+    transferBetweenAccounts,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    toggleAccountActive,
+  } = useAccounts();
 
   // Hook into finance data for Mone assistant
   const {
@@ -1098,6 +1107,10 @@ export default function App() {
         onAddCategory={(name, scope) => addCategory(name, scope)}
         onUpdateCategory={(categoryId, updates) => updateCategory(categoryId, updates)}
         onDeleteCategory={(categoryId) => deleteCategory(categoryId)}
+        onAddAccount={(params) => addAccount(params)}
+        onUpdateAccount={(accountId, params) => updateAccount(accountId, params)}
+        onDeleteAccount={(accountId) => deleteAccount(accountId)}
+        onToggleAccountActive={(accountId) => toggleAccountActive(accountId)}
       />
 
       {/* Deposit Modal */}
