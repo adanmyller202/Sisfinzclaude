@@ -671,12 +671,28 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
 
     if (newAmount !== null && newAmount > 0) {
-      if (lastActionItem.type === 'expense' && handlers?.onUpdateExpense) {
-        await handlers.onUpdateExpense(lastActionItem.id, { amount: newAmount });
-      } else if (lastActionItem.type === 'bill' && handlers?.onUpdateBill) {
-        await handlers.onUpdateBill(lastActionItem.id, { amount: newAmount });
-      } else if (lastActionItem.type === 'income' && handlers?.onUpdateIncome) {
-        await handlers.onUpdateIncome(lastActionItem.id, { amount: newAmount });
+      const recordExists =
+        (lastActionItem.type === 'expense' && expenses.some((item) => item.id === lastActionItem.id)) ||
+        (lastActionItem.type === 'bill' && bills.some((item) => item.id === lastActionItem.id)) ||
+        (lastActionItem.type === 'income' && incomes.some((item) => item.id === lastActionItem.id));
+      if (!recordExists) {
+        return {
+          text: 'Não encontrei mais o último lançamento que você quer corrigir. Diga o nome do registro para eu localizar o item certo.',
+          isInternalCalculation: true,
+        };
+      }
+      try {
+        if (lastActionItem.type === 'expense' && handlers?.onUpdateExpense) {
+          await handlers.onUpdateExpense(lastActionItem.id, { amount: newAmount });
+        } else if (lastActionItem.type === 'bill' && handlers?.onUpdateBill) {
+          await handlers.onUpdateBill(lastActionItem.id, { amount: newAmount });
+        } else if (lastActionItem.type === 'income' && handlers?.onUpdateIncome) {
+          await handlers.onUpdateIncome(lastActionItem.id, { amount: newAmount });
+        } else {
+          return { text: 'A edição desse tipo de lançamento não está disponível.', isInternalCalculation: true };
+        }
+      } catch (err: any) {
+        return { text: `Não consegui corrigir o lançamento: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
       }
 
       const formatted = formatCurrency(newAmount, currency);
