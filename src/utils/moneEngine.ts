@@ -939,7 +939,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 3. CATEGORY SPENDING QUERY (e.g. "Quanto gastei com transporte este mês?")
   const isCategorySpendingQuery =
-    (norm.includes('quanto gastei') || norm.includes('quanto foi gasto') || norm.includes('gastos com') || norm.includes('despesas com')) &&
+    (norm.includes('quanto gastei') || norm.includes('quanto foi gasto') ||
+      /\b(?:gastos?|despesas?)\s+(?:com|em|na|no)\b/.test(norm)) &&
     !norm.includes('comprei') &&
     !norm.includes('adicione');
 
@@ -948,31 +949,51 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const monthData = calculateMonthFinancials(context, targetMonth);
     const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
 
-    // Identify category
-    let targetCat = 'Transporte';
-    if (norm.includes('transporte') || norm.includes('uber') || norm.includes('gasolina')) targetCat = 'Transporte';
-    else if (norm.includes('alimentacao') || norm.includes('comida') || norm.includes('mercado') || norm.includes('restaurante')) targetCat = 'Alimentação';
-    else if (norm.includes('saude') || norm.includes('farmacia') || norm.includes('medico')) targetCat = 'Saúde';
-    else if (norm.includes('moradia') || norm.includes('aluguel') || norm.includes('casa')) targetCat = 'Moradia';
-    else if (norm.includes('lazer')) targetCat = 'Lazer & Estilo de Vida';
-    else if (norm.includes('compras') || norm.includes('roupa')) targetCat = 'Compras';
-
-    const catExpenses = monthData.monthExpenses.filter((e) => e.category === targetCat || inferCategory(e.name, 'expense') === targetCat);
-    const catBills = monthData.monthBills.filter((b) => b.category === targetCat || inferCategory(b.name, 'bill') === targetCat);
-
-    const sumExpenses = catExpenses.reduce((s, e) => s + e.amount, 0);
-    const sumBills = catBills.reduce((s, b) => s + b.amount, 0);
-    const totalCat = sumExpenses + sumBills;
-
-    if (totalCat === 0) {
-      return {
-        text: `Você não possui gastos registrados com ${targetCat} em ${monthName}.`,
-        isInternalCalculation: true,
-      };
+    let targetCat = getMentionedCategory(context, question, 'expense')
+      || getMentionedCategory(context, question, 'bill');
+    if (!targetCat) {
+      if (norm.includes('transporte') || norm.includes('uber') || norm.includes('gasolina')) targetCat = 'Transporte';
+      else if (norm.includes('alimentacao') || norm.includes('comida') || norm.includes('mercado') || norm.includes('restaurante')) targetCat = 'Alimentação';
+      else if (norm.includes('saude') || norm.includes('farmacia') || norm.includes('medico')) targetCat = 'Saúde';
+      else if (norm.includes('moradia') || norm.includes('aluguel') || norm.includes('casa')) targetCat = 'Moradia';
+      else if (norm.includes('lazer')) targetCat = 'Lazer & Estilo de Vida';
+      else if (norm.includes('compras') || norm.includes('roupa')) targetCat = 'Compras';
+    }
+    if (!targetCat) {
+      return { text: 'Qual categoria você quer consultar?', isInternalCalculation: true };
     }
 
+    const catExpenses = monthData.monthExpenses.filter((item) =>
+      normalize(item.category || '') === normalize(targetCat) ||
+      (!item.category && inferCategory(item.name, 'expense') === targetCat)
+    );
+    const catBills = monthData.monthBills.filter((item) =>
+      !item.isRefund && !item.isRefunded &&
+      (normalize(item.category || '') === normalize(targetCat) ||
+        (!item.category && inferCategory(item.name, 'bill') === targetCat))
+    );
+    const totals = new Map<CurrencyCode, number>();
+    for (const item of catExpenses) {
+      const distributions = (item as any).accountDistributions as { accountId: string; amount: number }[] | undefined;
+      if (distributions?.length) {
+        for (const distribution of distributions) {
+          const linkedAccount = context.accounts?.find((account) => account.id === distribution.accountId);
+          const code = linkedAccount?.currency || currency;
+          totals.set(code, (totals.get(code) || 0) + distribution.amount);
+        }
+      } else {
+        const linkedAccount = context.accounts?.find((account) => account.id === (item as any).accountId);
+        const code = linkedAccount?.currency || currency;
+        totals.set(code, (totals.get(code) || 0) + item.amount);
+      }
+    }
+    for (const item of catBills) {
+      totals.set(item.currency, (totals.get(item.currency) || 0) + item.amount);
+    }
+
+    const totalSummary = formatCurrencyBreakdown(totals, 'nenhum gasto ou conta prevista');
     return {
-      text: `Você gastou ${formatCurrencySpoken(totalCat, currency)} com ${targetCat} em ${monthName}.`,
+      text: `Na categoria ${targetCat}, em ${monthName}, você tem ${totalSummary} em despesas registradas e contas previstas.`,
       isInternalCalculation: true,
     };
   }
