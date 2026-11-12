@@ -16,6 +16,7 @@ import {
   MoneMood,
   AccountItem,
   SharedBill,
+  SharedInvitation,
   FiftyTwoWeekChallenge,
 } from '../types';
 import { SisFinzPet } from './shared/SisFinzPet';
