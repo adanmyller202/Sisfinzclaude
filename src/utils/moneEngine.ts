@@ -2120,7 +2120,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           !bill.exceptions?.[targetMonth]?.isDeleted;
         const inMonth = bill.month === targetMonth || (bill.dueDate || '').startsWith(targetMonth) || isRecurringOccurrence;
         const nameMatches = !name || normalize(bill.title).includes(name);
-        return inMonth && nameMatches && (!ctx.myUserId || bill.members.includes(ctx.myUserId));
+        const notExcludedForMonth = !(bill.excludedMonths || []).includes(targetMonth);
+        const notDeletedForUser = !ctx.myUserId || !(bill.exceptions?.[targetMonth]?.deletedForUsers || []).includes(ctx.myUserId);
+        return inMonth && notExcludedForMonth && notDeletedForUser &&
+          bill.shareRequest?.status !== 'rejected' &&
+          nameMatches && (!ctx.myUserId || bill.members.includes(ctx.myUserId));
       });
       if (!shared.length) {
         return { text: 'Não encontrei contas compartilhadas suas para esse período.', isInternalCalculation: true };
