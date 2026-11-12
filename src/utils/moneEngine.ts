@@ -22,6 +22,7 @@ import {
   SavingGoal,
   SavingTransaction,
   SplitMethod,
+  SharedInvitation,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -110,6 +111,8 @@ export interface MoneActionHandlers {
     splitMethod: SplitMethod; myPercentage: number; partnerPercentage: number;
   }) => Promise<any> | void;
   onDeleteSharedBill?: (billId: string) => Promise<any> | void;
+  onSendSharedInvitation?: (email: string) => Promise<{ success: boolean; message?: string }> | void;
+  onRespondSharedInvitation?: (invitationId: string, accept: boolean) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -118,6 +121,7 @@ export interface MoneContext {
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
   sharedPartners?: Array<{ uid: string; displayName: string; email?: string }>;
+  sharedInvitations?: SharedInvitation[];
   weeklyChallenges?: FiftyTwoWeekChallenge[];
   myUserId?: string;
   bills: BillItem[];
@@ -2004,6 +2008,52 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // QUERY CONNECTED PEOPLE AND PENDING INVITATIONS.
+    if (intent === 'query_shared_partners') {
+      const partners = ctx.sharedPartners || [];
+      const invitations = (ctx.sharedInvitations || []).filter((invitation) => invitation.status === 'pending');
+      const partnerLines = partners.map((partner) => `• ${partner.displayName}${partner.email ? ` — ${partner.email}` : ''}`);
+      const inviteLines = invitations.map((invitation) => `• Convite de ${invitation.fromUserName} (${invitation.fromUserEmail})`);
+      if (!partnerLines.length && !inviteLines.length) return { text: 'Você ainda não tem pessoas conectadas nem convites pendentes em Contas Compartilhadas.', isInternalCalculation: true };
+      return { text: `Pessoas conectadas:\n${partnerLines.join('\n') || 'Nenhuma'}\nConvites pendentes:\n${inviteLines.join('\n') || 'Nenhum'}`, isInternalCalculation: true };
+    }
+
+    // SEND AN INVITATION TO SHARE ACCOUNTS.
+    if (intent === 'send_shared_invitation') {
+      if (!handlers?.onSendSharedInvitation) return { text: 'O envio de convites não está disponível agora.', isInternalCalculation: true };
+      const email = String(d.email || d.inviteeEmail || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { text: 'Qual é o e-mail da pessoa que você quer convidar?', isInternalCalculation: true };
+      try {
+        const result = await handlers.onSendSharedInvitation(email);
+        if (!result?.success) return { text: result?.message || 'Não consegui enviar o convite. Verifique o e-mail e tente novamente.', isInternalCalculation: true };
+        return { text: `Convite enviado para ${email}. A pessoa precisa aceitar para aparecer nas suas contas compartilhadas.`, isInternalCalculation: true, actionExecuted: 'send_shared_invitation' };
+      } catch (err: any) {
+        return { text: `Não consegui enviar o convite: ${err?.message || 'falha ao enviar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // ACCEPT OR REJECT A PENDING INVITATION.
+    if (intent === 'respond_shared_invitation') {
+      if (!handlers?.onRespondSharedInvitation) return { text: 'A resposta a convites não está disponível agora.', isInternalCalculation: true };
+      const pending = (ctx.sharedInvitations || []).filter((invitation) => invitation.status === 'pending');
+      const invitationName = normalize(d.invitationName || d.email || '');
+      const matches = pending.filter((invitation) =>
+        d.invitationId ? invitation.id === d.invitationId : !invitationName ||
+          normalize(invitation.fromUserName).includes(invitationName) ||
+          normalize(invitation.fromUserEmail).includes(invitationName)
+      );
+      const invitation = d.invitationId ? matches[0] : invitationName ? (matches.length === 1 ? matches[0] : undefined) : pending.length === 1 ? pending[0] : undefined;
+      if (!invitation) return { text: pending.length > 1 ? 'Você tem mais de um convite pendente. De quem é o convite que quer responder?' : 'Não encontrei convite pendente para responder.', isInternalCalculation: true };
+      const accept = typeof d.accept === 'boolean' ? d.accept : undefined;
+      if (accept === undefined) return { text: `Você quer aceitar ou recusar o convite de ${invitation.fromUserName}?`, isInternalCalculation: true };
+      try {
+        await handlers.onRespondSharedInvitation(invitation.id, accept);
+        return { text: accept ? `Convite de ${invitation.fromUserName} aceito. A conexão está disponível no SisFinz.` : `Convite de ${invitation.fromUserName} recusado.`, isInternalCalculation: true, actionExecuted: 'respond_shared_invitation' };
+      } catch (err: any) {
+        return { text: `Não consegui responder ao convite: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // CREATE A SHARED BILL WITH AN EXISTING CONNECTED PARTNER.
     if (intent === 'create_shared_bill') {
       if (!handlers?.onCreateSharedBill) return { text: 'A criação de contas compartilhadas não está disponível.', isInternalCalculation: true };
@@ -2892,6 +2942,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           accounts: context.accounts || [],
           sharedBills: context.sharedBills || [],
           sharedPartners: context.sharedPartners || [],
+          sharedInvitations: context.sharedInvitations || [],
           weeklyChallenges: context.weeklyChallenges || [],
           statusRecords: context.statusRecords || [],
           currency,
@@ -2942,6 +2993,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }));
       const categoriesSummary = context.categories || [];
       const sharedPartnersSummary = context.sharedPartners || [];
+      const sharedInvitationsSummary = (context.sharedInvitations || []).filter((invitation) => invitation.status === 'pending');
       const sharedBillsSummary = (context.sharedBills || []).map((bill) => ({
         id: bill.id, title: bill.title, amount: bill.amount, dueDate: bill.dueDate,
         partnerId: bill.members.find((memberId) => memberId !== context.myUserId),
@@ -2968,6 +3020,7 @@ Use somente os saldos individuais por conta e moeda listados abaixo; nunca some 
 Contas ativas: ${JSON.stringify(accountSummary)}
 Categorias disponíveis: ${JSON.stringify(categoriesSummary)}
 Pessoas conectadas: ${JSON.stringify(sharedPartnersSummary)}
+Convites pendentes: ${JSON.stringify(sharedInvitationsSummary)}
 Contas compartilhadas: ${JSON.stringify(sharedBillsSummary)}
 Cofrinhos: ${JSON.stringify(savingsSummary)}
 Movimentações dos cofrinhos: ${JSON.stringify(savingTransactionsSummary)}
@@ -2993,6 +3046,7 @@ REGRAS:
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
 - Contas: consulte com "query_accounts"; crie com "create_account"; edite com "update_account"; exclua com "delete_account"; ative/desative com "toggle_account_active". Use o ID/nome exato, moeda e saldo informados.
+- Pessoas e convites compartilhados: consulte com "query_shared_partners"; envie convite por e-mail com "send_shared_invitation"; aceite/recuse convite pendente com "respond_shared_invitation" e accept true/false.
 - Contas compartilhadas: consulte com "query_shared_bills"; crie com "create_shared_bill"; edite com "update_shared_bill"; exclua com "delete_shared_bill". Use uma conexão ativa, confirme parceiro, valor e vencimento. Se não informar divisão, reutilize a última divisão com a mesma pessoa; sem histórico, use 50/50. Se disser apenas 60/40 sem indicar qual parte é sua, pergunte.
 - Categorias: consulte com "query_categories"; crie com "create_category"; edite com "update_category"; exclua com "delete_category". Use o nome/ID exato e o escopo bill, income, expense ou all.
 - Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; edite com "update_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
@@ -3003,12 +3057,13 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "create_shared_bill" | "update_shared_bill" | "delete_shared_bill" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "query_shared_partners" | "send_shared_invitation" | "respond_shared_invitation" | "create_shared_bill" | "update_shared_bill" | "delete_shared_bill" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string, "accountId": string,
     "savingName": string, "savingId": string, "categoryName": string, "categoryId": string,
-    "partnerName": string, "partnerId": string, "myPercentage": number, "partnerPercentage": number,
+    "partnerName": string, "partnerId": string, "email": string, "inviteeEmail": string,
+    "invitationId": string, "invitationName": string, "accept": boolean, "myPercentage": number, "partnerPercentage": number,
     "dueDate": string, "recurrenceMonthsCount": number, "newName": string, "scope": string,
     "type": string, "currency": string, "initialBalance": number,
     "currentBalance": number, "isActive": boolean, "hasTarget": boolean, "withoutTarget": boolean,
