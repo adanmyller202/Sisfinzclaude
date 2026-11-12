@@ -842,6 +842,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             currency: g.currency || currency,
           };
         })).slice(0, 2500) + '.',
+        'Pessoas conectadas para contas compartilhadas: ' + JSON.stringify(sharedPartners).slice(0, 1200) + '.',
         'Contas compartilhadas: ' + JSON.stringify(sharedBills.map((b) => ({ id: b.id, title: b.title, amount: b.amount, month: b.month, dueDate: b.dueDate, myShare: myUserId ? b.shares?.[myUserId]?.amount : undefined, myShareStatus: myUserId ? b.shares?.[myUserId]?.status : undefined }))).slice(0, 2500) + '.',
         'Cofrinhos e reservas: ' + JSON.stringify(savingsControl.savings.map((saving) => ({ id: saving.id, name: saving.name, currentAmount: saving.currentAmount, targetAmount: saving.targetAmount, hasTarget: saving.hasTarget, currency: saving.currency, deadline: saving.deadline }))).slice(0, 3500) + '.',
         'Histórico recente de aportes e resgates: ' + JSON.stringify(savingsControl.transactions.slice(0, 20).map((tx) => ({ savingName: tx.savingName, type: tx.type, amount: tx.amount, currency: tx.currency, date: tx.date }))).slice(0, 2500) + '.',
