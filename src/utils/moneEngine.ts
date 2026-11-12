@@ -313,6 +313,27 @@ function trySolveMath(question: string): string | null {
   return null;
 }
 
+function getCurrentBalancesByCurrency(context: MoneContext): Map<CurrencyCode, number> {
+  const totals = new Map<CurrencyCode, number>();
+  const activeAccounts = (context.accounts || []).filter((account) => account.isActive !== false);
+  if (activeAccounts.length) {
+    for (const account of activeAccounts) {
+      const amount = Number(account.currentBalance ?? (account as any).balance ?? account.initialBalance ?? 0) || 0;
+      totals.set(account.currency, (totals.get(account.currency) || 0) + amount);
+    }
+  } else {
+    totals.set(context.currency, Number(context.currentBalance) || 0);
+  }
+  return totals;
+}
+
+function formatCurrencyBreakdown(totals: Map<CurrencyCode, number>, emptyText = 'nenhum valor previsto'): string {
+  const parts = [...totals.entries()]
+    .filter(([, amount]) => Number.isFinite(amount) && Math.abs(amount) > 0.000001)
+    .map(([code, amount]) => formatCurrencySpoken(amount, code));
+  return parts.length ? parts.join(' + ') : emptyText;
+}
+
 /**
  * Calculates financial figures for a given month
  */
@@ -416,55 +437,48 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     }
   }
 
-  const monthExpenses = expenses.filter((e) => e.date && e.date.startsWith(targetMonthStr));
+  const monthExpenses = expenses.filter((expense) =>
+    expense.date && expense.date.startsWith(targetMonthStr) && !expense.isRefund && !expense.isRefunded
+  );
 
-  const totalIncomes = monthIncomes.reduce((acc, i) => acc + i.amount, 0);
-  const totalBills = monthBills.reduce((acc, b) => acc + b.amount, 0);
-  const totalOneOffExpenses = monthExpenses.reduce((acc, e) => acc + e.amount, 0);
+  const totalIncomes = monthIncomes.reduce((acc, item) => acc + item.amount, 0);
+  const totalBills = monthBills.reduce((acc, item) => acc + item.amount, 0);
+  const totalOneOffExpenses = monthExpenses.reduce((acc, item) => acc + item.amount, 0);
 
-  const receivedIncomes = monthIncomes.filter((i) => i.isCompleted).reduce((acc, i) => acc + i.amount, 0);
-  const pendingIncomes = totalIncomes - receivedIncomes;
+  const receivedIncomes = monthIncomes.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const pendingIncomes = monthIncomes.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const paidBills = monthBills.filter((item) => item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
+  const pendingBills = monthBills.filter((item) => !item.isCompleted).reduce((acc, item) => acc + item.amount, 0);
 
-  const paidBills = monthBills.filter((b) => b.isCompleted).reduce((acc, b) => acc + b.amount, 0);
-  const pendingBills = totalBills - paidBills;
+  const pendingIncomesByCurrency = new Map<CurrencyCode, number>();
+  const pendingBillsByCurrency = new Map<CurrencyCode, number>();
+  const expensesByCurrency = new Map<CurrencyCode, number>();
+  for (const item of monthIncomes.filter((entry) => !entry.isCompleted)) {
+    pendingIncomesByCurrency.set(item.currency, (pendingIncomesByCurrency.get(item.currency) || 0) + item.amount);
+  }
+  for (const item of monthBills.filter((entry) => !entry.isCompleted)) {
+    pendingBillsByCurrency.set(item.currency, (pendingBillsByCurrency.get(item.currency) || 0) + item.amount);
+  }
+  for (const expense of monthExpenses) {
+    const linkedAccount = context.accounts?.find((account) => account.id === (expense as any).accountId);
+    const code = linkedAccount?.currency || context.currency;
+    expensesByCurrency.set(code, (expensesByCurrency.get(code) || 0) + expense.amount);
+  }
 
   const monthlySurplus = totalIncomes - totalBills - totalOneOffExpenses;
 
-  let projectedBalance: number;
-  if (targetMonthStr === currentMonthStr) {
-    projectedBalance = currentBalance + pendingIncomes - pendingBills;
-  } else {
-    const diff = getMonthDiff(currentMonthStr, targetMonthStr);
-    if (diff > 0) {
-      let running = currentBalance + pendingIncomes - pendingBills;
-      for (let i = 1; i <= diff; i++) {
-        const m = shiftMonthStr(currentMonthStr, i);
-        let mInc = 0;
-        let mBill = 0;
-
-        for (const inc of incomes) {
-          if (doesItemOccurInMonth(inc.startMonth, m, inc.recurrence, inc.recurrenceMonthsCount)) {
-            const exc = inc.exceptions?.[m];
-            if (exc?.isDeleted || inc.excludedMonths?.includes(m)) continue;
-            mInc += exc?.amount ?? inc.amount;
-          }
-        }
-
-        for (const bill of bills) {
-          if (doesItemOccurInMonth(bill.startMonth, m, bill.recurrence, bill.recurrenceMonthsCount)) {
-            const exc = bill.exceptions?.[m];
-            if (exc?.isDeleted || bill.excludedMonths?.includes(m)) continue;
-            mBill += exc?.amount ?? bill.amount;
-          }
-        }
-
-        running += mInc - mBill;
-      }
-      projectedBalance = running;
-    } else {
-      projectedBalance = currentBalance + monthlySurplus;
-    }
+  // SisFinz report rule: actual account balance + pending income - pending bills.
+  // Keep currencies isolated; never add ARS, USD, BRL or EUR together.
+  const projectedBalanceByCurrency = getCurrentBalancesByCurrency(context);
+  for (const [code, amount] of pendingIncomesByCurrency) {
+    projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) + amount);
   }
+  for (const [code, amount] of pendingBillsByCurrency) {
+    projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) - amount);
+  }
+  const projectedBalance = projectedBalanceByCurrency.get(context.currency)
+    ?? [...projectedBalanceByCurrency.values()][0]
+    ?? currentBalance;
 
   return {
     targetMonthStr,
@@ -478,8 +492,12 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
     pendingIncomes,
     paidBills,
     pendingBills,
+    pendingIncomesByCurrency,
+    pendingBillsByCurrency,
+    expensesByCurrency,
     monthlySurplus,
     projectedBalance,
+    projectedBalanceByCurrency,
   };
 }
 
@@ -686,22 +704,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
 
   if (asksForecast) {
-    let projected = typeof context.forecastBalance === 'number' ? context.forecastBalance : currentBalance;
-    if (targetMonth !== currentMonthStr) {
-      const monthDiff = getMonthDiff(currentMonthStr, targetMonth);
-      if (monthDiff > 0) {
-        for (let offset = 1; offset <= monthDiff; offset++) {
-          const month = shiftMonthStr(currentMonthStr, offset);
-          const monthData = calculateMonthFinancials(context, month);
-          projected += monthData.totalIncomes - monthData.totalBills - monthData.totalOneOffExpenses;
-        }
-      } else {
-        const monthData = calculateMonthFinancials(context, targetMonth);
-        projected = monthData.projectedBalance;
-      }
-    }
+    const monthData = calculateMonthFinancials(context, targetMonth);
     const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
-    return { text: `A previsão de saldo no fim de ${monthName} é de ${formatCurrencySpoken(projected, currency)}.`, isInternalCalculation: true };
+    const projectedSummary = formatCurrencyBreakdown(monthData.projectedBalanceByCurrency);
+    return {
+      text: `A previsão de saldo no fim de ${monthName} é ${projectedSummary}.`,
+      isInternalCalculation: true,
+    };
   }
 
   if (asksBills) {
@@ -1712,8 +1721,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+      const expenseSummary = formatCurrencyBreakdown(data.expensesByCurrency, 'nenhuma despesa registrada');
+      const billTotals = new Map<CurrencyCode, number>();
+      for (const bill of data.monthBills) {
+        billTotals.set(bill.currency, (billTotals.get(bill.currency) || 0) + bill.amount);
+      }
+      const billSummary = formatCurrencyBreakdown(billTotals, 'nenhuma conta prevista');
       return {
-        text: `Em ${monthName}, você tem ${formatCurrencySpoken(data.totalOneOffExpenses, currency)} em despesas registradas e ${formatCurrencySpoken(data.totalBills, currency)} em contas previstas.`,
+        text: `Em ${monthName}, você tem ${expenseSummary} em despesas registradas e ${billSummary} em contas previstas.`,
         isInternalCalculation: true,
       };
     }
@@ -1723,11 +1738,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
-      const projected = targetMonth === currentMonthStr && typeof ctx.forecastBalance === 'number'
-        ? ctx.forecastBalance
-        : data.projectedBalance;
+      const projected = formatCurrencyBreakdown(data.projectedBalanceByCurrency);
       return {
-        text: `A previsão de saldo para ${monthName} é ${formatCurrencySpoken(projected, currency)}.`,
+        text: `A previsão de saldo para ${monthName} é ${projected}.`,
         isInternalCalculation: true,
       };
     }
