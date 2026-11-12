@@ -897,7 +897,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           notes: d.notes || 'Transferência solicitada à Mone',
         });
         return {
-          text: parsed.directResponse || `Transferi ${formatCurrency(amount, currency)} de ${fromAccount.name} para ${toAccount.name}.`,
+          text: parsed.directResponse || `Transferi ${formatCurrency(amount, fromAccount.currency)} de ${fromAccount.name} para ${toAccount.name}.`,
           isInternalCalculation: true,
           actionExecuted: 'transfer_between_accounts',
         };
