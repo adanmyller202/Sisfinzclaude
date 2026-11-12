@@ -16,6 +16,7 @@ import {
   MoneMood,
 } from '../types';
 import { MoneMascot } from './MoneMascot';
+import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
@@ -409,7 +410,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   animate={{ y: isLoading ? [0, -5, 0] : [0, -4, 0], scale: isRecording ? [1, 1.035, 1] : 1 }}
                   transition={{ duration: isRecording ? 1 : 3, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <MoneMascot mood={isRecording ? 'happy' : mood} size="lg" />
+                  <SisFinzPet size={142} className="drop-shadow-[0_10px_24px_rgba(16,185,129,0.22)]" />
                 </motion.div>
                 <motion.div
                   className={`absolute bottom-5 right-7 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-[#F2FBF6] shadow-lg ${isRecording ? 'bg-rose-500 text-white' : isLoading ? 'bg-amber-400 text-white' : 'bg-emerald-500 text-white'}`}
