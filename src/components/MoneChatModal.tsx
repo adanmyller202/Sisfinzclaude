@@ -159,11 +159,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
 
-  const initialGreeting = React.useMemo(() => {
-    if (language === 'pt') return 'Oi! Tudo bem? Pode conversar comigo sobre qualquer assunto — e, quando quiser, eu também posso cuidar das suas finanças no SisFinz.';
-    if (language === 'es') return '¡Hola! ¿Cómo estás? Puedes hablar conmigo de cualquier tema y también puedo ayudarte con tus finanzas en SisFinz.';
-    return 'Hi! How are you? You can talk to me about anything, and I can also help manage your finances in SisFinz.';
-  }, [language]);
+  const initialGreeting = React.useMemo(
+    () => 'Oi! Tudo bem? Pode conversar comigo sobre qualquer assunto — e, quando quiser, eu também posso cuidar das suas finanças no SisFinz.',
+    []
+  );
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -328,7 +327,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     onChangeMoneStyle?.(newStyle);
 
     const opt = STYLE_OPTIONS.find((s) => s.id === newStyle);
-    const cannedText = opt ? (t[opt.switchKey] as string) : '';
+    const cannedText = opt ? (getTranslations('pt')[opt.switchKey] as string) : '';
     if (cannedText) {
       const confirmationMsg: ChatMessage = {
         id: 'style_switch_' + Date.now(),
@@ -446,12 +445,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       const offlineMsg: ChatMessage = {
         id: 'msg_offline_' + Date.now(),
         sender: 'mone',
-        text:
-          language === 'pt'
-            ? 'O assistente inteligente Mone precisa de conexão com a internet para gerar respostas com inteligência artificial.'
-            : language === 'es'
-            ? 'El asistente inteligente Mone requiere conexión a internet para generar respuestas con IA.'
-            : 'The Mone AI assistant requires an internet connection.',
+        text: 'A Mone precisa de conexão com a internet para gerar respostas com inteligência artificial.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setTimeout(() => {
