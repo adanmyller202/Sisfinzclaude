@@ -568,7 +568,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           },
           onerror: (error: any) => {
             console.error('[Mone Live] Connection error:', error);
-            setLiveStatus('idle');
+            stopLiveVoice();
+            setMessages((prev) => [...prev, {
+              id: 'live_connection_error_' + Date.now(),
+              sender: 'mone',
+              text: 'A conexão de voz foi interrompida. Toque no microfone para tentar novamente ou continue por texto.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            }]);
           },
           onclose: () => {
             setIsLiveConnected(false);
@@ -614,7 +620,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       session.sendRealtimeInput({
-        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar conta como paga ou consultar dados, use a ferramenta sisfinz_action. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Alterações e exclusões ainda não estão liberadas nesta interface de voz; nesses casos explique que não fez nenhuma mudança. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
+        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar uma receita como recebida, transferir dinheiro entre contas próprias ou consultar dados, use a ferramenta sisfinz_action. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Alterações e exclusões ainda não estão liberadas nesta interface de voz; nesses casos explique que não fez nenhuma mudança. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
       });
     } catch (error: any) {
       console.error('[Mone Live] Start failed:', error);
