@@ -576,6 +576,76 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     livePlaybackTimeRef.current = startAt + buffer.duration;
   };
 
+  const armLiveTurnWatchdog = () => {
+    if (liveTurnWatchdogRef.current !== null) window.clearTimeout(liveTurnWatchdogRef.current);
+    const activeSession = liveSessionRef.current;
+    if (!activeSession) return;
+    liveTurnWatchdogRef.current = window.setTimeout(async () => {
+      liveTurnWatchdogRef.current = null;
+      const sequence = ++liveTurnSequenceRef.current;
+      if (liveSessionRef.current !== activeSession) return;
+
+      const userText = liveUserTextRef.current.trim();
+      let replyText = '';
+      // Do not repeat an action that may already have been executed by the tool.
+      if (liveFinanceToolUsedRef.current) {
+        replyText = 'Consegui encaminhar sua solicitação financeira, mas a conexão não confirmou a resposta final. Confira o registro no SisFinz antes de tentar novamente, para evitar duplicidade.';
+      } else if (userText) {
+        try {
+          const fallback = await askMone(userText, {
+            ...moneContextRef.current,
+            lastActionItem: lastActionItemRef.current,
+          });
+          replyText = fallback.text;
+          if (fallback.createdItem) {
+            setLastActionItem(fallback.createdItem);
+            lastActionItemRef.current = fallback.createdItem;
+          }
+        } catch {
+          replyText = 'Desculpe, a resposta demorou mais que o esperado e a conexão ficou presa. Pode repetir sua pergunta? Estou pronta para tentar novamente.';
+        }
+      } else {
+        replyText = 'A resposta demorou mais que o esperado. Pode repetir sua pergunta?';
+      }
+
+      if (sequence !== liveTurnSequenceRef.current || liveSessionRef.current !== activeSession) return;
+      liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
+      liveAudioSourcesRef.current = [];
+      livePlaybackTimeRef.current = liveOutputContextRef.current?.currentTime || 0;
+      const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setMessages((prev) => [
+        ...prev,
+        ...(userText ? [{ id: 'live_timeout_user_' + Date.now(), sender: 'user' as const, text: userText, timestamp: stamp }] : []),
+        { id: 'live_timeout_mone_' + Date.now(), sender: 'mone' as const, text: replyText, timestamp: stamp },
+      ]);
+      liveUserTextRef.current = '';
+      liveMoneTextRef.current = '';
+      liveFinanceToolUsedRef.current = false;
+      setLiveTranscript(replyText);
+
+      if (isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(replyText);
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.04;
+        utterance.volume = 1;
+        setLiveStatus('speaking');
+        const speechFinished = new Promise<void>((resolve) => {
+          utterance.onend = () => resolve();
+          utterance.onerror = () => resolve();
+        });
+        window.speechSynthesis.speak(utterance);
+        await Promise.race([speechFinished, new Promise<void>((resolve) => window.setTimeout(resolve, 30000))]);
+      }
+
+      if (sequence === liveTurnSequenceRef.current && liveSessionRef.current === activeSession) {
+        setLiveTranscript('');
+        liveInputMutedRef.current = false;
+        setLiveStatus('listening');
+      }
+    }, 25000);
+  };
+
   const startLiveVoice = async () => {
     if (!memoryReady || isLiveConnected || liveStatus === 'connecting' || isLoading) return;
     pendingTextActionRef.current = null;
@@ -688,6 +758,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           onmessage: async (message: any) => {
             const toolCalls = message?.toolCall?.functionCalls || [];
             if (toolCalls.length) {
+              armLiveTurnWatchdog();
               liveFinanceToolUsedRef.current = true;
               liveInputMutedRef.current = true;
               setLiveStatus('processing');
@@ -748,17 +819,20 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               }
               liveUserTextRef.current += content.inputTranscription.text;
               setLiveTranscript(liveUserTextRef.current);
+              armLiveTurnWatchdog();
             }
             if (content?.outputTranscription?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
               liveInputMutedRef.current = true;
               liveMoneTextRef.current += content.outputTranscription.text;
               setLiveTranscript(liveMoneTextRef.current);
               setLiveStatus('speaking');
+              armLiveTurnWatchdog();
             }
             (content?.modelTurn?.parts || []).forEach((part: any) => {
               if (part?.inlineData?.data || part?.text) {
                 liveInputMutedRef.current = true;
                 setLiveStatus('speaking');
+                armLiveTurnWatchdog();
               }
               if (part?.inlineData?.data && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) playLiveAudio(part.inlineData.data);
               if (part?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
@@ -777,6 +851,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               setLiveStatus('processing');
             }
             if (content?.turnComplete) {
+              if (liveTurnWatchdogRef.current !== null) window.clearTimeout(liveTurnWatchdogRef.current);
+              liveTurnWatchdogRef.current = null;
+              liveTurnSequenceRef.current += 1;
               liveInputMutedRef.current = true;
               setLiveStatus('processing');
               const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -842,6 +919,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             }]);
           },
           onclose: () => {
+            if (liveTurnWatchdogRef.current !== null) window.clearTimeout(liveTurnWatchdogRef.current);
+            liveTurnWatchdogRef.current = null;
+            liveTurnSequenceRef.current += 1;
             liveInputMutedRef.current = false;
             setIsLiveConnected(false);
             setIsRecording(false);
