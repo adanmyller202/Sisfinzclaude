@@ -1537,20 +1537,21 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+      const pendingBills = data.monthBills.filter((bill) => !bill.isCompleted);
 
-      if (data.monthBills.length === 0) {
+      if (pendingBills.length === 0) {
         return {
-          text: `Não. Você não tem contas para pagar em ${monthName}.`,
+          text: `Não. Você não tem contas pendentes para pagar em ${monthName}.`,
           isInternalCalculation: true,
         };
       }
 
-      let text = `Sim. Você tem ${formatCurrency(data.totalBills, currency)} para pagar em ${monthName}:\n`;
-      data.monthBills.forEach((b) => {
-        text += `• ${b.name}: ${formatCurrency(b.amount, currency)}\n`;
-      });
+      const pendingTotal = pendingBills.reduce((sum, bill) => sum + bill.amount, 0);
+      const lines = pendingBills.map((bill) =>
+        `• ${bill.name}: ${formatCurrency(bill.amount, currency)} (vencimento: ${bill.date})`
+      );
       return {
-        text: text.trim(),
+        text: `Sim. Você tem ${formatCurrency(pendingTotal, currency)} em contas pendentes para pagar em ${monthName}:\\n${lines.join('\\n')}`,
         isInternalCalculation: true,
       };
     }
