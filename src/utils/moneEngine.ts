@@ -1196,7 +1196,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           notes: d.notes || 'Transferência solicitada à Mone',
         });
         return {
-          text: parsed.directResponse || `Transferi ${formatCurrencySpoken(amount, fromAccount.currency)} de ${fromAccount.name} para ${toAccount.name}.`,
+          text: `Transferi ${formatCurrencySpoken(amount, fromAccount.currency)} de ${fromAccount.name} para ${toAccount.name}.`,
           isInternalCalculation: true,
           actionExecuted: 'transfer_between_accounts',
         };
@@ -1229,7 +1229,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
         return {
-          text: parsed.directResponse || `Despesa de ${expName} de ${formatCurrencySpoken(d.amount, currency)} adicionada.`,
+          text: `Despesa de ${expName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} adicionada.`,
           isInternalCalculation: true,
           actionExecuted: 'add_expense',
           createdItem: { type: 'expense', id: createdId, name: expName, amount: d.amount },
@@ -1277,9 +1277,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
         return {
-          text:
-            parsed.directResponse ||
-            `Pronto. ${billName} criada em ${installments} parcelas de ${formatCurrencySpoken(instAmount, currency)}, todo dia ${dueDay}.`,
+          text: `Pronto. ${billName} criada em ${installments} parcelas de ${formatCurrencySpoken(instAmount, selectedAccount.account?.currency || currency)}, todo dia ${dueDay}.`,
           isInternalCalculation: true,
           actionExecuted: 'add_installment',
           createdItem: { type: 'bill', id: createdId, name: billName, amount: instAmount },
@@ -1323,9 +1321,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
         return {
-          text:
-            parsed.directResponse ||
-            `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, currency)} criada para todo dia ${dueDay}.`,
+          text: `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} criada para todo dia ${dueDay}.`,
           isInternalCalculation: true,
           actionExecuted: 'add_bill',
           createdItem: { type: 'bill', id: createdId, name: billName, amount: d.amount },
@@ -1374,7 +1370,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           await handlers.onToggleIncomeReceived(createdId, startMonth, true);
         }
         return {
-          text: parsed.directResponse || `Receita de ${incName} de ${formatCurrencySpoken(d.amount, currency)} adicionada.`,
+          text: `Receita de ${incName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} adicionada.`,
           isInternalCalculation: true,
           actionExecuted: 'add_income',
           createdItem: { type: 'income', id: createdId, name: incName, amount: d.amount },
@@ -1608,7 +1604,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           const targetM = d.targetMonth || currentMonthStr;
           await handlers.onToggleBillPaid(matched.id, targetM, true);
           return {
-            text: parsed.directResponse || `Pronto. ${matched.name} marcada como paga.`,
+            text: `Pronto. ${matched.name} marcada como paga.`,
             isInternalCalculation: true,
             actionExecuted: 'mark_paid',
           };
@@ -1641,7 +1637,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       try {
         await handlers.onToggleIncomeReceived(incomeSearch.match.id, targetMonth, true);
         return {
-          text: parsed.directResponse || `Pronto. ${incomeSearch.match.name} marcada como recebida.`,
+          text: `Pronto. ${incomeSearch.match.name} marcada como recebida.`,
           isInternalCalculation: true,
           actionExecuted: 'mark_income_received',
           createdItem: { type: 'income', id: incomeSearch.match.id, name: incomeSearch.match.name, amount: incomeSearch.match.amount },
@@ -2422,7 +2418,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
       return {
-        text: `Despesa de ${name} de ${formatCurrencySpoken(parsedAmt, currency)} adicionada.`,
+        text: `Despesa de ${name} de ${formatCurrencySpoken(parsedAmt, selectedAccount.account?.currency || currency)} adicionada.`,
         isInternalCalculation: true,
         actionExecuted: 'add_expense',
         createdItem: { type: 'expense', id: createdId, name, amount: parsedAmt },
@@ -2473,7 +2469,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         await handlers.onToggleIncomeReceived(createdId, currentMonthStr, true);
       }
       return {
-        text: `Receita de ${name} de ${formatCurrencySpoken(parsedAmt, currency)} adicionada.`,
+        text: `Receita de ${name} de ${formatCurrencySpoken(parsedAmt, selectedAccount.account?.currency || currency)} adicionada.`,
         isInternalCalculation: true,
         actionExecuted: 'add_income',
         createdItem: { type: 'income', id: createdId, name, amount: parsedAmt },
