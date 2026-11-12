@@ -496,10 +496,10 @@ ${recentHistory.map((item: any) => item.role + ': ' + item.text).join('\n') || '
 Mensagem atual do usuário: ${message.trim()}`;
 
       const fastResponse = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.1-flash-lite',
         contents: conversationPrompt,
         config: {
-          maxOutputTokens: 500,
+          maxOutputTokens: 350,
           thinkingConfig: { thinkingBudget: 0 },
         },
       });
