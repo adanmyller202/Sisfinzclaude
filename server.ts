@@ -761,7 +761,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      matchedId: id do item correspondente
      directResponse: "Registro excluído."
    - Consultas financeiras (quanto gastei este mês?, quanto vou receber?, tenho algo para pagar?, qual meu saldo?):
-     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge"
+     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress"
      targetMonth: "YYYY-MM"
      directResponse: resposta direta e exata.
    - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
@@ -776,6 +776,10 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      intent: "query_weekly_challenge"
      challengeId: id exato do desafio
      challengeName: nome do desafio
+   - Consultar progresso de metas de economia (ex: "quanto falta para minha meta da moto?"):
+     intent: "query_goal_progress"
+     goalId: id exato da meta
+     goalName: nome da meta
 
 REGRA ABSOLUTA:
 NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alterar vencimento, alterar valor ou excluir um registro. Identifique a conta ou registro nas listas fornecidas e retorne a intenção de modificação correspondente.${stylePrompt}
@@ -805,6 +809,8 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "toAccountName": "string",
     "challengeId": "string",
     "challengeName": "string",
+    "goalId": "string",
+    "goalName": "string",
     "weekNumber": number,
     "accountId": "string",
     "accountName": "string",
