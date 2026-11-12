@@ -17,6 +17,7 @@ import {
   orderBy,
   getDocs,
   writeBatch,
+  runTransaction,
 } from 'firebase/firestore';
 
 function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
@@ -358,36 +359,72 @@ export function useAccounts() {
       date: string;
       notes?: string;
     }) => {
-      if (!user) return;
+      if (!user) throw new Error('Usuário não autenticado.');
       const { fromAccountId, toAccountId, amount, date, notes } = params;
 
       if (fromAccountId === toAccountId) {
         throw new Error('A conta de origem e destino não podem ser a mesma.');
       }
-      if (amount <= 0) {
+      if (!Number.isFinite(amount) || amount <= 0) {
         throw new Error('O valor da transferência deve ser maior que zero.');
       }
 
       const fromAcc = accounts.find((a) => a.id === fromAccountId);
       const toAcc = accounts.find((a) => a.id === toAccountId);
-
       if (!fromAcc || !toAcc) {
         throw new Error('Conta de origem ou destino não encontrada.');
+      }
+      if (fromAcc.isActive === false || toAcc.isActive === false) {
+        throw new Error('As duas contas precisam estar ativas.');
+      }
+      if (fromAcc.currency !== toAcc.currency) {
+        throw new Error('Não é possível transferir diretamente entre contas de moedas diferentes.');
       }
 
       const now = new Date().toISOString();
       const transferId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const fromRef = doc(db, 'users', user.uid, 'accounts', fromAccountId);
+      const toRef = doc(db, 'users', user.uid, 'accounts', toAccountId);
+      const transferRef = doc(db, 'users', user.uid, 'account_transfers', transferId);
 
-      // Optimistic update
+      // Commit both balance changes and the transfer record atomically.
+      await runTransaction(db, async (tx) => {
+        const [fromSnapshot, toSnapshot] = await Promise.all([tx.get(fromRef), tx.get(toRef)]);
+        if (!fromSnapshot.exists() || !toSnapshot.exists()) {
+          throw new Error('Uma das contas não existe mais. Atualize a tela e tente novamente.');
+        }
+        const fromData = fromSnapshot.data() as AccountItem;
+        const toData = toSnapshot.data() as AccountItem;
+        if (fromData.isActive === false || toData.isActive === false) {
+          throw new Error('As duas contas precisam estar ativas.');
+        }
+        if (fromData.currency !== toData.currency) {
+          throw new Error('Não é possível transferir diretamente entre contas de moedas diferentes.');
+        }
+
+        const fromBalance = Number(fromData.currentBalance) || 0;
+        const toBalance = Number(toData.currentBalance) || 0;
+        tx.update(fromRef, { currentBalance: fromBalance - amount, updatedAt: now });
+        tx.update(toRef, { currentBalance: toBalance + amount, updatedAt: now });
+        tx.set(transferRef, sanitizeFirestorePayload({
+          id: transferId,
+          userId: user.uid,
+          fromAccountId,
+          fromAccountName: fromData.name || fromAcc.name,
+          toAccountId,
+          toAccountName: toData.name || toAcc.name,
+          amount,
+          date,
+          ...(notes?.trim() ? { notes: notes.trim() } : {}),
+          createdAt: now,
+        }));
+      });
+
       setAccounts((prev) => {
-        const list = prev.map((a) => {
-          if (a.id === fromAccountId) {
-            return { ...a, currentBalance: (a.currentBalance || 0) - amount, updatedAt: now };
-          }
-          if (a.id === toAccountId) {
-            return { ...a, currentBalance: (a.currentBalance || 0) + amount, updatedAt: now };
-          }
-          return a;
+        const list = prev.map((account) => {
+          if (account.id === fromAccountId) return { ...account, currentBalance: (account.currentBalance || 0) - amount, updatedAt: now };
+          if (account.id === toAccountId) return { ...account, currentBalance: (account.currentBalance || 0) + amount, updatedAt: now };
+          return account;
         });
         try {
           localStorage.setItem(getLocalKey('accounts'), JSON.stringify(list));
@@ -395,49 +432,6 @@ export function useAccounts() {
         } catch {}
         return list;
       });
-
-      // 1. Decrement fromAcc balance
-      await setDoc(
-        doc(db, 'users', user.uid, 'accounts', fromAccountId),
-        sanitizeFirestorePayload({
-          currentBalance: (fromAcc.currentBalance || 0) - amount,
-          updatedAt: now,
-        }),
-        { merge: true }
-      );
-
-      // 2. Increment toAcc balance
-      await setDoc(
-        doc(db, 'users', user.uid, 'accounts', toAccountId),
-        sanitizeFirestorePayload({
-          currentBalance: (toAcc.currentBalance || 0) + amount,
-          updatedAt: now,
-        }),
-        { merge: true }
-      );
-
-      // 3. Create transfer record
-      const transferRecordData: Record<string, any> = {
-        id: transferId,
-        userId: user.uid,
-        fromAccountId,
-        fromAccountName: fromAcc.name,
-        toAccountId,
-        toAccountName: toAcc.name,
-        amount,
-        date,
-        createdAt: now,
-      };
-
-      const trimmedNotes = notes?.trim();
-      if (trimmedNotes) {
-        transferRecordData.notes = trimmedNotes;
-      }
-
-      await setDoc(
-        doc(db, 'users', user.uid, 'account_transfers', transferId),
-        sanitizeFirestorePayload(transferRecordData)
-      );
     },
     [user, accounts, getLocalKey]
   );
