@@ -2108,7 +2108,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const matchedSavings = (ctx.savings || []).filter((goal) =>
         d.savingId ? goal.id === d.savingId : !requestedSavingName || normalize(goal.name).includes(requestedSavingName)
       );
-      if (requestedSavingName && matchedSavings.length !== 1) {
+      if ((requestedSavingName || d.savingId) && matchedSavings.length !== 1) {
         return { text: matchedSavings.length > 1 ? 'Encontrei mais de um cofrinho com esse nome. Qual deles?' : 'Não encontrei esse cofrinho. Quer consultar a lista de todos?', isInternalCalculation: true };
       }
       const savingGoals = requestedSavingName || d.savingId ? matchedSavings : (ctx.savings || []);
