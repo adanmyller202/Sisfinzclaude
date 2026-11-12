@@ -50,6 +50,14 @@ interface ChatMessage {
   timestamp: string;
 }
 
+const isFinancialMutationRequest = (value: string): boolean => {
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const hasMutationVerb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|renome\w*|rename\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(normalized);
+  const isDelete = /\b(apag\w*|exclu\w*|delet\w*|remov\w*)\b/i.test(normalized);
+  const hasFinancialTarget = /\b(fatura|conta|despesa|receita|meta|lancamento|registro|valor|data|vencimento|saldo|semana|desafio|dinheiro|transferencia|parcelamento|parcela|isso|esse|essa|ultimo|ultima)\b|\bpara\s+\d/i.test(normalized);
+  return hasMutationVerb && (isDelete || hasFinancialTarget);
+};
+
 interface MoneChatModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -399,7 +407,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       pendingTextActionRef.current = null;
     }
 
-    const isDestructiveRequest = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|renome\w*|rename\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(query);
+    const isDestructiveRequest = isFinancialMutationRequest(query);
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
       sender: 'user',
@@ -624,7 +632,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             if (toolCalls.length && liveSessionRef.current) {
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
-                const destructiveRequest = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|renome\w*|rename\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(request);
+                const destructiveRequest = isFinancialMutationRequest(request);
                 const normalizedReply = request.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
                 const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
                 const isVoiceCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
