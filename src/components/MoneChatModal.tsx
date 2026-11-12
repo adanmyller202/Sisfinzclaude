@@ -286,6 +286,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     currency,
     language,
     lastActionItem,
+    history: messages.slice(-24).map((item) => ({ sender: item.sender, text: item.text })),
     persona: moneStyle || 'direto',
     handlers: {
       onAddExpense,
@@ -459,14 +460,54 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.1-flash-live-preview',
-        config: { responseModalities: [Modality.AUDIO] },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          tools: [{
+            functionDeclarations: [{
+              name: 'sisfinz_action',
+              description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  request: { type: 'STRING', description: 'Pedido original do usuário em linguagem natural, sem alterar valores ou nomes.' },
+                },
+                required: ['request'],
+              },
+            }],
+          }],
+        },
         callbacks: {
           onopen: () => {
             setIsLiveConnected(true);
             setIsRecording(true);
             setLiveStatus('listening');
           },
-          onmessage: (message: any) => {
+          onmessage: async (message: any) => {
+            const toolCalls = message?.toolCall?.functionCalls || [];
+            if (toolCalls.length && liveSessionRef.current) {
+              const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
+                const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
+                const destructiveRequest = /\\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|edita|editar|corrige|corrigir|corrija)\\b/i.test(request);
+                if (!request) {
+                  return { id: call.id, name: call.name, response: { error: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
+                }
+                if (destructiveRequest) {
+                  return { id: call.id, name: call.name, response: { result: 'Esta operação de alteração ou exclusão ainda não está habilitada na voz. Não foi feita nenhuma mudança. Oriente o usuário a usar a conversa por texto até essa proteção ser implementada.' } };
+                }
+                try {
+                  const result = await askMone(request, moneContext);
+                  if (result.createdItem) setLastActionItem(result.createdItem);
+                  return {
+                    id: call.id,
+                    name: call.name,
+                    response: { result: result.text, actionExecuted: result.actionExecuted || null },
+                  };
+                } catch (error: any) {
+                  return { id: call.id, name: call.name, response: { error: error?.message || 'A operação não foi concluída.' } };
+                }
+              }));
+              liveSessionRef.current.sendToolResponse({ functionResponses });
+            }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
               liveUserTextRef.current += content.inputTranscription.text;
@@ -551,7 +592,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       session.sendRealtimeInput({
-        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Nesta versão de voz você ainda não pode alterar registros; nunca diga que executou operações. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
+        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar conta como paga ou consultar dados, use a ferramenta sisfinz_action. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Alterações e exclusões ainda não estão liberadas nesta interface de voz; nesses casos explique que não fez nenhuma mudança. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
       });
     } catch (error: any) {
       console.error('[Mone Live] Start failed:', error);
