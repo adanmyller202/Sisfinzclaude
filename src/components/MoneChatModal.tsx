@@ -216,7 +216,20 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isOpen && liveSessionRef.current) stopLiveVoice();
+    if (!isOpen && liveSessionRef.current) {
+      try { liveProcessorRef.current?.disconnect(); } catch {}
+      try { liveSourceRef.current?.disconnect(); } catch {}
+      liveStreamRef.current?.getTracks().forEach((track) => track.stop());
+      liveSessionRef.current?.close?.();
+      liveSessionRef.current = null;
+      liveInputContextRef.current?.close().catch(() => {});
+      liveOutputContextRef.current?.close().catch(() => {});
+      liveInputContextRef.current = null;
+      liveOutputContextRef.current = null;
+      setIsLiveConnected(false);
+      setIsRecording(false);
+      setLiveStatus('idle');
+    }
   }, [isOpen]);
 
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState(false);
