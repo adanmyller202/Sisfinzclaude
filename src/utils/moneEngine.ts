@@ -1644,7 +1644,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || currentMonthStr;
       const name = normalize(d.name || '');
       const shared = (ctx.sharedBills || []).filter((bill) => {
-        const inMonth = bill.month === targetMonth || (bill.dueDate || '').startsWith(targetMonth);
+        const isRecurringOccurrence = bill.recurrence === 'monthly' &&
+          Boolean(bill.startMonth && bill.startMonth <= targetMonth) &&
+          !(bill.excludedMonths || []).includes(targetMonth) &&
+          !bill.exceptions?.[targetMonth]?.isDeleted;
+        const inMonth = bill.month === targetMonth || (bill.dueDate || '').startsWith(targetMonth) || isRecurringOccurrence;
         const nameMatches = !name || normalize(bill.title).includes(name);
         return inMonth && nameMatches && (!ctx.myUserId || bill.members.includes(ctx.myUserId));
       });
@@ -1652,8 +1656,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: 'Não encontrei contas compartilhadas suas para esse período.', isInternalCalculation: true };
       }
       const lines = shared.map((bill) => {
-        const share = ctx.myUserId ? bill.shares?.[ctx.myUserId] : undefined;
-        return `• ${bill.title}: sua parte ${formatCurrency(share?.amount || 0, currency)} — ${share?.status === 'paid' ? 'paga' : 'pendente'}`;
+        const monthOverride = bill.exceptions?.[targetMonth] || {};
+        const shareMap = monthOverride.shares || bill.shares;
+        const share = ctx.myUserId ? shareMap?.[ctx.myUserId] : undefined;
+        const effectiveTitle = monthOverride.title || bill.title;
+        const effectiveAmount = Number(monthOverride.amount) || bill.amount;
+        return `• ${effectiveTitle}: sua parte ${formatCurrency(share?.amount || 0, currency)} de ${formatCurrency(effectiveAmount, currency)} — ${share?.status === 'paid' ? 'paga' : 'pendente'}`;
       });
       return {
         text: `Suas contas compartilhadas em ${targetMonth}:\n${lines.join('\n')}`,
