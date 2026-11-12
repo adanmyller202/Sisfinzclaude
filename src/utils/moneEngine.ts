@@ -2203,6 +2203,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           return { text: `A conta "${account.name}" agora está ${currentlyActive ? 'inativa' : 'ativa'}.`, isInternalCalculation: true, actionExecuted: 'toggle_account_active' };
         }
         if (!handlers?.onUpdateAccount) return { text: 'A edição de contas não está disponível.', isInternalCalculation: true };
+        if (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency) && d.currency !== account.currency && d.currentBalance === undefined) {
+          return { text: `Você quer mudar a moeda da conta "${account.name}" para ${d.currency}. Qual será o novo saldo nessa moeda?`, isInternalCalculation: true };
+        }
         const updates: Partial<AccountItem> & { currentBalance?: number } = {};
         if (typeof d.newName === 'string' && d.newName.trim()) updates.name = d.newName.trim();
         if (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency)) updates.currency = d.currency;
