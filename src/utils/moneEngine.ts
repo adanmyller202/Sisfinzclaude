@@ -724,6 +724,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     if (!parsed || !parsed.intent) return null;
     const intent = parsed.intent;
     const d = { ...parsed, ...(parsed.data || {}) };
+    if (intent === 'conversation' || intent === 'general_query' || intent === 'math') {
+      const conversationalText = typeof parsed.directResponse === 'string' ? parsed.directResponse.trim() : '';
+      if (conversationalText) {
+        return { text: conversationalText, isInternalCalculation: false };
+      }
+    }
     const { currency, handlers, lastActionItem, bills, incomes, expenses, currentBalance } = ctx;
     const currentMonthStr = getCurrentMonthStr();
     const todayStr = getTodayStr();
@@ -1587,7 +1593,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // =========================================================================
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), audio ? 15000 : 6500);
+    const timeoutId = setTimeout(() => controller.abort(), audio ? 18000 : 12000);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (auth.currentUser) {
