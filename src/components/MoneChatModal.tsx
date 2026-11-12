@@ -41,7 +41,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
 
 interface ChatMessage {
   id: string;
@@ -632,7 +632,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           tools: [{
             functionDeclarations: [{
               name: 'sisfinz_action',
-              behavior: 'BLOCKING',
+              behavior: Behavior.BLOCKING,
               description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
               parameters: {
                 type: Type.OBJECT,
