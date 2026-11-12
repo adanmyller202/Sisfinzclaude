@@ -68,54 +68,6 @@ export const INITIAL_VALUE_SUGGESTIONS: Record<CurrencyCode, number[]> = {
   EUR: [1, 5, 10, 20, 50, 100],
 };
 
-/**
- * Formats a numeric amount into currency representation
- */
-/** Formats values with an unambiguous, currency-specific prefix. */
-function formatCurrencyNumber(amount: number, currencyCode: CurrencyCode, fractionDigits: number): string {
-  const config = CURRENCIES[currencyCode] || CURRENCIES.BRL;
-  return new Intl.NumberFormat(config.locale, {
-    style: 'decimal',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits === 2 ? 2 : 2,
-  }).format(amount);
-}
-
-export function formatCurrency(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
-  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
-  const number = formatCurrencyNumber(amount, code, 0);
-  switch (code) {
-    case 'ARS': return `ARS $ ${number}`;
-    case 'USD': return `US$ ${number}`;
-    case 'BRL': return `R$ ${number}`;
-    case 'EUR': return `${number} €`;
-  }
-}
-
-/** Currency wording designed to be read aloud without ambiguous symbols. */
-export function formatCurrencySpoken(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
-  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
-  const number = formatCurrencyNumber(amount, code, 0);
-  switch (code) {
-    case 'ARS': return `${number} pesos argentinos`;
-    case 'USD': return `${number} dólares estadounidenses`;
-    case 'BRL': return `${number} reais`;
-    case 'EUR': return `${number} euros`;
-  }
-}
-
-/** Formats currency with forced 2 decimal places. */
-export function formatCurrencyExact(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
-  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
-  const number = formatCurrencyNumber(amount, code, 2);
-  switch (code) {
-    case 'ARS': return `ARS $ ${number}`;
-    case 'USD': return `US$ ${number}`;
-    case 'BRL': return `R$ ${number}`;
-    case 'EUR': return `${number} €`;
-  }
-}
-
 /** Formats numeric values with an explicit, unambiguous currency label. */
 function formatCurrencyNumber(amount: number, currencyCode: CurrencyCode, fractionDigits: number): string {
   const config = CURRENCIES[currencyCode] || CURRENCIES.BRL;
