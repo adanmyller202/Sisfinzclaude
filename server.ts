@@ -568,10 +568,11 @@ Mensagem atual do usuário: ${message.trim()}`;
         };
       });
       const distributionCurrencies = [...new Set(distributions.map((item: any) => item.currency))] as string[];
-      const billCurrency = linkedAccount?.currency || (
-        distributionCurrencies.length === 1 ? distributionCurrencies[0] :
-        distributionCurrencies.length > 1 ? 'MULTI' : currency
-      );
+      const billCurrency = distributionCurrencies.length === 1
+        ? distributionCurrencies[0]
+        : distributionCurrencies.length > 1
+          ? 'MULTI'
+          : linkedAccount?.currency || currency;
       return {
         id: b.id,
         name: b.name,
