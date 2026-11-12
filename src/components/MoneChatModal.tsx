@@ -619,7 +619,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
-      const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
+      const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Se a ferramenta retornar status diferente de "ok", informe o usuário e não repita a chamada quando retryable for false. Nunca faça mais de duas chamadas consecutivas de ferramenta sem falar com o usuário. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
@@ -660,7 +660,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)(?:\s+(?:por favor|sim|confirmo|please))?$/.test(normalizedReply);
                 const isVoiceCancellation = /^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
                 if (!request) {
-                  return { id: call.id, name: call.name, response: { error: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
+                  return { id: call.id, name: call.name, response: { status: 'invalid_argument', retryable: false, message: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
                 }
                 let actionRequest = request;
                 if (pendingVoiceActionRef.current && isVoiceConfirmation) {
@@ -668,7 +668,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   pendingVoiceActionRef.current = null;
                 } else if (pendingVoiceActionRef.current && isVoiceCancellation) {
                   pendingVoiceActionRef.current = null;
-                  return { id: call.id, name: call.name, response: { result: 'Ação cancelada. Nenhuma alteração foi feita.' } };
+                  return { id: call.id, name: call.name, response: { status: 'cancelled', retryable: false, message: 'Ação cancelada. Nenhuma alteração foi feita.' } };
                 } else if (pendingVoiceActionRef.current) {
                   pendingVoiceActionRef.current = null;
                 }
@@ -677,7 +677,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   return {
                     id: call.id,
                     name: call.name,
-                    response: { result: 'Ainda não execute essa alteração ou exclusão. Diga ao usuário exatamente o pedido que ele fez e pergunte: “Você confirma que devo fazer isso?”. Aguarde um “sim” claro antes de chamar a ferramenta novamente. Se ele disser não, não execute nada.' },
+                    response: { status: 'confirmation_required', retryable: false, message: 'Ainda não execute essa alteração ou exclusão. Diga ao usuário exatamente o pedido que ele fez e pergunte: “Você confirma que devo fazer isso?”. Aguarde um “sim” claro antes de chamar a ferramenta novamente. Se ele disser não, não execute nada.' },
                   };
                 }
                 try {
@@ -692,13 +692,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   return {
                     id: call.id,
                     name: call.name,
-                    response: { result: result.text, actionExecuted: result.actionExecuted || null },
+                    response: { status: 'ok', retryable: false, message: result.text, actionExecuted: result.actionExecuted || null },
                   };
                 } catch (error: any) {
-                  return { id: call.id, name: call.name, response: { error: error?.message || 'A operação não foi concluída.' } };
+                  return { id: call.id, name: call.name, response: { status: 'error', retryable: false, message: error?.message || 'A operação não foi concluída.' } };
                 }
               }));
-              liveSessionRef.current.sendToolResponse({ functionResponses });
+              await liveSessionRef.current.sendToolResponse({ functionResponses });
             }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
