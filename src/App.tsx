@@ -1041,6 +1041,7 @@ export default function App() {
         forecastBalance={forecastBalance}
         accounts={accounts}
         sharedBills={sharedAccounts.sharedBills}
+        weeklyChallenges={fiftyTwoChallenge.challenges}
         myUserId={user?.uid}
         bills={bills}
         incomes={incomes}
@@ -1068,6 +1069,9 @@ export default function App() {
         onCreateGoal={handleSaveNewGoal}
         onTransferBetweenAccounts={transferBetweenAccounts}
         onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
+        onCompleteChallengeWeek={(challengeId, weekNumber, accountId) =>
+          fiftyTwoChallenge.completeWeek(challengeId, weekNumber, accountId, adjustAccountBalanceForFinancialItem)
+        }
       />
 
       {/* Deposit Modal */}
