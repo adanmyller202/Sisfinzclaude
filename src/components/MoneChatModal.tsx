@@ -495,11 +495,38 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
       }
       const tokenData = await tokenResponse.json();
+      const financialContext = [
+        'Idioma: ' + language + '; moeda: ' + currency + '.',
+        'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
+        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency }))).slice(0, 4500) + '.',
+        'Faturas: ' + JSON.stringify(bills.map((b) => ({ id: b.id, name: b.name, amount: b.amount, dueDay: b.dueDay }))).slice(0, 4500) + '.',
+        'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
+        'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
+        'Metas: ' + JSON.stringify(goals.map((g) => {
+          const savedAmount = (g.history || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+          return {
+            id: g.id,
+            title: g.title,
+            targetAmount: g.targetAmount || g.totalTarget,
+            savedAmount,
+            remainingAmount: Math.max(0, (Number(g.totalTarget || g.targetAmount) || 0) - savedAmount),
+            completedSquares: (g.completedSquares || []).length,
+            totalSquares: g.totalSquares || 0,
+            currency: g.currency || currency,
+          };
+        })).slice(0, 2500) + '.',
+        'Contas compartilhadas: ' + JSON.stringify(sharedBills.map((b) => ({ id: b.id, title: b.title, amount: b.amount, month: b.month, dueDate: b.dueDate, myShare: myUserId ? b.shares?.[myUserId]?.amount : undefined, myShareStatus: myUserId ? b.shares?.[myUserId]?.status : undefined }))).slice(0, 2500) + '.',
+        'Desafios semanais: ' + JSON.stringify(weeklyChallenges.map((challenge) => ({ id: challenge.id, title: challenge.title, initialAmount: challenge.initialAmount, totalWeeks: challenge.totalWeeks || 52, totalTarget: challenge.totalTarget, completedWeeks: challenge.completedWeeks, status: challenge.status, savingMode: challenge.savingMode }))).slice(0, 2500) + '.',
+        'Memória recente da conversa: ' + messages.slice(-12).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 5000) + '.',
+        'Preferência de estilo da Mone: ' + moneStyle + '.',
+      ].join(' ');
+      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir uma semana de desafio semanal usando uma conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}";
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.1-flash-live-preview',
         config: {
           responseModalities: [Modality.AUDIO],
+          systemInstruction: { parts: [{ text: liveSystemInstruction }] },
           tools: [{
             functionDeclarations: [{
               name: 'sisfinz_action',
@@ -650,34 +677,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       liveSourceRef.current = source;
       liveProcessorRef.current = processor;
 
-      const financialContext = [
-        'Idioma: ' + language + '; moeda: ' + currency + '.',
-        'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
-        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency }))).slice(0, 4500) + '.',
-        'Faturas: ' + JSON.stringify(bills.map((b) => ({ id: b.id, name: b.name, amount: b.amount, dueDay: b.dueDay }))).slice(0, 4500) + '.',
-        'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
-        'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
-        'Metas: ' + JSON.stringify(goals.map((g) => {
-          const savedAmount = (g.history || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-          return {
-            id: g.id,
-            title: g.title,
-            targetAmount: g.targetAmount || g.totalTarget,
-            savedAmount,
-            remainingAmount: Math.max(0, (Number(g.totalTarget || g.targetAmount) || 0) - savedAmount),
-            completedSquares: (g.completedSquares || []).length,
-            totalSquares: g.totalSquares || 0,
-            currency: g.currency || currency,
-          };
-        })).slice(0, 2500) + '.',
-        'Contas compartilhadas: ' + JSON.stringify(sharedBills.map((b) => ({ id: b.id, title: b.title, amount: b.amount, month: b.month, dueDate: b.dueDate, myShare: myUserId ? b.shares?.[myUserId]?.amount : undefined, myShareStatus: myUserId ? b.shares?.[myUserId]?.status : undefined }))).slice(0, 2500) + '.',
-        'Desafios semanais: ' + JSON.stringify(weeklyChallenges.map((challenge) => ({ id: challenge.id, title: challenge.title, initialAmount: challenge.initialAmount, totalWeeks: challenge.totalWeeks || 52, totalTarget: challenge.totalTarget, completedWeeks: challenge.completedWeeks, status: challenge.status, savingMode: challenge.savingMode }))).slice(0, 2500) + '.',
-        'Memória recente da conversa: ' + messages.slice(-12).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 5000) + '.',
-        'Preferência de estilo da Mone: ' + moneStyle + '.',
-      ].join(' ');
-      session.sendRealtimeInput({
-        text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir uma semana de desafio semanal usando uma conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, use a ferramenta, mas peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
-      });
+
     } catch (error: any) {
       console.error('[Mone Live] Start failed:', error);
       stopLiveVoice();
