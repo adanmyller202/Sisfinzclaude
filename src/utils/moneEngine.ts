@@ -1193,6 +1193,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         const dueDate = getEffectiveDateForMonth(startMonth, dueDay);
         const billName = d.name || 'Compra parcelada';
 
+        const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
+        if (selectedAccount.needsChoice) {
+          return { text: 'Em qual conta do SisFinz essa compra parcelada deve ficar vinculada?', isInternalCalculation: true };
+        }
         const res = await handlers.onAddBill({
           name: billName,
           amount: instAmount,
@@ -1202,6 +1206,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           recurrence: 'monthly',
           recurrenceMonthsCount: installments,
           startMonth,
+          ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
         });
 
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
@@ -2014,6 +2019,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     else if (norm.includes('carro')) name = 'Carro';
     else if (norm.includes('moto')) name = 'Moto';
 
+    const selectedAccount = resolveMoneAccount(context, undefined, context.accounts?.find((account) =>
+      account.isActive !== false && norm.includes(normalize(account.name))
+    )?.name);
+    if (selectedAccount.needsChoice) {
+      return { text: 'Em qual conta devo vincular as parcelas dessa compra?', isInternalCalculation: true };
+    }
     const res = await handlers.onAddBill({
       name,
       amount: instAmount,
@@ -2023,6 +2034,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       recurrence: 'monthly',
       recurrenceMonthsCount: installments,
       startMonth: targetMonth,
+      ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
     });
 
     const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
@@ -2394,33 +2406,57 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   if (apiKey) {
     try {
-      const unpaidBills = bills.map((b) => ({ name: b.name, amount: b.amount, dueDay: b.dueDay }));
-      const knownIncomes = incomes.map((i) => ({ name: i.name, amount: i.amount }));
+      const accountSummary = (context.accounts || [])
+        .filter((account) => account.isActive !== false)
+        .map((account) => ({
+          id: account.id,
+          name: account.name,
+          currency: account.currency,
+          currentBalance: account.currentBalance ?? account.initialBalance ?? 0,
+        }));
+      const billsSummary = bills.map((bill) => ({
+        id: bill.id, name: bill.name, amount: bill.amount, dueDay: bill.dueDay,
+        accountId: bill.accountId, recurrence: bill.recurrence,
+      }));
+      const incomesSummary = incomes.map((income) => ({
+        id: income.id, name: income.name, amount: income.amount,
+        accountId: income.accountId, recurrence: income.recurrence,
+      }));
 
-      const systemPrompt = `Você é o Mone, o cérebro financeiro do aplicativo Mone.
-Analise a mensagem do usuário e determine com alta precisão a intenção financeira.
-Contexto:
-- Data: ${todayStr} (Mês: ${currentMonthStr})
-- Moeda: ${currency}
-- Idioma: ${language}
-- Último registro: ${lastActionItem ? JSON.stringify(lastActionItem) : 'nenhum'}
-- Contas: ${JSON.stringify(unpaidBills)}
-- Receitas: ${JSON.stringify(knownIncomes)}
+      const systemPrompt = `Você é Mone, a inteligência integrada ao aplicativo SisFinz. Seu nome é Mone; nunca diga Gemini nem o nome de qualquer modelo.
+Você não é um chatbot financeiro limitado: conversa sobre qualquer assunto e, quando o pedido envolver o SisFinz, interpreta a intenção, consulta os dados reais abaixo e executa a operação correspondente usando os manipuladores disponíveis. Nunca invente saldos, valores, contas, moedas, registros ou resultados.
+Data: ${todayStr}; mês atual: ${currentMonthStr}; moeda padrão: ${currency}; idioma: ${language}.
+Saldo de contexto: ${currentBalance}; previsão informada pelo relatório: ${context.forecastBalance ?? 'não disponível'}.
+Contas ativas: ${JSON.stringify(accountSummary)}
+Contas/faturas: ${JSON.stringify(billsSummary)}
+Receitas: ${JSON.stringify(incomesSummary)}
+Despesas: ${JSON.stringify(expenses.slice(-60))}
+Último lançamento manipulado: ${lastActionItem ? JSON.stringify(lastActionItem) : 'nenhum'}.
+Histórico: ${JSON.stringify(context.history || [])}
 
-Responda ESTRITAMENTE em formato JSON:
+REGRAS:
+- Para saldo atual, use contas ativas e separe os subtotais por moeda. Nunca some moedas diferentes.
+- Para previsão de um mês, use o saldo atual das contas + receitas ainda pendentes - contas ainda pendentes daquele mês, consultando os registros e suas recorrências. Respeite as moedas individuais.
+- Perguntas sobre contas a pagar devem retornar apenas obrigações pendentes/atrasadas do mês solicitado, incluindo a parte do usuário em contas compartilhadas.
+- Perguntas sobre ingressos/receitas devem consultar os registros que ocorrem no mês solicitado.
+- Transferência: intent "transfer_between_accounts", com fromAccountName, toAccountName e amount. Identifique as duas contas pelos nomes da lista; se faltar origem/destino/valor, use "ask_clarification". Não invente IDs.
+- Gasto: intent "add_expense", com name, amount, accountName (se mencionado) e category. Se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta foi o gasto.
+- Receita: intent "add_income", com name, amount, accountName, expectedDay, targetMonth, isRecurring e isReceived. "Recebi/caiu" significa isReceived=true; "adicione/registre uma receita" sem dizer que recebeu significa isReceived=false.
+- Fatura/conta: intent "add_bill", com name, amount, accountName, dueDay, targetMonth e isRecurring. Sem repetição: isRecurring=false. Repetição mensal: isRecurring=true. Se faltar valor ou vencimento essencial, pergunte antes.
+- Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
+- Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
+- Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
+- Marcar fatura como paga: "mark_bill_paid". Marcar receita recebida: "mark_income_received".
+- Para correções, edições e exclusões, identifique exatamente o registro. Se houver mais de um possível, pergunte qual. Nunca exclua por suposição.
+- Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
+Retorne somente JSON válido com a estrutura:
 {
-  "intent": "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "mark_bill_paid" | "correct_last_item" | "delete_item" | "query_bills" | "query_incomes" | "query_balance" | "query_category_spending" | "ask_clarification" | "general_query",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "ask_clarification",
   "data": {
-    "name": string,
-    "amount": number,
-    "totalAmount": number,
-    "installmentsCount": number,
-    "dueDay": number,
-    "expectedDay": number,
-    "isRecurring": boolean,
-    "targetMonth": string,
-    "category": string,
-    "newAmount": number
+    "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
+    "fromAccountName": string, "toAccountName": string, "accountName": string,
+    "dueDay": number, "expectedDay": number, "isRecurring": boolean, "isReceived": boolean,
+    "targetMonth": "YYYY-MM", "category": string, "newAmount": number, "matchedId": string
   },
   "directResponse": string
 }`;
