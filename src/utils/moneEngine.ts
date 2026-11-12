@@ -2784,12 +2784,21 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         }));
       const billsSummary = bills.map((bill) => ({
         id: bill.id, name: bill.name, amount: bill.amount, dueDay: bill.dueDay,
-        accountId: bill.accountId, recurrence: bill.recurrence,
+        accountId: bill.accountId,
+        currency: context.accounts?.find((account) => account.id === bill.accountId)?.currency || currency,
+        recurrence: bill.recurrence,
       }));
       const categoriesSummary = context.categories || [];
+      const savingsSummary = (context.savings || []).map((saving) => ({
+        id: saving.id, name: saving.name, currentAmount: saving.currentAmount,
+        targetAmount: saving.targetAmount, hasTarget: saving.hasTarget, currency: saving.currency || currency,
+      }));
+      const savingTransactionsSummary = (context.savingTransactions || []).slice(0, 30);
       const incomesSummary = incomes.map((income) => ({
         id: income.id, name: income.name, amount: income.amount,
-        accountId: income.accountId, recurrence: income.recurrence,
+        accountId: income.accountId,
+        currency: context.accounts?.find((account) => account.id === income.accountId)?.currency || currency,
+        recurrence: income.recurrence,
       }));
 
       const systemPrompt = `Você é Mone, a inteligência integrada ao aplicativo SisFinz. Seu nome é Mone; nunca diga Gemini nem o nome de qualquer modelo.
@@ -2798,9 +2807,15 @@ Data: ${todayStr}; mês atual: ${currentMonthStr}; moeda padrão: ${currency}; i
 Use somente os saldos individuais por conta e moeda listados abaixo; nunca some moedas diferentes. Para previsões, calcule por moeda com os registros do mês solicitado.
 Contas ativas: ${JSON.stringify(accountSummary)}
 Categorias disponíveis: ${JSON.stringify(categoriesSummary)}
+Cofrinhos: ${JSON.stringify(savingsSummary)}
+Movimentações dos cofrinhos: ${JSON.stringify(savingTransactionsSummary)}
 Contas/faturas: ${JSON.stringify(billsSummary)}
 Receitas: ${JSON.stringify(incomesSummary)}
-Despesas: ${JSON.stringify(expenses.slice(-60))}
+Despesas: ${JSON.stringify(expenses.slice(-60).map((expense) => ({
+        id: expense.id, name: expense.name, amount: expense.amount, date: expense.date,
+        accountId: (expense as any).accountId,
+        currency: context.accounts?.find((account) => account.id === (expense as any).accountId)?.currency || currency,
+      })))} )
 Último lançamento manipulado: ${lastActionItem ? JSON.stringify(lastActionItem) : 'nenhum'}.
 Histórico: ${JSON.stringify(context.history || [])}
 
@@ -2828,7 +2843,11 @@ Retorne somente JSON válido com a estrutura:
   "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
-    "fromAccountName": string, "toAccountName": string, "accountName": string,
+    "fromAccountName": string, "toAccountName": string, "accountName": string, "accountId": string,
+    "savingName": string, "savingId": string, "categoryName": string, "categoryId": string,
+    "newName": string, "scope": string, "type": string, "currency": string, "initialBalance": number,
+    "currentBalance": number, "isActive": boolean, "hasTarget": boolean, "withoutTarget": boolean,
+    "targetAmount": number, "exchangeRate": number, "date": string, "note": string, "notes": string,
     "dueDay": number, "expectedDay": number, "isRecurring": boolean, "isReceived": boolean,
     "targetMonth": "YYYY-MM", "category": string, "newAmount": number, "matchedId": string, "section": string
   },
