@@ -745,6 +745,34 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     };
   }
 
+  // Deterministic debt/bill queries: financial facts must come only from SisFinz records.
+  const isPendingBillsQuestion =
+    /\\b(tenho|tem|existe|existem|quais|quanto|alguma|algum|falta|faltam|devo|dividas?|divida|contas?\\s+(?:a|para)\\s+pagar|a\\s+pagar|pendentes?|pendencia|pendencias|bills?|debts?)\\b/.test(norm) &&
+    /\\b(dividas?|divida|devo|pagar|pagamento|contas?|faturas?|pendentes?|pendencia|pendencias|bills?|debts?)\\b/.test(norm);
+
+  if (isPendingBillsQuestion) {
+    const targetMonth = extractTargetMonth(question, currentMonthStr);
+    const data = calculateMonthFinancials(context, targetMonth);
+    const pending = data.monthBills.filter((bill) => !bill.isCompleted);
+    const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+
+    if (pending.length === 0) {
+      return {
+        text: `Não encontrei contas pendentes cadastradas no SisFinz para ${monthName}. Não há nenhuma dívida registrada para esse mês.`,
+        isInternalCalculation: true,
+      };
+    }
+
+    const totalPending = pending.reduce((sum, bill) => sum + bill.amount, 0);
+    const lines = pending.map((bill) =>
+      `• ${bill.name}: ${formatCurrency(bill.amount, currency)} (vencimento: ${bill.date})`
+    );
+    return {
+      text: `Encontrei ${pending.length} conta(s) pendente(s) em ${monthName}, totalizando ${formatCurrency(totalPending, currency)}:\\n${lines.join('\\n')}`,
+      isInternalCalculation: true,
+    };
+  }
+
   // 4. EXECUTE STRUCTURED MONE INTENT
   async function executeMoneIntent(parsed: any, ctx: MoneContext): Promise<MoneResponse | null> {
     if (!parsed || !parsed.intent) return null;
