@@ -547,6 +547,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
         'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
         'Metas: ' + JSON.stringify(goals.map((g) => ({ id: g.id, title: g.title, targetAmount: g.targetAmount }))).slice(0, 1500) + '.',
+        'Memória recente da conversa: ' + messages.slice(-12).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 5000) + '.',
+        'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       session.sendRealtimeInput({
         text: 'Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto. Não transforme papo casual em comandos. Use apenas os dados financeiros abaixo; se faltarem dados, pergunte. Nesta versão de voz você ainda não pode alterar registros; nunca diga que executou operações. Responda em ' + (language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês') + '. Contexto financeiro: ' + financialContext,
