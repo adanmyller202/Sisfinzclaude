@@ -545,9 +545,8 @@ export function findMatchingExpense(
     const contains = expenses.filter(
       (e) => normalize(e.name).includes(normTarget) || normTarget.includes(normalize(e.name))
     );
-    if (contains.length >= 1) {
-      return { match: contains[contains.length - 1] };
-    }
+    if (contains.length === 1) return { match: contains[0] };
+    if (contains.length > 1) return { ambiguous: contains };
   }
 
   if (question) {
@@ -556,9 +555,8 @@ export function findMatchingExpense(
       const normE = normalize(e.name);
       return normQ.includes(normE) || normE.split(/\s+/).some((w) => w.length >= 3 && normQ.includes(w));
     });
-    if (matches.length >= 1) {
-      return { match: matches[matches.length - 1] };
-    }
+    if (matches.length === 1) return { match: matches[0] };
+    if (matches.length > 1) return { ambiguous: matches };
   }
 
   return {};
@@ -1075,14 +1073,19 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     // 8. MARK BILL PAID
     if (intent === 'mark_bill_paid' && handlers?.onToggleBillPaid) {
       const targetName = normalize(d.name || '');
-      let matched = bills.find(
-        (b) =>
-          normalize(b.name).includes(targetName) ||
-          targetName.includes(normalize(b.name)) ||
-          b.id === d.matchedBillId
-      );
-      if (!matched && bills.length > 0) {
-        matched = bills[0];
+      const billSearch = findMatchingBill(bills, d.name, d.matchedBillId || d.matchedId, question);
+      if (billSearch.ambiguous && billSearch.ambiguous.length > 1) {
+        return {
+          text: `Encontrei mais de uma conta correspondente (${billSearch.ambiguous.map((b) => `"${b.name}"`).join(' ou ')}). Qual delas você pagou?`,
+          isInternalCalculation: true,
+        };
+      }
+      const matched = billSearch.match;
+      if (!matched) {
+        return {
+          text: `Não consegui identificar qual conta você pagou. Diga o nome exato da fatura para eu não marcar a conta errada.`,
+          isInternalCalculation: true,
+        };
       }
       if (matched) {
         try {
@@ -1282,9 +1285,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   if (isInstallment && handlers?.onAddBill) {
     const countMatch = norm.match(/(\d+)\s*(?:parcelas?|vezes|cuotas?|x\b)/i);
-    const installments = countMatch ? parseInt(countMatch[1], 10) : 5;
-
-    const parsedAmt = parseAmountFromText(question) || 200000;
+    const installments = countMatch ? parseInt(countMatch[1], 10) : 0;
+    const parsedAmt = parseAmountFromText(question);
+    if (!parsedAmt || parsedAmt <= 0 || installments < 2 || installments > 120) {
+      return {
+        text: 'Para cadastrar a compra parcelada, preciso do valor total e da quantidade de parcelas. Por exemplo: “comprei um celular de 600.000 em 12 parcelas”. Ainda não cadastrei nada.',
+        isInternalCalculation: true,
+      };
+    }
     const instAmount = Math.round((parsedAmt / installments) * 100) / 100;
 
     const dayMatch = norm.match(/(?:dia|todo dia|vencimento|vencendo)\s*(\d{1,2})/i);
