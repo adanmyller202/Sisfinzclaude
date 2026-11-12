@@ -1312,7 +1312,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         }
         const expDay = d.expectedDay || 5;
         const startMonth = d.targetMonth || currentMonthStr;
-        const isRecur = d.isRecurring === true || incName.toLowerCase().includes('salario') || incName.toLowerCase().includes('salário');
+        const isRecur = typeof d.isRecurring === 'boolean'
+          ? d.isRecurring
+          : incName.toLowerCase().includes('salario') || incName.toLowerCase().includes('salário');
         const incomePayload = {
           name: incName,
           amount: d.amount,
@@ -2078,8 +2080,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // 2. One-off Expense (e.g. "Gastei 2500 pesos de Uber agora", "adicione despesa de 4000 de uber hoje")
   const isExpense =
     /\b(?:gastei|comprei|adicionei|adicione|adicionar|registre|registrar|lancei|lancar|anotei|anotar)\b/i.test(norm);
+  const requestsRecurrence = /\b(?:recorrente|repetir|repeticao|mensal|todo\s+mes|todos\s+os\s+meses|a\s+cada\s+mes)\b/i.test(norm);
 
-  if (isExpense && handlers?.onAddExpense) {
+  if (isExpense && !requestsRecurrence && handlers?.onAddExpense) {
     const parsedAmt = parseAmountFromText(question);
     if (parsedAmt && parsedAmt > 0) {
       let name = 'Despesa';
@@ -2141,7 +2144,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         expectedDay: 5,
         expectedDate: getEffectiveDateForMonth(currentMonthStr, 5),
         category: inferCategory(name, 'income'),
-        recurrence: name === 'Salário' ? 'monthly' as const : 'none' as const,
+        recurrence: /\b(?:sem\s+repeticao|nao\s+repetir|uma\s+vez|avulso)\b/.test(norm)
+          ? 'none' as const
+          : /\b(?:recorrente|repetir|mensal|todo\s+mes|todos\s+os\s+meses)\b/.test(norm) || name === 'Salário'
+            ? 'monthly' as const
+            : 'none' as const,
         startMonth: currentMonthStr,
         ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
       };
