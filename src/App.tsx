@@ -1038,6 +1038,8 @@ export default function App() {
         isOpen={isMoneChatOpen}
         onClose={() => setIsMoneChatOpen(false)}
         currentBalance={currentBalance}
+        forecastBalance={forecastBalance}
+        accounts={accounts}
         bills={bills}
         incomes={incomes}
         expenses={expenses}
