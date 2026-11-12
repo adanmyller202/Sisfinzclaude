@@ -282,8 +282,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const liveFinanceToolUsedRef = useRef(false);
+  const liveInputMutedRef = useRef(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
-  const [liveStatus, setLiveStatus] = useState<'idle' | 'connecting' | 'listening' | 'speaking'>('idle');
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'connecting' | 'listening' | 'processing' | 'speaking'>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -502,6 +503,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   };
 
   const stopLiveVoice = () => {
+    liveInputMutedRef.current = false;
     try { liveProcessorRef.current?.disconnect(); } catch {}
     try { liveSourceRef.current?.disconnect(); } catch {}
     liveStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -653,13 +655,18 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         },
         callbacks: {
           onopen: () => {
+            liveInputMutedRef.current = false;
             setIsLiveConnected(true);
             setIsRecording(true);
             setLiveStatus('listening');
           },
           onmessage: async (message: any) => {
             const toolCalls = message?.toolCall?.functionCalls || [];
-            if (toolCalls.length) liveFinanceToolUsedRef.current = true;
+            if (toolCalls.length) {
+              liveFinanceToolUsedRef.current = true;
+              liveInputMutedRef.current = true;
+              setLiveStatus('processing');
+            }
             if (toolCalls.length && liveSessionRef.current) {
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
@@ -718,11 +725,16 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               setLiveTranscript(liveUserTextRef.current);
             }
             if (content?.outputTranscription?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
+              liveInputMutedRef.current = true;
               liveMoneTextRef.current += content.outputTranscription.text;
               setLiveTranscript(liveMoneTextRef.current);
               setLiveStatus('speaking');
             }
             (content?.modelTurn?.parts || []).forEach((part: any) => {
+              if (part?.inlineData?.data || part?.text) {
+                liveInputMutedRef.current = true;
+                setLiveStatus('speaking');
+              }
               if (part?.inlineData?.data && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) playLiveAudio(part.inlineData.data);
               if (part?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
                 liveMoneTextRef.current += part.text;
@@ -730,6 +742,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               }
             });
             if (content?.interrupted) {
+              liveInputMutedRef.current = true;
               liveAudioSourcesRef.current.forEach((source) => {
                 try { source.stop(); } catch {}
               });
@@ -738,6 +751,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               setLiveStatus('listening');
             }
             if (content?.turnComplete) {
+              liveInputMutedRef.current = true;
+              setLiveStatus('processing');
               const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               const userText = liveUserTextRef.current.trim();
               let moneText = liveMoneTextRef.current.trim();
@@ -771,6 +786,15 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               liveMoneTextRef.current = '';
               liveFinanceToolUsedRef.current = false;
               setLiveTranscript('');
+              // Keep the microphone gated until every queued audio chunk has finished playing.
+              const outputContext = liveOutputContextRef.current;
+              const remainingAudioMs = outputContext
+                ? Math.max(0, (livePlaybackTimeRef.current - outputContext.currentTime) * 1000)
+                : 0;
+              if (remainingAudioMs > 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, remainingAudioMs + 120));
+              }
+              liveInputMutedRef.current = false;
               setLiveStatus('listening');
             }
           },
@@ -800,7 +824,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       processor.connect(silentGain);
       silentGain.connect(inputContext.destination);
       processor.onaudioprocess = (event) => {
-        if (!liveSessionRef.current) return;
+        if (!liveSessionRef.current || liveInputMutedRef.current) return;
         const data = floatToPcm16Base64(event.inputBuffer.getChannelData(0), inputContext.sampleRate);
         liveSessionRef.current.sendRealtimeInput({ audio: { data, mimeType: 'audio/pcm;rate=16000' } });
       };
@@ -971,11 +995,11 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                     exit={{ opacity: 0, y: -8 }}
                     className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl"
                   >
-                    {liveStatus === 'connecting' ? 'Conectando à Mone…' : liveStatus === 'speaking' ? 'Mone está falando…' : isLiveConnected ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
+                    {liveStatus === 'connecting' ? 'Conectando à Mone…' : liveStatus === 'processing' ? 'Estou preparando sua resposta…' : liveStatus === 'speaking' ? 'Mone está falando…' : isLiveConnected ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
                   </motion.h1>
                 </AnimatePresence>
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                  {isLiveConnected ? 'Conversa em tempo real. Pode falar naturalmente e me interromper.' : liveStatus === 'connecting' ? 'Preparando o microfone e a conexão segura.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre qualquer assunto ou suas finanças.'}
+                  {liveStatus === 'processing' || liveStatus === 'speaking' ? 'Aguarde eu terminar. O microfone fica pausado durante toda a resposta.' : isLiveConnected ? 'Estou ouvindo você. Quando terminar de falar, vou processar e responder sem interrupções.' : liveStatus === 'connecting' ? 'Preparando o microfone e a conexão segura.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre qualquer assunto ou suas finanças.'}
                 </p>
               </div>
 
