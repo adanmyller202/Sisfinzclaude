@@ -757,6 +757,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               const userText = liveUserTextRef.current.trim();
               let moneText = liveMoneTextRef.current.trim();
 
+              let fallbackSpeechPromise: Promise<void> | null = null;
               // Audio models can occasionally skip a function call. Never show or play an
               // unverified financial answer: fall back to the deterministic SisFinz engine.
               if (userText && isFinancialQuestion(userText) && !liveFinanceToolUsedRef.current) {
@@ -773,6 +774,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   const utterance = new SpeechSynthesisUtterance(moneText);
                   utterance.lang = 'pt-BR';
                   utterance.rate = 1.04;
+                  fallbackSpeechPromise = new Promise<void>((resolve) => {
+                    utterance.onend = () => resolve();
+                    utterance.onerror = () => resolve();
+                  });
                   window.speechSynthesis.speak(utterance);
                 }
               }
@@ -794,6 +799,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               if (remainingAudioMs > 0) {
                 await new Promise((resolve) => window.setTimeout(resolve, remainingAudioMs + 120));
               }
+              if (fallbackSpeechPromise) await fallbackSpeechPromise;
               liveInputMutedRef.current = false;
               setLiveStatus('listening');
             }
@@ -809,6 +815,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             }]);
           },
           onclose: () => {
+            liveInputMutedRef.current = false;
             setIsLiveConnected(false);
             setIsRecording(false);
             setLiveStatus('idle');
