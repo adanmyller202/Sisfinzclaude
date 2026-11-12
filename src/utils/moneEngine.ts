@@ -1656,7 +1656,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: 'Não encontrei contas compartilhadas suas para esse período.', isInternalCalculation: true };
       }
       const lines = shared.map((bill) => {
-        const monthOverride = bill.exceptions?.[targetMonth] || {};
+        const monthOverride: Partial<SharedBill> = bill.exceptions?.[targetMonth] || {};
         const shareMap = monthOverride.shares || bill.shares;
         const share = ctx.myUserId ? shareMap?.[ctx.myUserId] : undefined;
         const effectiveTitle = monthOverride.title || bill.title;
