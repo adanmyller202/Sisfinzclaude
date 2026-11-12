@@ -1106,6 +1106,38 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }
     }
 
+    // Mark a scheduled income as received only when the user clearly identifies it.
+    if (intent === 'mark_income_received' && handlers?.onToggleIncomeReceived) {
+      const incomeSearch = findMatchingIncome(incomes, d.name, d.matchedId, lastActionItem, question);
+      if (incomeSearch.ambiguous && incomeSearch.ambiguous.length > 1) {
+        return {
+          text: `Encontrei mais de uma receita correspondente (${incomeSearch.ambiguous.map((item) => `"${item.name}"`).join(' ou ')}). Qual delas você recebeu?`,
+          isInternalCalculation: true,
+        };
+      }
+      if (!incomeSearch.match) {
+        return {
+          text: 'Não consegui identificar qual receita você recebeu. Diga o nome da receita para eu não marcar a errada.',
+          isInternalCalculation: true,
+        };
+      }
+      const targetMonth = d.targetMonth || currentMonthStr;
+      try {
+        await handlers.onToggleIncomeReceived(incomeSearch.match.id, targetMonth, true);
+        return {
+          text: parsed.directResponse || `Pronto. ${incomeSearch.match.name} marcada como recebida.`,
+          isInternalCalculation: true,
+          actionExecuted: 'mark_income_received',
+          createdItem: { type: 'income', id: incomeSearch.match.id, name: incomeSearch.match.name, amount: incomeSearch.match.amount },
+        };
+      } catch (err: any) {
+        return {
+          text: `Não consegui marcar a receita como recebida: ${err?.message || 'falha ao salvar'}.`,
+          isInternalCalculation: true,
+        };
+      }
+    }
+
     // 9. CORRECTION (e.g. "Na verdade foi 3000, não 2500")
     if (intent === 'correct_last_item' && d.newAmount) {
       if (lastActionItem) {
@@ -1254,6 +1286,31 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       });
       return {
         text: text.trim(),
+        isInternalCalculation: true,
+      };
+    }
+
+    // 10. QUERY SPENDING: separate recorded expenses from scheduled bills.
+    if (intent === 'query_spending') {
+      const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
+      const data = calculateMonthFinancials(ctx, targetMonth);
+      const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+      return {
+        text: `Em ${monthName}, você tem ${formatCurrency(data.totalOneOffExpenses, currency)} em despesas registradas e ${formatCurrency(data.totalBills, currency)} em contas previstas.`,
+        isInternalCalculation: true,
+      };
+    }
+
+    // 11. QUERY FORECAST
+    if (intent === 'query_forecast') {
+      const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
+      const data = calculateMonthFinancials(ctx, targetMonth);
+      const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+      const projected = targetMonth === currentMonthStr && typeof ctx.forecastBalance === 'number'
+        ? ctx.forecastBalance
+        : data.projectedBalance;
+      return {
+        text: `A previsão de saldo para ${monthName} é ${formatCurrency(projected, currency)}.`,
         isInternalCalculation: true,
       };
     }
