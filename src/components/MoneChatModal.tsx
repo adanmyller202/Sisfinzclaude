@@ -24,6 +24,7 @@ import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
   Send,
   Mic,
@@ -160,18 +161,29 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     if (!isOpen) pendingTextActionRef.current = null;
   }, [isOpen]);
 
-  // Persistent, private conversation memory: each authenticated user has their own history.
+  // Persistent, private conversation memory: keep each Firebase account strictly isolated.
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!isOpen || !uid) return;
+    if (!isOpen) return;
     let cancelled = false;
-    setMemoryReady(false);
-    setMemoryOwnerUid(uid);
-    (async () => {
+    let loadSequence = 0;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const sequence = ++loadSequence;
+      setMemoryReady(false);
+      setMemoryOwnerUid(user?.uid || null);
+      setMessages([{
+        id: 'welcome_' + Date.now(),
+        sender: 'mone',
+        text: initialGreeting,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
+      if (!user) {
+        setMemoryReady(true);
+        return;
+      }
       try {
-        const memoryRef = doc(db, 'users', uid, 'mone_memory', 'conversation');
+        const memoryRef = doc(db, 'users', user.uid, 'mone_memory', 'conversation');
         const snapshot = await getDoc(memoryRef);
-        if (cancelled) return;
+        if (cancelled || sequence !== loadSequence) return;
         const saved = snapshot.exists() ? snapshot.data().messages : null;
         if (Array.isArray(saved)) {
           const restored = saved
@@ -186,13 +198,18 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           if (restored.length) setMessages(restored);
         }
       } catch (error) {
-        console.warn('[Mone] Não foi possível recuperar a memória da conversa:', error);
+        if (!cancelled && sequence === loadSequence) {
+          console.warn('[Mone] Não foi possível recuperar a memória da conversa:', error);
+        }
       } finally {
-        if (!cancelled) setMemoryReady(true);
+        if (!cancelled && sequence === loadSequence) setMemoryReady(true);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [isOpen]);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [isOpen, initialGreeting]);
 
   useEffect(() => {
     if (!isOpen || !memoryReady || !memoryOwnerUid || auth.currentUser?.uid !== memoryOwnerUid) return;
