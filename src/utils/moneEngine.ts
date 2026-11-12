@@ -367,8 +367,6 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
       const effAmount = exc?.amount ?? bill.amount;
       const effDay = exc?.dueDay ?? bill.dueDay;
       const effDate = exc?.dueDate ?? getEffectiveDateForMonth(targetMonthStr, effDay);
-      const isCompleted = statusMap.get(`bill_${bill.id}_${targetMonthStr}`)?.isCompleted === true;
-
       const effectiveDistributions = exc?.accountDistributions ?? bill.accountDistributions;
       const isCompleted = statusMap.get(`bill_${bill.id}_${targetMonthStr}`)?.isCompleted === true;
       if (effectiveDistributions?.length) {
