@@ -379,6 +379,9 @@ app.post('/api/mone', async (req, res) => {
 
     const {
       currentBalance = 0,
+      forecastBalance = currentBalance,
+      accounts = [],
+      statusRecords = [],
       currency = 'BRL',
       language = 'pt',
       bills = [],
@@ -425,8 +428,24 @@ app.post('/api/mone', async (req, res) => {
       targetAmount: g.targetAmount,
     }));
 
+    const accountsSummary = (accounts || []).map((account: any) => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      currency: account.currency,
+      currentBalance: account.currentBalance,
+      isActive: account.isActive !== false,
+    }));
+
+    const completionSummary = (statusRecords || []).slice(-120).map((record: any) => ({
+      id: record.id,
+      isCompleted: Boolean(record.isCompleted),
+      month: record.month,
+      type: record.type,
+    }));
+
     const conversationHistoryStr = (history || [])
-      .slice(-8)
+      .slice(-24)
       .map((m: any) => `${m.sender === 'user' ? 'Usuário' : 'Mone'}: "${m.text}"`)
       .join('\n');
 
@@ -450,7 +469,10 @@ Contexto financeiro do usuário:
 - Data atual: ${todayStr} (Mês: ${currentMonthStr})
 - Moeda ativa: ${currency}
 - Idioma preferido: ${language === 'pt' ? 'Português' : language === 'es' ? 'Español' : 'English'}
-- Saldo atual em conta: ${currentBalance}
+- Saldo atual consolidado: ${currentBalance}
+- Saldo projetado: ${forecastBalance}
+- Contas e saldos por carteira: ${JSON.stringify(accountsSummary)}
+- Situação de pagamentos e recebimentos (registros recentes): ${JSON.stringify(completionSummary)}
 - Último item manipulado nesta conversa: ${lastActionItem ? JSON.stringify(lastActionItem) : 'Nenhum'}
 - Contas cadastradas: ${JSON.stringify(billsSummary)}
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
