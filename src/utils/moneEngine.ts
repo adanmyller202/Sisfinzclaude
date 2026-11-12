@@ -2114,7 +2114,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
       try {
         await handlers.onCreateSharedBill({
-          title, amount, dueDate, dueDay, category: d.category || 'Outros',
+          title, amount, dueDate, dueDay, category: getMentionedCategory(ctx, question, 'bill') || d.category || 'Outros',
           ...(d.notes ? { notes: d.notes } : {}),
           partnerId: partner.uid, splitMethod, myPercentage, partnerPercentage,
           recurrence: d.isRecurring === true ? 'monthly' : 'none',
@@ -2155,7 +2155,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           title: String(d.newName || d.title || bill.title),
           amount: Number(d.newAmount || d.amount || bill.amount),
           dueDate, dueDay,
-          category: d.category || bill.category || 'Outros',
+          category: getMentionedCategory(ctx, question, 'bill') || d.category || bill.category || 'Outros',
           ...(d.notes !== undefined ? { notes: d.notes } : { notes: bill.notes }),
           splitMethod: myPercentage === 50 && partnerPercentage === 50 ? 'fifty_fifty' : 'custom_percentage',
           myPercentage, partnerPercentage,
