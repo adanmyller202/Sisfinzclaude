@@ -73,6 +73,7 @@ interface MoneChatModalProps {
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
   sharedPartners?: Array<{ uid: string; displayName: string; email?: string }>;
+  sharedInvitations?: SharedInvitation[];
   weeklyChallenges?: FiftyTwoWeekChallenge[];
   categories?: Array<{ id: string; name: string; scope: string; isPredefined?: boolean }>;
   myUserId?: string;
@@ -142,6 +143,8 @@ interface MoneChatModalProps {
     splitMethod: 'fifty_fifty' | 'custom_percentage'; myPercentage: number; partnerPercentage: number;
   }) => Promise<any> | void;
   onDeleteSharedBill?: (billId: string) => Promise<any> | void;
+  onSendSharedInvitation?: (email: string) => Promise<{ success: boolean; message?: string }> | void;
+  onRespondSharedInvitation?: (invitationId: string, accept: boolean) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -152,6 +155,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   accounts = [],
   sharedBills = [],
   sharedPartners = [],
+  sharedInvitations = [],
   weeklyChallenges = [],
   categories = [],
   myUserId,
@@ -197,6 +201,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onCreateSharedBill,
   onUpdateSharedBill,
   onDeleteSharedBill,
+  onSendSharedInvitation,
+  onRespondSharedInvitation,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -407,6 +413,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     accounts,
     sharedBills,
     sharedPartners,
+    sharedInvitations,
     weeklyChallenges,
     myUserId,
     bills,
@@ -455,6 +462,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onCreateSharedBill,
       onUpdateSharedBill,
       onDeleteSharedBill,
+      onSendSharedInvitation,
+      onRespondSharedInvitation,
       onCreateSavingGoal: savingsControl.createSavingGoal,
       onUpdateSavingGoal: savingsControl.updateSavingGoal,
       onDeleteSavingGoal: savingsControl.deleteSavingGoal,
