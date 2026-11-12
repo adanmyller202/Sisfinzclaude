@@ -1366,26 +1366,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // 3. ADD REGULAR / RECURRING BILL
     if (intent === 'add_bill' && handlers?.onAddBill) {
-      if (!d.amount) {
+      if (!Number(d.amount) || Number(d.amount) <= 0) {
         return {
-          text: parsed.directResponse || `Qual é o valor da conta de ${d.name || 'despesa'}?`,
+          text: `Qual é o valor da conta de ${d.name || 'despesa'}?`,
           isInternalCalculation: true,
         };
       }
       try {
-        const dueDay = d.dueDay || 10;
         const billName = d.name || 'Conta';
+        const startMonth = d.targetMonth || (typeof d.dueDate === 'string' ? d.dueDate.slice(0, 7) : currentMonthStr);
+        const dueDay = Number(d.dueDay || (typeof d.dueDate === 'string' ? d.dueDate.slice(8, 10) : 10));
+        const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
         const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
         if (selectedAccount.needsChoice) {
           return { text: 'Em qual conta do SisFinz essa fatura deve ficar vinculada?', isInternalCalculation: true };
         }
         const isRecur = d.isRecurring !== false;
-        const startMonth = d.targetMonth || currentMonthStr;
         const res = await handlers.onAddBill({
           name: billName,
           amount: d.amount,
           dueDay,
-          dueDate: getEffectiveDateForMonth(startMonth, dueDay),
+          dueDate,
           category: getMentionedCategory(ctx, question, 'bill') || d.category || inferCategory(billName, 'bill'),
           recurrence: isRecur ? 'monthly' : 'none',
           ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
@@ -1393,8 +1394,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
+        const dueDateLabel = dueDate.split('-').reverse().join('/');
         return {
-          text: `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} criada para todo dia ${dueDay}.`,
+          text: isRecur
+            ? `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} criada com repetição mensal, vencendo todo dia ${dueDay}.`
+            : `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, selectedAccount.account?.currency || currency)} criada para ${dueDateLabel}.`,
           isInternalCalculation: true,
           actionExecuted: 'add_bill',
           createdItem: { type: 'bill', id: createdId, name: billName, amount: d.amount },
