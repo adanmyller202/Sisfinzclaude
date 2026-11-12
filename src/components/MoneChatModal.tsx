@@ -572,7 +572,19 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('Entre na sua conta SisFinz para iniciar a conversa por voz.');
-      const idToken = await user.getIdToken();
+      // Create and resume audio contexts immediately from the tap for iOS Safari autoplay rules.
+      const inputContext = new AudioContext();
+      const outputContext = new AudioContext();
+      liveInputContextRef.current = inputContext;
+      liveOutputContextRef.current = outputContext;
+      const [stream, idToken] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        }),
+        user.getIdToken(),
+        Promise.all([inputContext.resume(), outputContext.resume()]),
+      ]);
+      liveStreamRef.current = stream;
       const tokenResponse = await fetch('/api/mone/live-token', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
@@ -608,7 +620,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
       const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
-      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
+      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
         config: {
@@ -750,15 +762,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         },
       });
       liveSessionRef.current = session;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      liveStreamRef.current = stream;
-      const inputContext = new AudioContext({ sampleRate: 16000 });
-      const outputContext = new AudioContext({ sampleRate: 24000 });
-      await Promise.all([inputContext.resume(), outputContext.resume()]);
-      liveInputContextRef.current = inputContext;
-      liveOutputContextRef.current = outputContext;
       const source = inputContext.createMediaStreamSource(stream);
       const processor = inputContext.createScriptProcessor(2048, 1, 1);
       const silentGain = inputContext.createGain();
