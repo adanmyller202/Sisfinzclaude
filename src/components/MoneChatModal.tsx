@@ -346,9 +346,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     if ((!query && !audio) || isLoading) return;
     if (query) pendingVoiceActionRef.current = null;
     let actionQuery = query;
-    const normalizedReply = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
-    const isConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
-    const isCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
+    const normalizedReply = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[,.!?]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const isConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)(?:\s+(?:por favor|sim|confirmo|please))?$/.test(normalizedReply);
+    const isCancellation = /^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
     if (pendingTextActionRef.current && isConfirmation) {
       actionQuery = pendingTextActionRef.current;
       pendingTextActionRef.current = null;
@@ -634,7 +634,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
               const spoken = content.inputTranscription.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
-              if (/^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(spoken)) {
+              if (/^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(spoken)) {
                 pendingVoiceActionRef.current = null;
               }
               liveUserTextRef.current += content.inputTranscription.text;
