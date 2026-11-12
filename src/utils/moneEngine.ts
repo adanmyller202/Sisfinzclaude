@@ -785,7 +785,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > totalWeeks) {
         return { text: `Qual semana do desafio "${challenge.title}" você deseja concluir? O plano vai até a semana ${totalWeeks}.`, isInternalCalculation: true };
       }
-      if (challenge.completedWeeks.includes(weekNumber)) {
+      const completedWeeks = challenge.completedWeeks || [];
+      if (completedWeeks.includes(weekNumber)) {
         return { text: `A semana ${weekNumber} do desafio "${challenge.title}" já está concluída.`, isInternalCalculation: true };
       }
       const accountName = normalize(d.accountName || '');
@@ -843,7 +844,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }
       const challenge = challengeMatches[0];
       const weekNumber = Number(d.weekNumber);
-      if (!Number.isInteger(weekNumber) || !challenge.completedWeeks.includes(weekNumber)) {
+      const completedWeeks = challenge.completedWeeks || [];
+      if (!Number.isInteger(weekNumber) || !completedWeeks.includes(weekNumber)) {
         return { text: `A semana ${d.weekNumber || ''} não aparece como concluída no desafio "${challenge.title}". Qual semana você deseja desfazer?`, isInternalCalculation: true };
       }
       const accountName = normalize(d.accountName || '');
