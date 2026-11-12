@@ -1376,6 +1376,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         const billName = d.name || 'Conta';
         const startMonth = d.targetMonth || (typeof d.dueDate === 'string' ? d.dueDate.slice(0, 7) : currentMonthStr);
         const dueDay = Number(d.dueDay || (typeof d.dueDate === 'string' ? d.dueDate.slice(8, 10) : 10));
+        if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+          return { text: 'Qual é o dia de vencimento dessa conta?', isInternalCalculation: true };
+        }
         const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
         const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
         if (selectedAccount.needsChoice) {
