@@ -475,7 +475,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
       }
       const tokenData = await tokenResponse.json();
-      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
+      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.1-flash-live-preview',
         config: {
