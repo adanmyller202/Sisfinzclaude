@@ -28,7 +28,7 @@ import {
   getEffectiveDateForMonth,
   getMonthDiff,
 } from './finance';
-import { formatCurrency } from './currency';
+import { formatCurrency, formatCurrencySpoken } from './currency';
 import { getLocaleForLanguage } from './i18n';
 
 export interface MoneActionItem {
@@ -1556,10 +1556,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
       }
       const totalSummary = [...totalsByCurrency.entries()]
-        .map(([code, amount]) => formatCurrency(amount, code))
+        .map(([code, amount]) => formatCurrencySpoken(amount, code))
         .join(' + ');
       const lines = pendingBills.map((bill) =>
-        `• ${bill.name}: ${formatCurrency(bill.amount, bill.currency)} (vencimento: ${bill.date})`
+        `• ${bill.name}: ${formatCurrencySpoken(bill.amount, bill.currency)} (vencimento: ${bill.date})`
       );
       return {
         text: `Sim. Você tem ${totalSummary} em contas pendentes para pagar em ${monthName}:\n${lines.join('\n')}`,
