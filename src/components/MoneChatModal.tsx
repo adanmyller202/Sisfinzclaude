@@ -44,8 +44,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
 
 const isFinancialQuestion = (value: string): boolean => {
-  const normalized = value.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-  return /\\b(saldo|dividas?|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|quanto tenho|quanto devo)\\b/.test(normalized);
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return /\b(saldo|dividas?|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|quanto tenho|quanto devo)\b/.test(normalized);
 };
 
 interface ChatMessage {
