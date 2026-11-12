@@ -2379,8 +2379,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const isExpense =
     /\b(?:gastei|comprei|adicionei|adicione|adicionar|registre|registrar|lancei|lancar|anotei|anotar)\b/i.test(norm);
   const requestsRecurrence = /\b(?:recorrente|repetir|repeticao|mensal|todo\s+mes|todos\s+os\s+meses|a\s+cada\s+mes)\b/i.test(norm);
+  const hasExplicitDateOrMonth = /\b(?:ontem|anteontem|amanha|depois\s+de\s+amanha|dia\s+\d{1,2}|no\s+dia\s+\d{1,2}|proxim[oa]\s+m[eê]s|m[eê]s\s+que\s+vem|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/i.test(norm);
+  const hasExplicitCurrency = /\b(?:d[oó]lares?|usd|ars|pesos?|reais?|brl|eur|euros?)\b/i.test(norm);
 
-  if (isExpense && !requestsRecurrence && handlers?.onAddExpense) {
+  if (isExpense && !requestsRecurrence && !hasExplicitDateOrMonth && !hasExplicitCurrency && handlers?.onAddExpense) {
     const parsedAmt = parseAmountFromText(question);
     if (parsedAmt && parsedAmt > 0) {
       let name = 'Despesa';
@@ -2421,7 +2423,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     /\b(?:recebi|adicionei|adicione|adicionar|registre|registrar|lancei|lancar|caiu)\b/i.test(norm) &&
     (/\b(?:salario|receita|renda|freelance|freela|investimento)\b/i.test(norm) || /\brecebi\b/i.test(norm));
 
-  if (isIncome && handlers?.onAddIncome) {
+  if (isIncome && !requestsRecurrence && !hasExplicitDateOrMonth && !hasExplicitCurrency && handlers?.onAddIncome) {
     const parsedAmt = parseAmountFromText(question);
     if (parsedAmt && parsedAmt > 0) {
       let name = 'Receita';
