@@ -1135,30 +1135,43 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // 10. DELETE ITEM
     if (intent === 'delete_item') {
-      let targetType: 'bill' | 'expense' | 'income' | null = d.itemType || (lastActionItem?.type as any) || null;
-      let targetId: string | null = d.matchedId || (lastActionItem ? lastActionItem.id : null);
-      let targetName: string = d.name || (lastActionItem ? lastActionItem.name : '');
+      let targetType: 'bill' | 'expense' | 'income' | null = d.itemType || null;
+      let targetId: string | null = d.matchedId || null;
+      let targetName: string = d.name || '';
+
+      // Use the last created item only for an explicit pronoun/reference with no named target.
+      if (!targetId && !targetName && lastActionItem) {
+        targetType = lastActionItem.type;
+        targetId = lastActionItem.id;
+        targetName = lastActionItem.name;
+      }
 
       if (!targetId && targetName) {
         const billSearch = findMatchingBill(bills, targetName, undefined, question);
-        if (billSearch.match) {
-          targetType = 'bill';
-          targetId = billSearch.match.id;
-          targetName = billSearch.match.name;
-        } else {
-          const expSearch = findMatchingExpense(expenses, targetName, undefined, lastActionItem, question);
-          if (expSearch.match) {
-            targetType = 'expense';
-            targetId = expSearch.match.id;
-            targetName = expSearch.match.name;
-          } else {
-            const incSearch = findMatchingIncome(incomes, targetName, undefined, lastActionItem, question);
-            if (incSearch.match) {
-              targetType = 'income';
-              targetId = incSearch.match.id;
-              targetName = incSearch.match.name;
-            }
-          }
+        const expSearch = findMatchingExpense(expenses, targetName, undefined, lastActionItem, question);
+        const incSearch = findMatchingIncome(incomes, targetName, undefined, lastActionItem, question);
+        const candidates = [
+          ...(billSearch.match ? [{ type: 'bill' as const, item: billSearch.match }] : []),
+          ...(expSearch.match ? [{ type: 'expense' as const, item: expSearch.match }] : []),
+          ...(incSearch.match ? [{ type: 'income' as const, item: incSearch.match }] : []),
+        ];
+        const ambiguous = billSearch.ambiguous?.length || expSearch.ambiguous?.length || incSearch.ambiguous?.length || candidates.length > 1;
+        if (ambiguous) {
+          const names = [
+            ...(billSearch.ambiguous || []).map((item) => item.name),
+            ...(expSearch.ambiguous || []).map((item) => item.name),
+            ...(incSearch.ambiguous || []).map((item) => item.name),
+            ...candidates.map((candidate) => candidate.item.name),
+          ];
+          return {
+            text: `Encontrei mais de um registro que pode corresponder a "${targetName}". Qual deles você deseja excluir? ${[...new Set(names)].map((name) => `"${name}"`).join(' ou ')}.`,
+            isInternalCalculation: true,
+          };
+        }
+        if (candidates.length === 1) {
+          targetType = candidates[0].type;
+          targetId = candidates[0].item.id;
+          targetName = candidates[0].item.name;
         }
       }
 
