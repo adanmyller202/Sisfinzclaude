@@ -59,6 +59,8 @@ export interface MoneActionHandlers {
     currency: CurrencyCode;
     notes?: string;
   }) => Promise<any> | void;
+  onUpdateGoal?: (goalId: string, partial: { title?: string; icon?: string; notes?: string }) => Promise<any> | void;
+  onDeleteGoal?: (goalId: string) => Promise<any> | void;
   onTransferBetweenAccounts?: (params: {
     fromAccountId: string;
     toAccountId: string;
@@ -1505,6 +1507,72 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         text: text.trim(),
         isInternalCalculation: true,
       };
+    }
+
+    // UPDATE AN EXISTING SAVINGS GOAL.
+    if (intent === 'update_goal') {
+      if (!handlers?.onUpdateGoal) {
+        return { text: 'A edição de metas não está disponível neste momento.', isInternalCalculation: true };
+      }
+      const goalName = normalize(d.goalName || d.name || '');
+      const matches = (ctx.goals || []).filter((goal) =>
+        d.goalId ? goal.id === d.goalId : Boolean(goalName && normalize(goal.title).includes(goalName))
+      );
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? 'Encontrei mais de uma meta com esse nome. Qual delas você quer editar?'
+            : 'Qual meta você quer editar? Diga o nome dela.',
+          isInternalCalculation: true,
+        };
+      }
+      const goal = matches[0];
+      const partial: { title?: string; icon?: string; notes?: string } = {};
+      if (typeof d.newName === 'string' && d.newName.trim()) partial.title = d.newName.trim();
+      if (typeof d.icon === 'string' && d.icon.trim()) partial.icon = d.icon.trim();
+      if (typeof d.notes === 'string') partial.notes = d.notes;
+      if (!Object.keys(partial).length) {
+        return { text: 'O que você deseja mudar nessa meta: nome, ícone ou observação?', isInternalCalculation: true };
+      }
+      try {
+        await handlers.onUpdateGoal(goal.id, partial);
+        return {
+          text: parsed.directResponse || `Atualizei a meta "${goal.title}".`,
+          isInternalCalculation: true,
+          actionExecuted: 'update_goal',
+        };
+      } catch (err: any) {
+        return { text: `Não consegui atualizar a meta: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // DELETE A SAVINGS GOAL.
+    if (intent === 'delete_goal') {
+      if (!handlers?.onDeleteGoal) {
+        return { text: 'A exclusão de metas não está disponível neste momento.', isInternalCalculation: true };
+      }
+      const goalName = normalize(d.goalName || d.name || '');
+      const matches = (ctx.goals || []).filter((goal) =>
+        d.goalId ? goal.id === d.goalId : Boolean(goalName && normalize(goal.title).includes(goalName))
+      );
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? 'Encontrei mais de uma meta com esse nome. Qual delas você quer excluir?'
+            : 'Qual meta você quer excluir? Diga o nome dela.',
+          isInternalCalculation: true,
+        };
+      }
+      try {
+        await handlers.onDeleteGoal(matches[0].id);
+        return {
+          text: parsed.directResponse || `A meta "${matches[0].title}" foi excluída.`,
+          isInternalCalculation: true,
+          actionExecuted: 'delete_goal',
+        };
+      } catch (err: any) {
+        return { text: `Não consegui excluir a meta: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
     }
 
     // 10. QUERY SPENDING: separate recorded expenses from scheduled bills.
