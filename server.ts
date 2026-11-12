@@ -557,11 +557,19 @@ Mensagem atual do usuário: ${message.trim()}`;
       category: e.category,
     }));
 
-    const goalsSummary = (goals || []).map((g: any) => ({
-      id: g.id,
-      title: g.title,
-      targetAmount: g.targetAmount,
-    }));
+    const goalsSummary = (goals || []).map((g: any) => {
+      const savedAmount = (g.history || []).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+      return {
+        id: g.id,
+        title: g.title,
+        targetAmount: g.targetAmount || g.totalTarget,
+        savedAmount,
+        remainingAmount: Math.max(0, (Number(g.totalTarget || g.targetAmount) || 0) - savedAmount),
+        completedSquares: (g.completedSquares || []).length,
+        totalSquares: g.totalSquares || 0,
+        currency: g.currency || currency,
+      };
+    });
 
     const sharedBillsSummary = (sharedBills || []).map((b: any) => ({
       id: b.id,
