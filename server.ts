@@ -720,8 +720,8 @@ Contexto financeiro do usuário:
 - Data atual: ${todayStr} (Mês: ${currentMonthStr})
 - Moeda ativa: ${currency}
 - Idioma preferido: ${language === 'pt' ? 'Português' : language === 'es' ? 'Español' : 'English'}
-- Saldo atual consolidado: ${currentBalance}
-- Saldo projetado: ${forecastBalance}
+- Saldos atuais por conta e moeda: ${JSON.stringify(accountsSummary)}
+- Nunca use um total numérico consolidado entre moedas; consulte os registros do mês e mantenha cada moeda separada.
 - Contas e saldos por carteira: ${JSON.stringify(accountsSummary)}
 - Situação de pagamentos e recebimentos (registros recentes): ${JSON.stringify(completionSummary)}
 - Último item manipulado nesta conversa: ${lastActionItem ? JSON.stringify(lastActionItem) : 'Nenhum'}
