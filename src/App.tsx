@@ -1040,6 +1040,8 @@ export default function App() {
         currentBalance={currentBalance}
         forecastBalance={forecastBalance}
         accounts={accounts}
+        sharedBills={sharedAccounts.sharedBills}
+        myUserId={user?.uid}
         bills={bills}
         incomes={incomes}
         expenses={expenses}
@@ -1065,6 +1067,7 @@ export default function App() {
         onUpdateCurrentBalance={updateCurrentBalance}
         onCreateGoal={handleSaveNewGoal}
         onTransferBetweenAccounts={transferBetweenAccounts}
+        onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
       />
 
       {/* Deposit Modal */}
