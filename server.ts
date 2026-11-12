@@ -57,6 +57,83 @@ function checkRateLimit(ip: string): boolean {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
+ 
+// Issue a single-use, short-lived Gemini Live token only to an authenticated SisFinz user.
+// The browser connects directly to Gemini for lower audio latency; the long-lived API key stays server-side.
+app.post('/api/mone/live-token', async (req, res) => {
+  try {
+    const firebaseApiKey = firebaseConfig.apiKey;
+    const geminiApiKey = process.env.GEMINI_API_KEY || '';
+    if (!firebaseApiKey || !geminiApiKey) {
+      res.status(503).json({ error: 'Configuração segura da Mone Live indisponível no servidor.' });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Autenticação necessária.' });
+      return;
+    }
+    const idToken = authHeader.slice(7).trim();
+    if (!idToken) {
+      res.status(401).json({ error: 'Token de autenticação vazio.' });
+      return;
+    }
+
+    const verifyResp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    if (!verifyResp.ok) {
+      res.status(401).json({ error: 'Sessão expirada. Entre novamente no SisFinz.' });
+      return;
+    }
+    const verifyData: any = await verifyResp.json();
+    const uid = verifyData.users?.[0]?.localId;
+    if (!uid) {
+      res.status(401).json({ error: 'Não foi possível validar o usuário.' });
+      return;
+    }
+
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    if (!checkRateLimit(`mone_live_ip:${ip}`) || !checkRateLimit(`mone_live_uid:${uid}`)) {
+      res.status(429).json({ error: 'Muitas conexões de voz. Aguarde um minuto.' });
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    const now = Date.now();
+    const token = await ai.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
+        newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
+        liveConnectConstraints: {
+          model: 'gemini-3.1-flash-live-preview',
+          config: {
+            responseModalities: ['AUDIO', 'TEXT'],
+            sessionResumption: {},
+          },
+        },
+      },
+    });
+
+    if (!token?.name) {
+      res.status(502).json({ error: 'O Google não retornou um token de voz válido.' });
+      return;
+    }
+    res.json({
+      token: token.name,
+      model: 'gemini-3.1-flash-live-preview',
+      expiresAt: new Date(now + 30 * 60 * 1000).toISOString(),
+    });
+  } catch (err: any) {
+    console.error('[Mone Live] Token creation failed:', err);
+    res.status(502).json({ error: 'Não foi possível iniciar a conexão de voz em tempo real.' });
+  }
+});
+
 
 // Secure Exact-Email User Lookup with Abuse & Rate-Limiting Protection (Server Token Verified)
 app.post('/api/search-user', async (req, res) => {
@@ -456,7 +533,7 @@ app.post('/api/mone', async (req, res) => {
     };
 
     const stylePrompt = persona !== 'direto' && personaDescriptions[persona]
-      ? `\n\nESTILO DO MONE: ${personaDescriptions[persona]}. O estilo afeta SOMENTE o tom do directResponse. Nunca altere intent, data, números, datas ou valores: continuam exatos. Máximo 2 frases curtas. Responda no idioma preferido do usuário. Nunca zombe da aparência, origem, renda ou dívidas da pessoa. Se a mensagem indicar aflição financeira séria (dívida impagável, desespero, 'não aguento mais'), responda calmo e acolhedor mesmo no estilo sincero.`
+      ? `\n\nESTILO DO MONE: ${personaDescriptions[persona]}. O estilo afeta SOMENTE o tom do directResponse. Nunca altere intent, data, números, datas ou valores: continuam exatos. Responda no idioma preferido do usuário, com naturalidade e sem sacrificar contexto. Nunca zombe da aparência, origem, renda ou dívidas da pessoa. Se a mensagem indicar aflição financeira séria (dívida impagável, desespero, 'não aguento mais'), responda calmo e acolhedor mesmo no estilo sincero.`
       : '';
 
     const systemPrompt = `Você é Mone, a assistente pessoal inteligente integrada ao SisFinz. Você é uma IA conversacional completa, não um robô de comandos financeiros.
