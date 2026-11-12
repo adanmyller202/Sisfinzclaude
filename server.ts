@@ -541,15 +541,31 @@ Mensagem atual do usuário: ${message.trim()}`;
     const todayStr = today.toISOString().split('T')[0];
     const currentMonthStr = todayStr.substring(0, 7);
 
+    const DOLLAR_SIGN = String.fromCharCode(36);
+    const currencyNames: Record<string, string> = {
+      ARS: 'pesos argentinos',
+      USD: 'dólares estadounidenses',
+      BRL: 'reais brasileiros',
+      EUR: 'euros',
+    };
+    const currencySymbols: Record<string, string> = {
+      ARS: 'ARS ' + DOLLAR_SIGN,
+      USD: 'US' + DOLLAR_SIGN,
+      BRL: 'R' + DOLLAR_SIGN,
+      EUR: '€',
+    };
     const billsSummary = bills.map((b: any) => {
       const linkedAccount = (accounts || []).find((account: any) => account.id === b.accountId);
+      const billCurrency = linkedAccount?.currency || currency;
       return {
         id: b.id,
         name: b.name,
         amount: b.amount,
-        currency: linkedAccount?.currency || currency,
-        currencyName: ({ ARS: 'pesos argentinos', USD: 'dólares estadounidenses', BRL: 'reais brasileiros', EUR: 'euros' } as Record<string, string>)[linkedAccount?.currency || currency] || 'moeda não identificada',
-        currencySymbol: ({ ARS: 'ARS 
+        currency: billCurrency,
+        currencyName: currencyNames[billCurrency] || 'moeda não identificada',
+        currencySymbol: currencySymbols[billCurrency] || '',
+        accountId: b.accountId || null,
+        accountName: linkedAccount?.name || null,
         dueDay: b.dueDay,
         dueDate: b.dueDate,
         category: b.category,
@@ -671,7 +687,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas, junto de currencyName e currencySymbol. O código é a fonte da verdade; NUNCA deduza a moeda pelo símbolo '
+0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: ao consultar contas, use o campo currency de cada registro em Contas cadastradas, junto de currencyName e currencySymbol. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa PESOS ARGENTINOS e deve ser falado como "pesos argentinos"; seu prefixo visual inequívoco é "ARS" seguido do cifrão. USD significa DÓLARES ESTADUNIDENSES e deve ser falado como "dólares"; seu prefixo é "US" seguido do cifrão. BRL significa REAIS e usa o prefixo "R" seguido do cifrão; EUR significa EUROS e usa o símbolo do euro. Sempre fale e escreva o nome da moeda junto ao valor (ex.: "45.000 pesos argentinos"), nunca responda apenas "45.000". O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca converta moedas sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
