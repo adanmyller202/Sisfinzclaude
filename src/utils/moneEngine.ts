@@ -1551,7 +1551,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         `• ${bill.name}: ${formatCurrency(bill.amount, currency)} (vencimento: ${bill.date})`
       );
       return {
-        text: `Sim. Você tem ${formatCurrency(pendingTotal, currency)} em contas pendentes para pagar em ${monthName}:\\n${lines.join('\\n')}`,
+        text: `Sim. Você tem ${formatCurrency(pendingTotal, currency)} em contas pendentes para pagar em ${monthName}:\n${lines.join('\n')}`,
         isInternalCalculation: true,
       };
     }
