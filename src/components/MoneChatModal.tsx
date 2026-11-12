@@ -222,6 +222,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       try { liveSourceRef.current?.disconnect(); } catch {}
       liveStreamRef.current?.getTracks().forEach((track) => track.stop());
       liveSessionRef.current?.close?.();
+      liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
+      liveAudioSourcesRef.current = [];
       liveSessionRef.current = null;
       liveInputContextRef.current?.close().catch(() => {});
       liveOutputContextRef.current?.close().catch(() => {});
@@ -663,6 +665,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     try { liveSourceRef.current?.disconnect(); } catch {}
     liveStreamRef.current?.getTracks().forEach((track) => track.stop());
     liveSessionRef.current?.close?.();
+    liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
+    liveAudioSourcesRef.current = [];
     liveInputContextRef.current?.close().catch(() => {});
     liveOutputContextRef.current?.close().catch(() => {});
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
