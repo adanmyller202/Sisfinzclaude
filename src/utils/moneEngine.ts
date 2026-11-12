@@ -16,6 +16,7 @@ import {
   LanguageCode,
   RecurrenceType,
   MoneStyle,
+  SharedBill,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -64,12 +65,15 @@ export interface MoneActionHandlers {
     date: string;
     notes?: string;
   }) => Promise<any> | void;
+  onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
   currentBalance: number;
   forecastBalance?: number;
   accounts?: AccountItem[];
+  sharedBills?: SharedBill[];
+  myUserId?: string;
   bills: BillItem[];
   incomes: IncomeItem[];
   expenses: ExpenseItem[];
@@ -742,6 +746,46 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const currentMonthStr = getCurrentMonthStr();
     const todayStr = getTodayStr();
     const locale = getLocaleForLanguage(ctx.language);
+
+    // Mark only the authenticated user's share of a shared bill as paid.
+    if (intent === 'mark_shared_share_paid') {
+      if (!handlers?.onToggleMySharePaid) {
+        return { text: 'A função de contas compartilhadas não está disponível agora.', isInternalCalculation: true };
+      }
+      const available = (ctx.sharedBills || []).filter((bill) =>
+        !ctx.myUserId || bill.members.includes(ctx.myUserId)
+      );
+      const requestedName = normalize(d.name || '');
+      const matches = available.filter((bill) => {
+        if (d.matchedId && bill.id === d.matchedId) return true;
+        const title = normalize(bill.title);
+        return requestedName ? title === requestedName || title.includes(requestedName) || requestedName.includes(title) : false;
+      });
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? `Encontrei mais de uma conta compartilhada correspondente. Qual delas você já pagou?`
+            : 'Qual conta compartilhada você pagou? Diga o nome dela para eu marcar somente a sua parte.',
+          isInternalCalculation: true,
+        };
+      }
+      const target = matches[0];
+      const targetMonth = d.targetMonth || target.month;
+      try {
+        await handlers.onToggleMySharePaid(target.id, true, targetMonth);
+        const share = ctx.myUserId ? target.shares?.[ctx.myUserId]?.amount : undefined;
+        return {
+          text: parsed.directResponse || `Pronto. Marquei sua parte de "${target.title}" como paga${typeof share === 'number' ? ` (${formatCurrency(share, currency)})` : ''}.`,
+          isInternalCalculation: true,
+          actionExecuted: 'mark_shared_share_paid',
+        };
+      } catch (err: any) {
+        return {
+          text: `Não consegui marcar sua parte como paga: ${err?.message || 'falha ao salvar'}.`,
+          isInternalCalculation: true,
+        };
+      }
+    }
 
     // TRANSFER BETWEEN OWN ACCOUNTS. Resolve both accounts uniquely and keep currencies identical.
     if (intent === 'transfer_between_accounts') {
