@@ -229,6 +229,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const livePlaybackTimeRef = useRef(0);
   const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const pendingVoiceActionRef = useRef<string | null>(null);
+  const pendingTextActionRef = useRef<string | null>(null);
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -339,7 +340,29 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const handleSendMessage = async (textToSend?: string, audio?: { data: string; mimeType: string }) => {
     const query = (textToSend || inputValue).trim();
     if ((!query && !audio) || isLoading) return;
+    let actionQuery = query;
+    const normalizedReply = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
+    const isConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
+    const isCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
+    if (pendingTextActionRef.current && isConfirmation) {
+      actionQuery = pendingTextActionRef.current;
+      pendingTextActionRef.current = null;
+    } else if (pendingTextActionRef.current && isCancellation) {
+      pendingTextActionRef.current = null;
+      const cancelMsg: ChatMessage = {
+        id: 'cancel_action_' + Date.now(),
+        sender: 'mone',
+        text: 'Tudo bem. Cancelei a operação e não alterei nenhum registro.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, { id: 'msg_' + Date.now(), sender: 'user', text: query, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, cancelMsg]);
+      setInputValue('');
+      return;
+    } else if (pendingTextActionRef.current) {
+      pendingTextActionRef.current = null;
+    }
 
+    const isDestructiveRequest = /\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|troca|trocar|substitui|substituir|ajusta|ajustar|aumenta|reduz|reduzir|edita|editar|corrige|corrigir|corrija)\b/i.test(query);
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
       sender: 'user',
@@ -349,6 +372,17 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
     setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
+    if (isDestructiveRequest && actionQuery === query) {
+      pendingTextActionRef.current = query;
+      const confirmMsg: ChatMessage = {
+        id: 'confirm_action_' + Date.now(),
+        sender: 'mone',
+        text: `Você quer que eu execute esta alteração ou exclusão: “${query}”? Responda “sim” para confirmar ou “não” para cancelar.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, confirmMsg]);
+      return;
+    }
     setIsLoading(true);
 
     if (!isOnline) {
@@ -376,7 +410,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         text: m.text,
       }));
 
-      const response: MoneResponse = await askMone(query || 'Comando por voz', {
+      const response: MoneResponse = await askMone(actionQuery || 'Comando por voz', {
         ...moneContext,
         history: historyItems,
         lastActionItem,
