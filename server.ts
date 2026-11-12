@@ -522,6 +522,7 @@ Mensagem atual do usuário: ${message.trim()}`;
       expenses = [],
       goals = [],
       sharedBills = [],
+      weeklyChallenges = [],
       lastActionItem = null,
     } = context;
 
@@ -572,6 +573,18 @@ Mensagem atual do usuário: ${message.trim()}`;
       status: b.status,
       myShare: b.shares?.[verifiedUid]?.amount,
       myShareStatus: b.shares?.[verifiedUid]?.status,
+    }));
+
+    const weeklyChallengesSummary = (weeklyChallenges || []).map((challenge: any) => ({
+      id: challenge.id,
+      title: challenge.title,
+      currency: challenge.currency,
+      initialAmount: challenge.initialAmount,
+      totalWeeks: challenge.totalWeeks || 52,
+      totalTarget: challenge.totalTarget,
+      completedWeeks: challenge.completedWeeks || [],
+      status: challenge.status,
+      savingMode: challenge.savingMode || 'progressive',
     }));
 
     const accountsSummary = (accounts || []).map((account: any) => ({
@@ -625,6 +638,7 @@ Contexto financeiro do usuário:
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
 - Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
+- Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
 
 Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
@@ -690,6 +704,14 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      toAccountId: id exato da conta de destino na lista de contas
      amount: valor numérico exato
      directResponse: confirmação natural somente se a ação for executada
+   - Concluir uma semana de desafio semanal (ex: "conclua a semana 3 do desafio moto usando o Galicia"):
+     intent: "complete_challenge_week"
+     challengeId: id exato do desafio
+     challengeName: nome do desafio
+     weekNumber: número inteiro da semana
+     accountId: id exato da conta de onde sairá o dinheiro
+     accountName: nome da conta
+     directResponse: confirmação natural somente se a ação for executada
    - Marcar somente minha parte de conta compartilhada como paga (ex: "marque minha parte do aluguel compartilhado como paga"):
      intent: "mark_shared_share_paid"
      name: título exato da conta compartilhada
@@ -727,7 +749,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
@@ -748,6 +770,11 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "toAccountId": "string",
     "fromAccountName": "string",
     "toAccountName": "string",
+    "challengeId": "string",
+    "challengeName": "string",
+    "weekNumber": number,
+    "accountId": "string",
+    "accountName": "string",
     "date": "YYYY-MM-DD",
     "notes": "string"
   },
