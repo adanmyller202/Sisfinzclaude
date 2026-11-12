@@ -387,7 +387,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       pendingTextActionRef.current = null;
     }
 
-    const isDestructiveRequest = /\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|troca|trocar|substitui|substituir|ajusta|ajustar|aumenta|reduz|reduzir|desfaz|desfazer|estorna|estornar|edita|editar|corrige|corrigir|corrija)\b/i.test(query);
+    const isDestructiveRequest = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(query);
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
       sender: 'user',
