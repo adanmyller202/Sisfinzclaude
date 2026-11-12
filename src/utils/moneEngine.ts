@@ -644,17 +644,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 2. CONVERSATIONAL CORRECTION (e.g. "Na verdade, foi 3000, não 2500" or "corrige para 3000")
   const isCorrection =
-    norm.includes('na verdade') ||
-    norm.includes('corrige') ||
-    norm.includes('corrigir') ||
-    norm.includes('correto e') ||
-    norm.includes('correto eh') ||
-    norm.includes('mude o valor') ||
-    norm.includes('muda para') ||
-    norm.includes('mudar para') ||
-    /\bfoi\s+\d+/i.test(norm) ||
-    /\bera\s+\d+/i.test(norm) ||
-    (norm.startsWith('nao') && (norm.includes('foi') || norm.includes('era')));
+    /\bna verdade\b.*\b(?:foi|era|para)\s+\d/i.test(norm) ||
+    /\b(?:corrige|corrigir|corrija|mude o valor|muda para|mudar para|troque|trocar|altere|alterar)\b.*\b(?:para|em)\s+\d/i.test(norm) ||
+    /\b(?:foi|era)\s+\d/i.test(norm) ||
+    (norm.startsWith('nao') && /\b(?:foi|era)\s+\d/i.test(norm));
 
   if (isCorrection && lastActionItem) {
     // Extract new amount
@@ -1522,13 +1515,16 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 1. Installment Purchase (e.g. "Comprei um tênis de 200 mil em 5 vezes", "compra de 200.000 em 5 parcelas")
   const isInstallment =
-    (norm.includes('parcela') || norm.includes('vezes') || norm.includes('cuotas') || norm.includes(' x ') || norm.includes('x\b')) &&
-    (norm.includes('comprei') || norm.includes('compra') || norm.includes('crie') || norm.includes('criar') || norm.includes('adicionar') || norm.includes('tenis') || norm.includes('tênis'));
+    /\b(?:comprei|adicionei|adicione|adicionar|crie|criar|registre|registrar|lancei|lancar)\b/i.test(norm) &&
+    /\b(?:parcelas?|vezes|cuotas?)\b|\s+x\s+/i.test(norm);
 
   if (isInstallment && handlers?.onAddBill) {
     const countMatch = norm.match(/(\d+)\s*(?:parcelas?|vezes|cuotas?|x\b)/i);
     const installments = countMatch ? parseInt(countMatch[1], 10) : 0;
-    const parsedAmt = parseAmountFromText(question);
+    const amountText = question
+      .replace(/\b\d+\s*(?:parcelas?|vezes|cuotas?|x\b)/i, '')
+      .replace(/\b(?:dia|todo dia|vencimento|vencendo)\s*\d{1,2}\b/i, '');
+    const parsedAmt = parseAmountFromText(amountText);
     if (!parsedAmt || parsedAmt <= 0 || installments < 2 || installments > 120) {
       return {
         text: 'Para cadastrar a compra parcelada, preciso do valor total e da quantidade de parcelas. Por exemplo: “comprei um celular de 600.000 em 12 parcelas”. Ainda não cadastrei nada.',
@@ -1571,14 +1567,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 2. One-off Expense (e.g. "Gastei 2500 pesos de Uber agora", "adicione despesa de 4000 de uber hoje")
   const isExpense =
-    norm.includes('gastei') ||
-    norm.includes('despesa') ||
-    norm.includes('gasto') ||
-    norm.includes('uber') ||
-    norm.includes('comprei') ||
-    norm.includes('almoço') ||
-    norm.includes('almoco') ||
-    norm.includes('jantar');
+    /\b(?:gastei|comprei|adicionei|adicione|adicionar|registre|registrar|lancei|lancar|anotei|anotar)\b/i.test(norm);
 
   if (isExpense && handlers?.onAddExpense) {
     const parsedAmt = parseAmountFromText(question);
@@ -1611,11 +1600,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 3. Income (e.g. "Recebi 50 mil de salário", "adicione receita de 1500")
   const isIncome =
-    norm.includes('recebi') ||
-    norm.includes('salario') ||
-    norm.includes('salário') ||
-    norm.includes('receita') ||
-    norm.includes('renda');
+    /\b(?:recebi|adicionei|adicione|adicionar|registre|registrar|lancei|lancar|caiu)\b/i.test(norm) &&
+    (/\b(?:salario|receita|renda|freelance|freela|investimento)\b/i.test(norm) || /\brecebi\b/i.test(norm));
 
   if (isIncome && handlers?.onAddIncome) {
     const parsedAmt = parseAmountFromText(question);
