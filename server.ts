@@ -747,10 +747,22 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      itemType: "bill" | "expense" | "income"
      matchedId: id do item correspondente
      directResponse: "Registro excluído."
-   - Consultas (quanto gastei com transporte este mês?, quanto vou receber em novembro?, tenho algo para pagar em novembro?, qual meu saldo?):
-     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast"
+   - Consultas financeiras (quanto gastei este mês?, quanto vou receber?, tenho algo para pagar?, qual meu saldo?):
+     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge"
      targetMonth: "YYYY-MM"
      directResponse: resposta direta e exata.
+   - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
+     intent: "query_account_balance"
+     accountId: id exato da conta
+     accountName: nome exato da conta
+   - Consultar contas compartilhadas (ex: "quanto falta pagar da minha parte?"):
+     intent: "query_shared_bills"
+     name: título da conta, se o usuário citar uma
+     targetMonth: "YYYY-MM"
+   - Consultar progresso do desafio semanal (ex: "como está meu desafio da moto?"):
+     intent: "query_weekly_challenge"
+     challengeId: id exato do desafio
+     challengeName: nome do desafio
 
 REGRA ABSOLUTA:
 NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alterar vencimento, alterar valor ou excluir um registro. Identifique a conta ou registro nas listas fornecidas e retorne a intenção de modificação correspondente.${stylePrompt}
