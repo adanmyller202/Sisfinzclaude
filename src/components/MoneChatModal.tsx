@@ -577,14 +577,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       const outputContext = new AudioContext();
       liveInputContextRef.current = inputContext;
       liveOutputContextRef.current = outputContext;
-      const [stream, idToken] = await Promise.all([
-        navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        }),
-        user.getIdToken(),
-        Promise.all([inputContext.resume(), outputContext.resume()]),
-      ]);
+      const idTokenPromise = user.getIdToken();
+      const audioResumePromise = Promise.all([inputContext.resume(), outputContext.resume()]);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       liveStreamRef.current = stream;
+      const [idToken] = await Promise.all([idTokenPromise, audioResumePromise]);
       const tokenResponse = await fetch('/api/mone/live-token', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
