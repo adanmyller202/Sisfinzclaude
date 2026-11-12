@@ -569,7 +569,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
                 </button>
                 <motion.button
-                  whileHover={{ scale: 1.05 }
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   type="submit"
                   disabled={!inputValue.trim() || isLoading}
