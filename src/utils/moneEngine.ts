@@ -924,7 +924,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         try {
           await handlers.onUpdateBill(billSearch.match.id, { amount: newAmount });
           return {
-            text: `Pronto! Atualizei "${billSearch.match.name}" de ${formatCurrencySpoken(billSearch.match.amount, billSearch.match.currency || currency)} para ${formatCurrencySpoken(newAmount, billSearch.match.currency || currency)}.`,
+            text: `Pronto! Atualizei "${billSearch.match.name}" de ${formatCurrencySpoken(billSearch.match.amount, context.accounts?.find((account) => account.id === billSearch.match?.accountId)?.currency || currency)} para ${formatCurrencySpoken(newAmount, context.accounts?.find((account) => account.id === billSearch.match?.accountId)?.currency || currency)}.`,
             isInternalCalculation: true,
             actionExecuted: 'update_bill',
             createdItem: { type: 'bill', id: billSearch.match.id, name: billSearch.match.name, amount: newAmount },
