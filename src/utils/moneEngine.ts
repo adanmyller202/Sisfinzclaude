@@ -1359,7 +1359,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           amount: d.amount,
           dueDay,
           dueDate: getEffectiveDateForMonth(startMonth, dueDay),
-          category: d.category || inferCategory(billName, 'bill'),
+          category: getMentionedCategory(ctx, question, 'bill') || d.category || inferCategory(billName, 'bill'),
           recurrence: isRecur ? 'monthly' : 'none',
           ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
           startMonth,
