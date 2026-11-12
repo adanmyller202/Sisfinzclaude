@@ -620,6 +620,18 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
 /**
  * Intelligent categorization helper
  */
+function getMentionedCategory(
+  context: MoneContext,
+  question: string,
+  scope: 'expense' | 'income' | 'bill'
+): string | undefined {
+  const normalizedQuestion = normalize(question);
+  return context.categories?.find((category) =>
+    (category.scope === scope || category.scope === 'all') &&
+    normalizedQuestion.includes(normalize(category.name))
+  )?.name;
+}
+
 function inferCategory(name: string, type: 'expense' | 'bill' | 'income'): string {
   const norm = normalize(name);
   if (type === 'income') {
@@ -1253,7 +1265,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         if (selectedAccount.needsChoice) {
           return { text: 'Em qual conta você fez esse gasto? Diga, por exemplo, Galicia ou Naranja.', isInternalCalculation: true };
         }
-        const cat = d.category || inferCategory(expName, 'expense');
+        const cat = getMentionedCategory(ctx, question, 'expense') || d.category || inferCategory(expName, 'expense');
         const res = await handlers.onAddExpense({
           name: expName,
           amount: d.amount,
@@ -1302,7 +1314,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           amount: instAmount,
           dueDay,
           dueDate,
-          category: d.category || inferCategory(billName, 'bill'),
+          category: getMentionedCategory(ctx, question, 'bill') || d.category || inferCategory(billName, 'bill'),
           recurrence: 'monthly',
           recurrenceMonthsCount: installments,
           startMonth,
@@ -1390,7 +1402,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           amount: d.amount,
           expectedDay: expDay,
           expectedDate: getEffectiveDateForMonth(startMonth, expDay),
-          category: d.category || inferCategory(incName, 'income'),
+          category: getMentionedCategory(ctx, question, 'income') || d.category || inferCategory(incName, 'income'),
           recurrence: isRecur ? 'monthly' as const : 'none' as const,
           ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
           startMonth,
@@ -2626,7 +2638,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       if (selectedAccount.needsChoice) {
         return { text: 'Em qual conta você fez esse gasto? Diga, por exemplo, Galicia ou Naranja.', isInternalCalculation: true };
       }
-      const cat = inferCategory(name, 'expense');
+      const cat = getMentionedCategory(context, question, 'expense') || inferCategory(name, 'expense');
       const res = await handlers.onAddExpense({
         name,
         amount: parsedAmt,
@@ -2670,7 +2682,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         amount: parsedAmt,
         expectedDay: 5,
         expectedDate: getEffectiveDateForMonth(currentMonthStr, 5),
-        category: inferCategory(name, 'income'),
+        category: getMentionedCategory(context, question, 'income') || inferCategory(name, 'income'),
         recurrence: /\b(?:sem\s+repeticao|nao\s+repetir|uma\s+vez|avulso)\b/.test(norm)
           ? 'none' as const
           : /\b(?:recorrente|repetir|mensal|todo\s+mes|todos\s+os\s+meses)\b/.test(norm) || name === 'Salário'
