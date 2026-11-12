@@ -73,6 +73,7 @@ interface MoneChatModalProps {
   accounts?: AccountItem[];
   sharedBills?: SharedBill[];
   weeklyChallenges?: FiftyTwoWeekChallenge[];
+  categories?: Array<{ id: string; name: string; scope: string; isPredefined?: boolean }>;
   myUserId?: string;
   bills: BillItem[];
   incomes: IncomeItem[];
@@ -122,6 +123,9 @@ interface MoneChatModalProps {
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
   onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
+  onAddCategory?: (name: string, scope: 'all' | 'bill' | 'income' | 'expense') => Promise<any> | void;
+  onUpdateCategory?: (categoryId: string, updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string }) => Promise<any> | void;
+  onDeleteCategory?: (categoryId: string) => Promise<any> | void;
 }
 
 export const MoneChatModal: React.FC<MoneChatModalProps> = ({
@@ -132,6 +136,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   accounts = [],
   sharedBills = [],
   weeklyChallenges = [],
+  categories = [],
   myUserId,
   bills,
   incomes,
@@ -164,6 +169,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onCompleteChallengeWeek,
   onUndoChallengeWeek,
   onNavigateToSection,
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory,
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
@@ -382,6 +390,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     goals,
     savings: savingsControl.savings,
     savingTransactions: savingsControl.transactions,
+    categories,
     currency,
     language: 'pt' as LanguageCode,
     lastActionItem,
@@ -409,6 +418,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onCompleteChallengeWeek,
       onUndoChallengeWeek,
       onNavigateToSection,
+      onAddCategory,
+      onUpdateCategory,
+      onDeleteCategory,
       onCreateSavingGoal: savingsControl.createSavingGoal,
       onUpdateSavingGoal: savingsControl.updateSavingGoal,
       onDeleteSavingGoal: savingsControl.deleteSavingGoal,
