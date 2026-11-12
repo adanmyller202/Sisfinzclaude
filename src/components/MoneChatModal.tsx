@@ -14,6 +14,7 @@ import {
   MonthlyStatusRecord,
   MoneStyle,
   MoneMood,
+  AccountItem,
 } from '../types';
 import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
@@ -49,6 +50,8 @@ interface MoneChatModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentBalance: number;
+  forecastBalance?: number;
+  accounts?: AccountItem[];
   bills: BillItem[];
   incomes: IncomeItem[];
   expenses: ExpenseItem[];
@@ -86,6 +89,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   isOpen,
   onClose,
   currentBalance,
+  forecastBalance = currentBalance,
+  accounts = [],
   bills,
   incomes,
   expenses,
@@ -241,6 +246,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
   const moneContext: MoneContext = {
     currentBalance,
+    forecastBalance,
+    accounts,
     bills,
     incomes,
     expenses,
