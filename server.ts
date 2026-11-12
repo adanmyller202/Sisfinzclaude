@@ -533,6 +533,8 @@ Mensagem atual do usuário: ${message.trim()}`;
       incomes = [],
       expenses = [],
       goals = [],
+      savings = [],
+      savingTransactions = [],
       sharedBills = [],
       weeklyChallenges = [],
       lastActionItem = null,
@@ -622,6 +624,27 @@ Mensagem atual do usuário: ${message.trim()}`;
       };
     });
 
+    const savingsSummary = (savings || []).map((saving: any) => ({
+      id: saving.id,
+      name: saving.name,
+      hasTarget: saving.hasTarget !== false,
+      targetAmount: saving.targetAmount || null,
+      currentAmount: Number(saving.currentAmount) || 0,
+      currency: saving.currency || currency,
+      deadline: saving.deadline || null,
+      notes: saving.notes || '',
+    }));
+    const savingTransactionsSummary = (savingTransactions || []).slice(0, 40).map((tx: any) => ({
+      id: tx.id,
+      savingId: tx.savingId,
+      savingName: tx.savingName,
+      type: tx.type,
+      amount: tx.amount,
+      currency: tx.currency || currency,
+      date: tx.date,
+      note: tx.note || '',
+    }));
+
     const userIdForContext = verifiedUid ?? '';
     const sharedBillsSummary = (sharedBills || []).map((b: any) => ({
       id: b.id,
@@ -699,6 +722,8 @@ Contexto financeiro do usuário:
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
+- Cofrinhos e reservas: ${JSON.stringify(savingsSummary)}
+- Histórico de aportes e resgates: ${JSON.stringify(savingTransactionsSummary)}
 - Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
 - Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
 
@@ -841,6 +866,12 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      intent: "query_goal_progress"
      goalId: id exato da meta
      goalName: nome da meta
+   - Consultar cofrinhos/reservas: intent "query_savings", savingId ou savingName se citar um cofrinho específico.
+   - Consultar histórico de aportes/resgates: intent "query_saving_transactions", savingId ou savingName se citar um cofrinho específico.
+   - Criar cofrinho: intent "create_saving_goal", name, hasTarget, targetAmount se houver meta, currency e deadline se informado.
+   - Fazer aporte: intent "deposit_to_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
+   - Fazer resgate: intent "withdraw_from_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
+   - Excluir cofrinho: intent "delete_saving_goal", savingId ou savingName exato; nunca exclua se houver mais de uma correspondência.
    - Editar uma meta de economia (ex: "renomeie minha meta da moto para viagem"):
      intent: "update_goal"
      goalId: id exato da meta
