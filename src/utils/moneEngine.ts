@@ -886,10 +886,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         : undefined;
       const [fromAccount, toAccount] = mentionedAccounts;
       if (fromAccount.currency === toAccount.currency && (!currencyMention || currencyMention === fromAccount.currency)) {
-        return await executeMoneIntent({
+        return (await executeMoneIntent({
           intent: 'transfer_between_accounts',
           data: { amount, fromAccountId: fromAccount.id, toAccountId: toAccount.id },
-        }, context);
+        }, context)) || { text: 'Não consegui concluir a transferência agora. Confira as contas e tente novamente.', isInternalCalculation: true };
       }
     }
   }
@@ -3009,7 +3009,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       return (tokens.length ? tokens : [normalize(account.name)]).some((token) => norm.includes(token));
     });
     if (mentionedAccounts.length === 1) {
-      return await executeMoneIntent({ intent: 'query_account_balance', data: { accountId: mentionedAccounts[0].id } }, context);
+      return (await executeMoneIntent({ intent: 'query_account_balance', data: { accountId: mentionedAccounts[0].id } }, context)) || { text: 'Não consegui consultar essa conta agora.', isInternalCalculation: true };
     }
     if (mentionedAccounts.length > 1) {
       return { text: 'Encontrei mais de uma conta com esse nome. Qual delas você quer consultar?', isInternalCalculation: true };
