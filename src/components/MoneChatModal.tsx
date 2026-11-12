@@ -344,6 +344,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const handleSendMessage = async (textToSend?: string, audio?: { data: string; mimeType: string }) => {
     const query = (textToSend || inputValue).trim();
     if ((!query && !audio) || isLoading) return;
+    if (query) pendingVoiceActionRef.current = null;
     let actionQuery = query;
     const normalizedReply = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
     const isConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
@@ -515,6 +516,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
   const startLiveVoice = async () => {
     if (!memoryReady || isLiveConnected || liveStatus === 'connecting' || isLoading) return;
+    pendingTextActionRef.current = null;
     if (!navigator.mediaDevices?.getUserMedia) {
       setMessages((prev) => [...prev, { id: 'live_unsupported_' + Date.now(), sender: 'mone', text: 'Este navegador não oferece acesso ao microfone. Você pode conversar por texto.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
       return;
