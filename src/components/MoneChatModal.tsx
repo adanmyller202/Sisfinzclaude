@@ -22,6 +22,8 @@ import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem, MoneNavigationSection } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
+import { useSavings } from '../hooks/useSavings';
+import { getCurrentMonthStr } from '../utils/finance';
 import { auth, db } from '../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -165,6 +167,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 }) => {
   const t = getTranslations(language);
   const { isOnline } = useSyncStatus();
+  const savingsControl = useSavings();
 
   const initialGreeting = React.useMemo(
     () => 'Oi! Tudo bem? Pode conversar comigo sobre qualquer assunto — e, quando quiser, eu também posso cuidar das suas finanças no SisFinz.',
@@ -377,6 +380,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     expenses,
     statusRecords,
     goals,
+    savings: savingsControl.savings,
+    savingTransactions: savingsControl.transactions,
     currency,
     language: 'pt' as LanguageCode,
     lastActionItem,
@@ -404,6 +409,33 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onCompleteChallengeWeek,
       onUndoChallengeWeek,
       onNavigateToSection,
+      onCreateSavingGoal: savingsControl.createSavingGoal,
+      onUpdateSavingGoal: savingsControl.updateSavingGoal,
+      onDeleteSavingGoal: savingsControl.deleteSavingGoal,
+      onTransferToSaving: (savingId, amount, exchangeRate, date, note) =>
+        savingsControl.transferToSaving(savingId, amount, exchangeRate, date, note, {
+          currency,
+          addExpense: async (expenseData) => {
+            if (!onAddExpense) throw new Error('A criação de despesas não está disponível.');
+            return await onAddExpense(expenseData) as ExpenseItem;
+          },
+        }),
+      onWithdrawFromSaving: (savingId, amount, exchangeRate, date, note) =>
+        savingsControl.withdrawFromSaving(savingId, amount, exchangeRate, date, note, {
+          currentMonthStr: getCurrentMonthStr(),
+          addIncome: async (incomeData) => {
+            if (!onAddIncome) throw new Error('A criação de receitas não está disponível.');
+            return await onAddIncome(incomeData) as IncomeItem;
+          },
+          ...(onAddIncomeAsReceived ? {
+            addIncomeAsReceived: async (incomeData, receivedMonth) =>
+              await onAddIncomeAsReceived(incomeData, receivedMonth) as IncomeItem,
+          } : {}),
+          toggleIncomeReceived: async (incomeId, month, isReceived, receivedDate) => {
+            if (!onToggleIncomeReceived) throw new Error('A atualização de recebimentos não está disponível.');
+            await onToggleIncomeReceived(incomeId, month, isReceived, receivedDate);
+          },
+        }),
     },
   };
   const moneContextRef = useRef<MoneContext>(moneContext);
