@@ -47,6 +47,10 @@ export interface MoneActionHandlers {
   onDeleteBill?: (billId: string) => Promise<any> | void;
   onToggleBillPaid?: (billId: string, month: string, isPaid: boolean) => Promise<any> | void;
   onAddIncome?: (incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<any> | void;
+  onAddIncomeAsReceived?: (
+    incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+    receivedMonth: string
+  ) => Promise<any> | void;
   onUpdateIncome?: (incomeId: string, partial: Partial<IncomeItem>) => Promise<any> | void;
   onDeleteIncome?: (incomeId: string) => Promise<any> | void;
   onToggleIncomeReceived?: (incomeId: string, month: string, isReceived: boolean) => Promise<any> | void;
@@ -1275,19 +1279,22 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         const expDay = d.expectedDay || 5;
         const startMonth = d.targetMonth || currentMonthStr;
         const isRecur = d.isRecurring === true || incName.toLowerCase().includes('salario') || incName.toLowerCase().includes('salário');
-        const res = await handlers.onAddIncome({
+        const incomePayload = {
           name: incName,
           amount: d.amount,
           expectedDay: expDay,
           expectedDate: getEffectiveDateForMonth(startMonth, expDay),
           category: d.category || inferCategory(incName, 'income'),
-          recurrence: isRecur ? 'monthly' : 'none',
+          recurrence: isRecur ? 'monthly' as const : 'none' as const,
           ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
           startMonth,
           ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
-        });
+        };
+        const res = d.isReceived === true && handlers.onAddIncomeAsReceived
+          ? await handlers.onAddIncomeAsReceived(incomePayload, startMonth)
+          : await handlers.onAddIncome(incomePayload);
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
-        if (d.isReceived === true && handlers?.onToggleIncomeReceived) {
+        if (d.isReceived === true && !handlers.onAddIncomeAsReceived && handlers?.onToggleIncomeReceived) {
           await handlers.onToggleIncomeReceived(createdId, startMonth, true);
         }
         return {
@@ -2087,19 +2094,22 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: 'Em qual conta você recebe essa receita? Diga o nome da conta.', isInternalCalculation: true };
       }
       const receivedNow = /\b(recebi|caiu)\b/.test(norm);
-      const res = await handlers.onAddIncome({
+      const incomePayload = {
         name,
         amount: parsedAmt,
         expectedDay: 5,
         expectedDate: getEffectiveDateForMonth(currentMonthStr, 5),
         category: inferCategory(name, 'income'),
-        recurrence: name === 'Salário' ? 'monthly' : 'none',
+        recurrence: name === 'Salário' ? 'monthly' as const : 'none' as const,
         startMonth: currentMonthStr,
         ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
-      });
+      };
+      const res = receivedNow && handlers.onAddIncomeAsReceived
+        ? await handlers.onAddIncomeAsReceived(incomePayload, currentMonthStr)
+        : await handlers.onAddIncome(incomePayload);
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
-      if (receivedNow && handlers.onToggleIncomeReceived) {
+      if (receivedNow && !handlers.onAddIncomeAsReceived && handlers.onToggleIncomeReceived) {
         await handlers.onToggleIncomeReceived(createdId, currentMonthStr, true);
       }
       return {
