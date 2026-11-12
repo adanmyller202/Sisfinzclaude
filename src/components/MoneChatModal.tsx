@@ -19,6 +19,8 @@ import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
+import { auth, db } from '../firebase/config';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   Send,
   Mic,
@@ -112,9 +114,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const { isOnline } = useSyncStatus();
 
   const initialGreeting = React.useMemo(() => {
-    if (language === 'pt') return 'Como posso ajudar com suas finanças hoje?';
-    if (language === 'es') return '¿Cómo puedo ayudarte con tus finanzas hoy?';
-    return 'How can I help with your finances today?';
+    if (language === 'pt') return 'Oi! Tudo bem? Pode conversar comigo sobre qualquer assunto — e, quando quiser, eu também posso cuidar das suas finanças no SisFinz.';
+    if (language === 'es') return '¡Hola! ¿Cómo estás? Puedes hablar conmigo de cualquier tema y también puedo ayudarte con tus finanzas en SisFinz.';
+    return 'Hi! How are you? You can talk to me about anything, and I can also help manage your finances in SisFinz.';
   }, [language]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -125,6 +127,64 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
+  const [memoryOwnerUid, setMemoryOwnerUid] = useState<string | null>(null);
+  const [memoryReady, setMemoryReady] = useState(false);
+
+  // Persistent, private conversation memory: each authenticated user has their own history.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!isOpen || !uid) return;
+    let cancelled = false;
+    setMemoryReady(false);
+    setMemoryOwnerUid(uid);
+    (async () => {
+      try {
+        const memoryRef = doc(db, 'users', uid, 'mone_memory', 'conversation');
+        const snapshot = await getDoc(memoryRef);
+        if (cancelled) return;
+        const saved = snapshot.exists() ? snapshot.data().messages : null;
+        if (Array.isArray(saved)) {
+          const restored = saved
+            .filter((item: any) => item && (item.sender === 'user' || item.sender === 'mone') && typeof item.text === 'string')
+            .slice(-60)
+            .map((item: any, index: number) => ({
+              id: typeof item.id === 'string' ? item.id : 'restored_' + index,
+              sender: item.sender,
+              text: item.text.slice(0, 4000),
+              timestamp: typeof item.timestamp === 'string' ? item.timestamp : '',
+            })) as ChatMessage[];
+          if (restored.length) setMessages(restored);
+        }
+      } catch (error) {
+        console.warn('[Mone] Não foi possível recuperar a memória da conversa:', error);
+      } finally {
+        if (!cancelled) setMemoryReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !memoryReady || !memoryOwnerUid || auth.currentUser?.uid !== memoryOwnerUid) return;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const compactMessages = messages.slice(-60).map((item) => ({
+          id: item.id,
+          sender: item.sender,
+          text: item.text.slice(0, 4000),
+          timestamp: item.timestamp,
+        }));
+        await setDoc(
+          doc(db, 'users', memoryOwnerUid, 'mone_memory', 'conversation'),
+          { messages: compactMessages, updatedAt: new Date().toISOString(), version: 1 },
+          { merge: true }
+        );
+      } catch (error) {
+        console.warn('[Mone] Não foi possível salvar a memória da conversa:', error);
+      }
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [isOpen, memoryReady, memoryOwnerUid, messages]);
 
   const [lastActionItem, setLastActionItem] = useState<MoneActionItem | null>(null);
   const [inputValue, setInputValue] = useState('');
@@ -265,7 +325,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       };
 
       setMessages((prev) => [...prev, moneMsg]);
-      if (audio && isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      if (isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(response.text);
         utterance.lang = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-AR' : 'en-US';
@@ -315,7 +375,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           const dataUrl = String(reader.result || '');
           const data = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
           if (!data) return;
-          await handleSendMessage('Comando enviado por voz. Interprete exatamente o que foi dito, inclusive expressões informais.', { data, mimeType: blob.type || 'audio/webm' });
+          await handleSendMessage('', { data, mimeType: blob.type || 'audio/webm' });
         };
         reader.readAsDataURL(blob);
       };
