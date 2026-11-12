@@ -334,6 +334,28 @@ function formatCurrencyBreakdown(totals: Map<CurrencyCode, number>, emptyText = 
   return parts.length ? parts.join(' + ') : emptyText;
 }
 
+function resolveMoneAccount(
+  context: MoneContext,
+  accountId?: string,
+  accountName?: string
+): { account?: AccountItem; needsChoice: boolean } {
+  const active = (context.accounts || []).filter((account) => account.isActive !== false);
+  if (!active.length) return { needsChoice: false };
+  if (accountId) {
+    const byId = active.find((account) => account.id === accountId);
+    return byId ? { account: byId, needsChoice: false } : { needsChoice: true };
+  }
+  const target = normalize(accountName || '');
+  if (target) {
+    const matches = active.filter((account) => {
+      const name = normalize(account.name);
+      return name === target || name.includes(target) || target.includes(name);
+    });
+    return matches.length === 1 ? { account: matches[0], needsChoice: false } : { needsChoice: true };
+  }
+  return active.length === 1 ? { account: active[0], needsChoice: false } : { needsChoice: true };
+}
+
 /**
  * Calculates financial figures for a given month
  */
@@ -1092,12 +1114,17 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     if (intent === 'add_expense' && d.amount && handlers?.onAddExpense) {
       try {
         const expName = d.name || 'Despesa';
+        const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
+        if (selectedAccount.needsChoice) {
+          return { text: 'Em qual conta você fez esse gasto? Diga, por exemplo, Galicia ou Naranja.', isInternalCalculation: true };
+        }
         const cat = d.category || inferCategory(expName, 'expense');
         const res = await handlers.onAddExpense({
           name: expName,
           amount: d.amount,
           date: d.date || todayStr,
           category: cat,
+          ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
         return {
@@ -1165,15 +1192,22 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       try {
         const dueDay = d.dueDay || 10;
         const billName = d.name || 'Conta';
+        const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
+        if (selectedAccount.needsChoice) {
+          return { text: 'Em qual conta do SisFinz essa fatura deve ficar vinculada?', isInternalCalculation: true };
+        }
         const isRecur = d.isRecurring !== false;
+        const startMonth = d.targetMonth || currentMonthStr;
         const res = await handlers.onAddBill({
           name: billName,
           amount: d.amount,
           dueDay,
-          dueDate: getEffectiveDateForMonth(currentMonthStr, dueDay),
+          dueDate: getEffectiveDateForMonth(startMonth, dueDay),
           category: d.category || inferCategory(billName, 'bill'),
           recurrence: isRecur ? 'monthly' : 'none',
-          startMonth: currentMonthStr,
+          ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
+          startMonth,
+          ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
         return {
@@ -1197,18 +1231,28 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     if (intent === 'add_income' && d.amount && handlers?.onAddIncome) {
       try {
         const incName = d.name || 'Receita';
+        const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
+        if (selectedAccount.needsChoice) {
+          return { text: 'Em qual conta você recebe essa receita?', isInternalCalculation: true };
+        }
         const expDay = d.expectedDay || 5;
+        const startMonth = d.targetMonth || currentMonthStr;
         const isRecur = d.isRecurring === true || incName.toLowerCase().includes('salario') || incName.toLowerCase().includes('salário');
         const res = await handlers.onAddIncome({
           name: incName,
           amount: d.amount,
           expectedDay: expDay,
-          expectedDate: getEffectiveDateForMonth(currentMonthStr, expDay),
+          expectedDate: getEffectiveDateForMonth(startMonth, expDay),
           category: d.category || inferCategory(incName, 'income'),
           recurrence: isRecur ? 'monthly' : 'none',
-          startMonth: currentMonthStr,
+          ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
+          startMonth,
+          ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
+        if (d.isReceived === true && handlers?.onToggleIncomeReceived) {
+          await handlers.onToggleIncomeReceived(createdId, startMonth, true);
+        }
         return {
           text: parsed.directResponse || `Receita de ${incName} de ${formatCurrencySpoken(d.amount, currency)} adicionada.`,
           isInternalCalculation: true,
@@ -1961,12 +2005,19 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       else if (norm.includes('farmacia') || norm.includes('farmácia')) name = 'Farmácia';
       else if (norm.includes('gasolina')) name = 'Gasolina';
 
+      const selectedAccount = resolveMoneAccount(context, undefined, context.accounts?.find((account) =>
+        account.isActive !== false && norm.includes(normalize(account.name))
+      )?.name);
+      if (selectedAccount.needsChoice) {
+        return { text: 'Em qual conta você fez esse gasto? Diga, por exemplo, Galicia ou Naranja.', isInternalCalculation: true };
+      }
       const cat = inferCategory(name, 'expense');
       const res = await handlers.onAddExpense({
         name,
         amount: parsedAmt,
         date: todayStr,
         category: cat,
+        ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
       });
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
@@ -1992,6 +2043,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       else if (norm.includes('freelance') || norm.includes('freela')) name = 'Freelance';
       else if (norm.includes('investimento')) name = 'Investimento';
 
+      const selectedAccount = resolveMoneAccount(context, undefined, context.accounts?.find((account) =>
+        account.isActive !== false && norm.includes(normalize(account.name))
+      )?.name);
+      if (selectedAccount.needsChoice) {
+        return { text: 'Em qual conta você recebe essa receita? Diga o nome da conta.', isInternalCalculation: true };
+      }
+      const receivedNow = /\b(recebi|caiu)\b/.test(norm);
       const res = await handlers.onAddIncome({
         name,
         amount: parsedAmt,
@@ -2000,9 +2058,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         category: inferCategory(name, 'income'),
         recurrence: name === 'Salário' ? 'monthly' : 'none',
         startMonth: currentMonthStr,
+        ...(selectedAccount.account ? { accountId: selectedAccount.account.id } : {}),
       });
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
+      if (receivedNow && handlers.onToggleIncomeReceived) {
+        await handlers.onToggleIncomeReceived(createdId, currentMonthStr, true);
+      }
       return {
         text: `Receita de ${name} de ${formatCurrencySpoken(parsedAmt, currency)} adicionada.`,
         isInternalCalculation: true,
@@ -2216,8 +2278,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // 7. Balance query (e.g. "Qual meu saldo atual?")
   if (norm.includes('saldo')) {
+    const balanceSummary = formatCurrencyBreakdown(getCurrentBalancesByCurrency(context), 'não encontrei saldo nas contas ativas');
     return {
-      text: `Seu saldo atual é de ${formatCurrencySpoken(currentBalance, currency)}.`,
+      text: `Seu saldo atual nas contas do SisFinz é ${balanceSummary}.`,
       isInternalCalculation: true,
     };
   }
