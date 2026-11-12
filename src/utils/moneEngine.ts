@@ -782,13 +782,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   }
 
   if (asksBills) {
-    return executeMoneIntent({ intent: 'query_bills', data: { targetMonth } }, context)
-      || { text: 'Não consegui consultar as contas desse período agora.', isInternalCalculation: true };
+    const billsResult = await executeMoneIntent({ intent: 'query_bills', data: { targetMonth } }, context);
+    return billsResult || { text: 'Não consegui consultar as contas desse período agora.', isInternalCalculation: true };
   }
 
   if (asksIncomes) {
-    return executeMoneIntent({ intent: 'query_incomes', data: { targetMonth } }, context)
-      || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
+    const incomesResult = await executeMoneIntent({ intent: 'query_incomes', data: { targetMonth } }, context);
+    return incomesResult || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
   }
 
   // 1. Math queries (e.g. "Quanto é 50.000 + 50.000?" -> "100.000.")
