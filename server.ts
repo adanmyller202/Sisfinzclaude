@@ -357,10 +357,9 @@ app.post('/api/mone', async (req, res) => {
       return;
     }
 
-    const { message, history = [], context = {}, persona: rawPersona } = req.body;
+    const { message, audio, audioMimeType, history = [], context = {}, persona: rawPersona } = req.body;
 
-
-    if (!message || typeof message !== 'string') {
+    if ((!message || typeof message !== 'string') && (!audio || typeof audio !== 'string')) {
       res.status(400).json({ error: 'Message is required' });
       return;
     }
@@ -563,11 +562,12 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
       contents: [
         {
           role: 'user',
-          parts: [
-            {
-              text: `${systemPrompt}\n\nMensagem do usuário: "${message}"`,
-            },
-          ],
+          parts: audio
+            ? [
+                { inlineData: { mimeType: typeof audioMimeType === 'string' ? audioMimeType : 'audio/webm', data: audio } },
+                { text: `${systemPrompt}\n\nInterprete o áudio anexado como a mensagem do usuário. Entenda português informal, valores falados, correções e intenção. Não invente informações que não foram ditas.` },
+              ]
+            : [{ text: `${systemPrompt}\n\nMensagem do usuário: "${message}"` }],
         },
       ],
       config: {
