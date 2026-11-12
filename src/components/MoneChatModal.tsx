@@ -156,6 +156,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [memoryOwnerUid, setMemoryOwnerUid] = useState<string | null>(null);
   const [memoryReady, setMemoryReady] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) pendingTextActionRef.current = null;
+  }, [isOpen]);
+
   // Persistent, private conversation memory: each authenticated user has their own history.
   useEffect(() => {
     const uid = auth.currentUser?.uid;
