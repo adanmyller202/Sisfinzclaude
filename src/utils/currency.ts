@@ -1,16 +1,19 @@
 import { CurrencyCode, CurrencyConfig, ChallengeGoal, ChallengeSquare } from '../types';
 
+const DOLLAR_SIGN = String.fromCharCode(36);
+
 export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   ARS: {
     code: 'ARS',
-    symbol: 'ARS 
+    symbol: 'ARS ' + DOLLAR_SIGN,
+    name: 'Pesos Argentinos',
     locale: 'es-AR',
     flag: '🇦🇷',
     country: 'Argentina',
   },
   BRL: {
     code: 'BRL',
-    symbol: 'R$',
+    symbol: 'R' + DOLLAR_SIGN,
     name: 'Real Brasileiro',
     locale: 'pt-BR',
     flag: '🇧🇷',
@@ -18,7 +21,8 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   },
   USD: {
     code: 'USD',
-    symbol: 'US
+    symbol: 'US' + DOLLAR_SIGN,
+    name: 'Dólar Estadounidense',
     locale: 'en-US',
     flag: '🇺🇸',
     country: 'Estados Unidos',
@@ -109,6 +113,50 @@ export function formatCurrencyExact(amount: number, currencyCode: CurrencyCode =
     case 'USD': return `US$ ${number}`;
     case 'BRL': return `R$ ${number}`;
     case 'EUR': return `${number} €`;
+  }
+}
+
+/** Formats numeric values with an explicit, unambiguous currency label. */
+function formatCurrencyNumber(amount: number, currencyCode: CurrencyCode, fractionDigits: number): string {
+  const config = CURRENCIES[currencyCode] || CURRENCIES.BRL;
+  return new Intl.NumberFormat(config.locale, {
+    style: 'decimal',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+export function formatCurrency(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
+  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
+  const number = formatCurrencyNumber(amount, code, 0);
+  switch (code) {
+    case 'ARS': return 'ARS ' + DOLLAR_SIGN + ' ' + number;
+    case 'USD': return 'US' + DOLLAR_SIGN + ' ' + number;
+    case 'BRL': return 'R' + DOLLAR_SIGN + ' ' + number;
+    case 'EUR': return number + ' €';
+  }
+}
+
+/** Full currency names for natural spoken responses from Mone. */
+export function formatCurrencySpoken(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
+  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
+  const number = formatCurrencyNumber(amount, code, 0);
+  switch (code) {
+    case 'ARS': return number + ' pesos argentinos';
+    case 'USD': return number + ' dólares estadounidenses';
+    case 'BRL': return number + ' reais';
+    case 'EUR': return number + ' euros';
+  }
+}
+
+export function formatCurrencyExact(amount: number, currencyCode: CurrencyCode = 'BRL'): string {
+  const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
+  const number = formatCurrencyNumber(amount, code, 2);
+  switch (code) {
+    case 'ARS': return 'ARS ' + DOLLAR_SIGN + ' ' + number;
+    case 'USD': return 'US' + DOLLAR_SIGN + ' ' + number;
+    case 'BRL': return 'R' + DOLLAR_SIGN + ' ' + number;
+    case 'EUR': return number + ' €';
   }
 }
 
