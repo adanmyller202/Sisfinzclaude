@@ -110,7 +110,7 @@ app.post('/api/mone/live-token', async (req, res) => {
         expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
         newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
         liveConnectConstraints: {
-          model: 'gemini-3.1-flash-live-preview',
+          model: 'gemini-3.8-live',
           config: {
             responseModalities: [Modality.AUDIO],
             inputAudioTranscription: {},
@@ -119,6 +119,7 @@ app.post('/api/mone/live-token', async (req, res) => {
             tools: [{
               functionDeclarations: [{
                 name: 'sisfinz_action',
+                behavior: 'BLOCKING',
                 description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
                 parameters: {
                   type: Type.OBJECT,
@@ -140,7 +141,7 @@ app.post('/api/mone/live-token', async (req, res) => {
     }
     res.json({
       token: token.name,
-      model: 'gemini-3.1-flash-live-preview',
+      model: 'gemini-3.8-live',
       expiresAt: new Date(now + 30 * 60 * 1000).toISOString(),
     });
   } catch (err: any) {
