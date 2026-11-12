@@ -386,6 +386,8 @@ export function useAccounts() {
       const fromRef = doc(db, 'users', user.uid, 'accounts', fromAccountId);
       const toRef = doc(db, 'users', user.uid, 'accounts', toAccountId);
       const transferRef = doc(db, 'users', user.uid, 'account_transfers', transferId);
+      let committedFromBalance = 0;
+      let committedToBalance = 0;
 
       // Commit both balance changes and the transfer record atomically.
       await runTransaction(db, async (tx) => {
@@ -404,8 +406,10 @@ export function useAccounts() {
 
         const fromBalance = Number(fromData.currentBalance) || 0;
         const toBalance = Number(toData.currentBalance) || 0;
-        tx.update(fromRef, { currentBalance: fromBalance - amount, updatedAt: now });
-        tx.update(toRef, { currentBalance: toBalance + amount, updatedAt: now });
+        committedFromBalance = fromBalance - amount;
+        committedToBalance = toBalance + amount;
+        tx.update(fromRef, { currentBalance: committedFromBalance, updatedAt: now });
+        tx.update(toRef, { currentBalance: committedToBalance, updatedAt: now });
         tx.set(transferRef, sanitizeFirestorePayload({
           id: transferId,
           userId: user.uid,
@@ -422,8 +426,8 @@ export function useAccounts() {
 
       setAccounts((prev) => {
         const list = prev.map((account) => {
-          if (account.id === fromAccountId) return { ...account, currentBalance: (account.currentBalance || 0) - amount, updatedAt: now };
-          if (account.id === toAccountId) return { ...account, currentBalance: (account.currentBalance || 0) + amount, updatedAt: now };
+          if (account.id === fromAccountId) return { ...account, currentBalance: committedFromBalance, updatedAt: now };
+          if (account.id === toAccountId) return { ...account, currentBalance: committedToBalance, updatedAt: now };
           return account;
         });
         try {
