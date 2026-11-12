@@ -723,7 +723,11 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             };
           });
           const distinctCurrencies = [...new Set(currencyBreakdown.map((item) => item.currency))];
-          const billCurrency = linkedAccount?.currency || (distinctCurrencies.length === 1 ? distinctCurrencies[0] : distinctCurrencies.length > 1 ? 'MULTI' : currency);
+          const billCurrency = distinctCurrencies.length === 1
+            ? distinctCurrencies[0]
+            : distinctCurrencies.length > 1
+              ? 'MULTI'
+              : linkedAccount?.currency || currency;
           return {
             id: b.id,
             name: b.name,
