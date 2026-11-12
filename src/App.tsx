@@ -1090,6 +1090,10 @@ export default function App() {
         onUndoChallengeWeek={(challengeId, weekNumber, returnAccountId) =>
           fiftyTwoChallenge.undoWeek(challengeId, weekNumber, returnAccountId, adjustAccountBalanceForFinancialItem, deleteExpense)
         }
+        onNavigateToSection={(section) => {
+          setCurrentView(section);
+          setIsMoneChatOpen(false);
+        }}
       />
 
       {/* Deposit Modal */}
