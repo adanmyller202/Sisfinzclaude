@@ -369,16 +369,34 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
       const effDate = exc?.dueDate ?? getEffectiveDateForMonth(targetMonthStr, effDay);
       const isCompleted = statusMap.get(`bill_${bill.id}_${targetMonthStr}`)?.isCompleted === true;
 
-      monthBills.push({
-        id: bill.id,
-        name: bill.name,
-        amount: effAmount,
-        // A bill follows the currency of its linked account, not the app default.
-        currency: context.accounts?.find((account) => account.id === (exc?.accountId ?? bill.accountId))?.currency || context.currency,
-        category: bill.category,
-        date: effDate,
-        isCompleted,
-      });
+      const effectiveDistributions = exc?.accountDistributions ?? bill.accountDistributions;
+      const isCompleted = statusMap.get(`bill_${bill.id}_${targetMonthStr}`)?.isCompleted === true;
+      if (effectiveDistributions?.length) {
+        for (const distribution of effectiveDistributions) {
+          const distributionAccount = context.accounts?.find((account) => account.id === distribution.accountId);
+          monthBills.push({
+            id: bill.id,
+            name: bill.name,
+            amount: distribution.amount,
+            currency: distributionAccount?.currency || context.currency,
+            category: bill.category,
+            date: effDate,
+            isCompleted,
+          });
+        }
+      } else {
+        const linkedAccountId = exc?.accountId ?? bill.accountId;
+        const linkedAccount = context.accounts?.find((account) => account.id === linkedAccountId);
+        monthBills.push({
+          id: bill.id,
+          name: bill.name,
+          amount: effAmount,
+          currency: linkedAccount?.currency || context.currency,
+          category: bill.category,
+          date: effDate,
+          isCompleted,
+        });
+      };
     }
   }
 
