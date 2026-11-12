@@ -1593,6 +1593,28 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // QUERY SAVINGS GOAL PROGRESS.
+    if (intent === 'query_goal_progress') {
+      const goalName = normalize(d.goalName || d.name || '');
+      const matches = (ctx.goals || []).filter((goal) =>
+        d.goalId ? goal.id === d.goalId : Boolean(goalName && normalize(goal.title).includes(goalName))
+      );
+      const selectedGoals = goalName || d.goalId ? matches : (ctx.goals || []);
+      if (!selectedGoals.length) {
+        return { text: 'Você ainda não tem metas de economia cadastradas.', isInternalCalculation: true };
+      }
+      const lines = selectedGoals.map((goal) => {
+        const saved = (goal.history || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        const target = Number(goal.totalTarget || goal.targetAmount) || 0;
+        const remaining = Math.max(0, target - saved);
+        return `• ${goal.title}: ${formatCurrency(saved, goal.currency || currency)} guardados de ${formatCurrency(target, goal.currency || currency)}; faltam ${formatCurrency(remaining, goal.currency || currency)}.`;
+      });
+      return {
+        text: lines.length === 1 ? lines[0] : `Progresso das suas metas:\n${lines.join('\n')}`,
+        isInternalCalculation: true,
+      };
+    }
+
     // QUERY SAVINGS CHALLENGE PROGRESS.
     if (intent === 'query_weekly_challenge') {
       const challengeName = normalize(d.challengeName || d.name || '');
