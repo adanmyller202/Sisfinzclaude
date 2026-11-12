@@ -394,7 +394,7 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
           date: effDate,
           isCompleted,
         });
-      };
+      }
     }
   }
 
