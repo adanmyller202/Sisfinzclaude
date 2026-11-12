@@ -2184,11 +2184,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: 'As porcentagens da divisão precisam somar 100%. Como você quer dividir?', isInternalCalculation: true };
       }
       const dueDay = Number(d.dueDay || bill.dueDay);
+      if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return { text: 'Qual será o novo dia de vencimento?', isInternalCalculation: true };
+      const updatedAmount = Number(d.newAmount ?? d.amount ?? bill.amount);
+      if (!Number.isFinite(updatedAmount) || updatedAmount <= 0) return { text: 'Qual é o novo valor total da conta compartilhada?', isInternalCalculation: true };
       const dueDate = d.dueDate || getEffectiveDateForMonth(d.targetMonth || bill.month, dueDay);
       try {
         await handlers.onUpdateSharedBill(bill.id, {
           title: String(d.newName || d.title || bill.title),
-          amount: Number(d.newAmount || d.amount || bill.amount),
+          amount: updatedAmount,
           dueDate, dueDay,
           category: getMentionedCategory(ctx, question, 'bill') || d.category || bill.category || 'Outros',
           ...(d.notes !== undefined ? { notes: d.notes } : { notes: bill.notes }),
