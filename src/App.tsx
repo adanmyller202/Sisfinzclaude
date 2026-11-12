@@ -1052,6 +1052,7 @@ export default function App() {
         forecastBalance={forecastBalance}
         accounts={accounts}
         sharedBills={sharedAccounts.sharedBills}
+        sharedPartners={sharedAccounts.activePartners}
         weeklyChallenges={fiftyTwoChallenge.challenges}
         categories={allDisplayCategories}
         myUserId={user?.uid}
@@ -1117,6 +1118,9 @@ export default function App() {
         onUpdateAccount={(accountId, params) => updateAccount(accountId, params)}
         onDeleteAccount={(accountId) => deleteAccount(accountId)}
         onToggleAccountActive={(accountId) => toggleAccountActive(accountId)}
+        onCreateSharedBill={(params) => sharedAccounts.createSharedBill(params)}
+        onUpdateSharedBill={(billId, updates) => sharedAccounts.updateSharedBill(billId, updates)}
+        onDeleteSharedBill={(billId) => sharedAccounts.deleteSharedBill(billId, true)}
       />
 
       {/* Deposit Modal */}
