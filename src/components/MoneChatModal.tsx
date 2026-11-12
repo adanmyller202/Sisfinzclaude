@@ -771,7 +771,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       };
       const financialContext = [
         'Idioma obrigatório da Mone: português brasileiro (pt-BR). Moeda ativa do SisFinz: ' + currency + '. Códigos de moeda são obrigatórios: ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Nunca deduza a moeda pelo cifrão genérico.',
-        'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
+        'Não use totais numéricos consolidados entre moedas; para saldo e previsão, consulte sisfinz_action e separe cada moeda.',
         'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency, currencyName: currencyNames[a.currency] || 'moeda não identificada', currencySymbol: currencySymbols[a.currency] || '' }))).slice(0, 4500) + '.',
         'Faturas: ' + JSON.stringify(bills.map((b) => {
           const linkedAccount = accounts.find((account) => account.id === b.accountId)
