@@ -476,7 +476,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   };
 
   const startLiveVoice = async () => {
-    if (isLiveConnected || liveStatus === 'connecting' || isLoading) return;
+    if (!memoryReady || isLiveConnected || liveStatus === 'connecting' || isLoading) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setMessages((prev) => [...prev, { id: 'live_unsupported_' + Date.now(), sender: 'mone', text: 'Este navegador não oferece acesso ao microfone. Você pode conversar por texto.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
       return;
@@ -885,7 +885,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 <motion.button
                   type="button"
                   onClick={isLiveConnected ? stopRecording : startLiveVoice}
-                  disabled={isLoading || liveStatus === 'connecting'}
+                  disabled={isLoading || liveStatus === 'connecting' || !memoryReady}
                   whileTap={{ scale: 0.94 }}
                   className={`flex h-24 w-24 items-center justify-center rounded-full border-[6px] border-white shadow-[0_14px_40px_rgba(16,185,129,0.25)] transition-all disabled:opacity-50 ${isRecording ? 'bg-gradient-to-br from-rose-400 to-rose-600 text-white' : 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'}`}
                   aria-label={isLiveConnected ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
