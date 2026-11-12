@@ -454,6 +454,43 @@ app.post('/api/mone', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
+    // Fast conversational lane: casual/general messages do not need the full financial
+    // context or the structured-action prompt. This avoids turning greetings into commands
+    // and reduces latency and token usage for ordinary conversation.
+    const financialIntentPattern = /\\b(saldo|contas?|faturas?|despesas?|gastos?|receitas?|sal[aá]rio|renda|dinheiro|economiz|poup|cofrinho|meta financeira|or[cç]amento|pagar|paguei|pagamento|receber|recebi|invest|cart[aã]o|banco|transfer[eê]ncia|d[oó]lar|pesos?|reais|cot[aã]ç[aã]o|parcelas?|vencimento|boleto|comprar|compra|consigo|cabe no|moto|carro|financiar|d[ií]vida)\\b/i;
+    const isGeneralConversation = typeof message === 'string' && message.trim().length > 0 &&
+      !audio && !financialIntentPattern.test(message);
+
+    if (isGeneralConversation) {
+      const recentHistory = Array.isArray(history)
+        ? history.slice(-8).map((item: any) => ({
+            role: item?.sender === 'mone' ? 'Mone' : 'Usuário',
+            text: typeof item?.text === 'string' ? item.text.slice(0, 1200) : '',
+          })).filter((item: any) => item.text)
+        : [];
+      const conversationPrompt = `Você é Mone, uma assistente de IA natural, inteligente, calorosa e útil, integrada ao aplicativo SisFinz.
+Converse como uma IA geral moderna: responda sobre qualquer assunto, cumprimente naturalmente, explique, raciocine, faça perguntas pertinentes e mantenha o fio da conversa.
+Não transforme mensagens casuais em tarefas financeiras. Não ofereça cadastrar despesas ou receitas sem que isso tenha sido pedido.
+Responda no idioma da mensagem do usuário. Seja direta quando a pergunta for simples e detalhada quando o assunto exigir. Nunca afirme que fez alterações no SisFinz neste modo.
+Histórico recente:
+${recentHistory.map((item: any) => item.role + ': ' + item.text).join('\\n') || 'Sem histórico.'}
+Mensagem atual do usuário: ${message.trim()}`;
+
+      const fastResponse = await ai.models.generateContent({
+        model: 'gemini-flash-latest',
+        contents: conversationPrompt,
+        config: {
+          maxOutputTokens: 500,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      });
+      const naturalText = fastResponse.text?.trim();
+      if (naturalText) {
+        res.json({ intent: 'conversation', directResponse: naturalText });
+        return;
+      }
+    }
+
     const {
       currentBalance = 0,
       forecastBalance = currentBalance,
