@@ -748,7 +748,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               });
               liveAudioSourcesRef.current = [];
               livePlaybackTimeRef.current = liveOutputContextRef.current?.currentTime || 0;
-              setLiveStatus('listening');
+              // An interruption event must not reopen the microphone; only turnComplete does that.
+              setLiveStatus('processing');
             }
             if (content?.turnComplete) {
               liveInputMutedRef.current = true;
