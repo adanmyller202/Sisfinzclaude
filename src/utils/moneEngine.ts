@@ -1982,14 +1982,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // ACCOUNTS: query and manage the user's real SisFinz wallets.
     if (intent === 'query_accounts') {
-      const accountList = (ctx.accounts || []).filter((account) => account.isActive !== false);
-      if (!accountList.length) return { text: 'Não há contas ativas cadastradas no SisFinz.', isInternalCalculation: true };
+      const accountList = ctx.accounts || [];
+      if (!accountList.length) return { text: 'Não há contas cadastradas no SisFinz.', isInternalCalculation: true };
       const totals = new Map<CurrencyCode, number>();
-      for (const account of accountList) {
+      for (const account of accountList.filter((item) => item.isActive !== false)) {
         totals.set(account.currency, (totals.get(account.currency) || 0) + (Number(account.currentBalance) || 0));
       }
       const lines = accountList.map((account) =>
-        `• ${account.name}: ${formatCurrencySpoken(Number(account.currentBalance) || 0, account.currency)}`
+        `• ${account.name}: ${formatCurrencySpoken(Number(account.currentBalance) || 0, account.currency)} (${account.isActive === false ? 'inativa' : 'ativa'})`
       );
       return { text: `Suas contas ativas somam ${formatCurrencyBreakdown(totals)}.\n${lines.join('\n')}`, isInternalCalculation: true };
     }
