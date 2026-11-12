@@ -186,6 +186,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       setMemoryReady(false);
       setMemoryOwnerUid(user?.uid || null);
       setLastActionItem(null);
+      lastActionItemRef.current = null;
       setMessages([{
         id: 'welcome_' + Date.now(),
         sender: 'mone',
@@ -205,6 +206,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         const savedAction = memoryData.lastActionItem;
         if (savedAction && ['expense', 'bill', 'income'].includes(savedAction.type) && typeof savedAction.id === 'string' && typeof savedAction.name === 'string') {
           setLastActionItem(savedAction as MoneActionItem);
+          lastActionItemRef.current = savedAction as MoneActionItem;
         }
         if (Array.isArray(saved)) {
           const restored = saved
@@ -271,6 +273,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const pendingVoiceActionRef = useRef<string | null>(null);
   const pendingTextActionRef = useRef<string | null>(null);
+  const lastActionItemRef = useRef<MoneActionItem | null>(lastActionItem);
+  lastActionItemRef.current = lastActionItem;
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -380,6 +384,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onUndoChallengeWeek,
     },
   };
+  const moneContextRef = useRef<MoneContext>(moneContext);
+  moneContextRef.current = moneContext;
 
   const handleSendMessage = async (textToSend?: string, audio?: { data: string; mimeType: string }) => {
     const query = (textToSend || inputValue).trim();
@@ -463,6 +469,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
       if (response.createdItem) {
         setLastActionItem(response.createdItem);
+        lastActionItemRef.current = response.createdItem;
       }
 
       const moneMsg: ChatMessage = {
@@ -658,8 +665,14 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   };
                 }
                 try {
-                  const result = await askMone(actionRequest, moneContext);
-                  if (result.createdItem) setLastActionItem(result.createdItem);
+                  const result = await askMone(actionRequest, {
+                    ...moneContextRef.current,
+                    lastActionItem: lastActionItemRef.current,
+                  });
+                  if (result.createdItem) {
+                    setLastActionItem(result.createdItem);
+                    lastActionItemRef.current = result.createdItem;
+                  }
                   return {
                     id: call.id,
                     name: call.name,
@@ -834,6 +847,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       },
     ]);
     setLastActionItem(null);
+    lastActionItemRef.current = null;
   };
 
   const quickSuggestions = [
