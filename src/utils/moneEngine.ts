@@ -18,6 +18,8 @@ import {
   MoneStyle,
   SharedBill,
   FiftyTwoWeekChallenge,
+  SavingGoal,
+  SavingTransaction,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -80,6 +82,14 @@ export interface MoneActionHandlers {
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
   onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
   onNavigateToSection?: (section: MoneNavigationSection) => Promise<void> | void;
+  onCreateSavingGoal?: (params: {
+    name: string; hasTarget?: boolean; targetAmount?: number; currency?: CurrencyCode;
+    deadline?: string; icon?: string; notes?: string;
+  }) => Promise<any> | void;
+  onUpdateSavingGoal?: (savingId: string, updates: Partial<SavingGoal>) => Promise<any> | void;
+  onDeleteSavingGoal?: (savingId: string) => Promise<any> | void;
+  onTransferToSaving?: (savingId: string, amount: number, exchangeRate?: number, date?: string, note?: string) => Promise<any> | void;
+  onWithdrawFromSaving?: (savingId: string, amount: number, exchangeRate?: number, date?: string, note?: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -94,6 +104,8 @@ export interface MoneContext {
   expenses: ExpenseItem[];
   statusRecords: MonthlyStatusRecord[];
   goals: ChallengeGoal[];
+  savings?: SavingGoal[];
+  savingTransactions?: SavingTransaction[];
   currency: CurrencyCode;
   language: LanguageCode;
   lastActionItem?: MoneActionItem | null;
@@ -789,6 +801,16 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   if (asksIncomes) {
     const incomesResult = await executeMoneIntent({ intent: 'query_incomes', data: { targetMonth } }, context);
     return incomesResult || { text: 'Não consegui consultar os ingressos desse período agora.', isInternalCalculation: true };
+  }
+
+  const asksSavings =
+    /\b(?:cofrinho|cofrinhos|reserva|reservas|poupanca|poupancas|dinheiro\s+guardado|valor\s+guardado)\b/i.test(norm) &&
+    /\b(?:quanto|total|tenho|guardado|poupado|saldo|progresso|historico|hist[oó]rico|falta)\b/i.test(norm);
+  if (asksSavings) {
+    const savingsResult = await executeMoneIntent({
+      intent: /\b(?:historico|hist[oó]rico|movimentacoes|transacoes)\b/i.test(norm) ? 'query_saving_transactions' : 'query_savings',
+    }, context);
+    return savingsResult || { text: 'Não consegui consultar seus cofrinhos agora.', isInternalCalculation: true };
   }
 
   // 1. Math queries (e.g. "Quanto é 50.000 + 50.000?" -> "100.000.")
@@ -1949,6 +1971,113 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // SAVINGS JARS: read actual savings goals and transaction history.
+    if (intent === 'query_savings' || intent === 'query_saving_transactions') {
+      const savingGoals = ctx.savings || [];
+      if (intent === 'query_saving_transactions') {
+        const history = (ctx.savingTransactions || []).slice(0, 12);
+        if (!history.length) return { text: 'Ainda não há movimentações registradas nos seus cofrinhos.', isInternalCalculation: true };
+        const lines = history.map((tx) =>
+          `• ${tx.type === 'deposit' ? 'Aporte' : 'Resgate'} — ${tx.savingName}: ${formatCurrencySpoken(tx.amount, tx.currency || currency)} em ${tx.date}`
+        );
+        return { text: `Últimas movimentações dos seus cofrinhos:\n${lines.join('\n')}`, isInternalCalculation: true };
+      }
+      if (!savingGoals.length) return { text: 'Você ainda não tem cofrinhos cadastrados no SisFinz.', isInternalCalculation: true };
+      const totals = new Map<CurrencyCode, number>();
+      for (const goal of savingGoals) {
+        const code = goal.currency || currency;
+        totals.set(code, (totals.get(code) || 0) + (Number(goal.currentAmount) || 0));
+      }
+      const totalSummary = formatCurrencyBreakdown(totals, 'nenhum valor guardado');
+      const lines = savingGoals.map((goal) => {
+        const code = goal.currency || currency;
+        const saved = Number(goal.currentAmount) || 0;
+        if (goal.hasTarget === false || !goal.targetAmount) {
+          return `• ${goal.name}: ${formatCurrencySpoken(saved, code)} guardados, sem meta definida.`;
+        }
+        const remaining = Math.max(0, goal.targetAmount - saved);
+        return `• ${goal.name}: ${formatCurrencySpoken(saved, code)} de ${formatCurrencySpoken(goal.targetAmount, code)}; faltam ${formatCurrencySpoken(remaining, code)}.`;
+      });
+      return { text: `Você tem ${totalSummary} guardados nos seus cofrinhos.\n${lines.join('\n')}`, isInternalCalculation: true };
+    }
+
+    // CREATE A SAVINGS JAR.
+    if (intent === 'create_saving_goal') {
+      if (!handlers?.onCreateSavingGoal) return { text: 'A criação de cofrinhos não está disponível neste momento.', isInternalCalculation: true };
+      const name = String(d.name || d.savingName || '').trim();
+      if (!name) return { text: 'Como você quer chamar esse cofrinho?', isInternalCalculation: true };
+      const hasTarget = d.hasTarget !== false && d.withoutTarget !== true;
+      const targetAmount = Number(d.targetAmount) || 0;
+      if (hasTarget && targetAmount <= 0) return { text: `Qual é o valor da meta do cofrinho "${name}"? Ou prefere criar sem meta?`, isInternalCalculation: true };
+      const code = (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency) ? d.currency : currency) as CurrencyCode;
+      try {
+        await handlers.onCreateSavingGoal({
+          name, hasTarget, ...(hasTarget ? { targetAmount } : {}),
+          currency: code, ...(d.deadline ? { deadline: d.deadline } : {}),
+          icon: d.icon || '🎯', ...(d.notes ? { notes: d.notes } : {}),
+        });
+        return { text: `Pronto. Criei o cofrinho "${name}" ${hasTarget ? `com meta de ${formatCurrencySpoken(targetAmount, code)}` : 'sem meta definida'}.`, isInternalCalculation: true, actionExecuted: 'create_saving_goal' };
+      } catch (err: any) {
+        return { text: `Não consegui criar o cofrinho: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // DEPOSIT INTO OR WITHDRAW FROM A SAVINGS JAR.
+    if (intent === 'deposit_to_saving' || intent === 'withdraw_from_saving') {
+      const savingName = normalize(d.savingName || d.name || '');
+      const matches = (ctx.savings || []).filter((goal) =>
+        d.savingId ? goal.id === d.savingId : Boolean(savingName && normalize(goal.name).includes(savingName))
+      );
+      if (matches.length !== 1) {
+        return {
+          text: matches.length > 1
+            ? 'Encontrei mais de um cofrinho com esse nome. Qual deles você quer usar?'
+            : 'Em qual cofrinho você quer fazer essa movimentação?',
+          isInternalCalculation: true,
+        };
+      }
+      const goal = matches[0];
+      const amount = Number(d.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return { text: 'Qual valor você quer movimentar?', isInternalCalculation: true };
+      const code = goal.currency || currency;
+      const exchangeRate = code === 'ARS' ? 1 : Number(d.exchangeRate);
+      if (code !== 'ARS' && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
+        return { text: `Qual cotação em pesos argentinos por ${code === 'USD' ? 'dólar' : code === 'BRL' ? 'real' : 'euro'} devo usar?`, isInternalCalculation: true };
+      }
+      const handler = intent === 'deposit_to_saving' ? handlers?.onTransferToSaving : handlers?.onWithdrawFromSaving;
+      if (!handler) return { text: 'Essa movimentação de cofrinho não está disponível neste momento.', isInternalCalculation: true };
+      try {
+        await handler(goal.id, amount, exchangeRate, d.date || todayStr, d.note);
+        return {
+          text: intent === 'deposit_to_saving'
+            ? `Aporte de ${formatCurrencySpoken(amount, code)} realizado no cofrinho "${goal.name}".`
+            : `Resgate de ${formatCurrencySpoken(amount, code)} realizado do cofrinho "${goal.name}".`,
+          isInternalCalculation: true,
+          actionExecuted: intent,
+        };
+      } catch (err: any) {
+        return { text: `Não consegui concluir a movimentação: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    // DELETE A SAVINGS JAR.
+    if (intent === 'delete_saving_goal') {
+      if (!handlers?.onDeleteSavingGoal) return { text: 'A exclusão de cofrinhos não está disponível.', isInternalCalculation: true };
+      const savingName = normalize(d.savingName || d.name || '');
+      const matches = (ctx.savings || []).filter((goal) =>
+        d.savingId ? goal.id === d.savingId : Boolean(savingName && normalize(goal.name).includes(savingName))
+      );
+      if (matches.length !== 1) {
+        return { text: matches.length > 1 ? 'Encontrei mais de um cofrinho com esse nome. Qual você quer excluir?' : 'Qual cofrinho você quer excluir?', isInternalCalculation: true };
+      }
+      try {
+        await handlers.onDeleteSavingGoal(matches[0].id);
+        return { text: `O cofrinho "${matches[0].name}" foi excluído.`, isInternalCalculation: true, actionExecuted: 'delete_saving_goal' };
+      } catch (err: any) {
+        return { text: `Não consegui excluir o cofrinho: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // QUERY SAVINGS GOAL PROGRESS.
     if (intent === 'query_goal_progress') {
       const goalName = normalize(d.goalName || d.name || '');
@@ -2430,6 +2559,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           incomes,
           expenses,
           goals,
+          savings: context.savings || [],
+          savingTransactions: context.savingTransactions || [],
           lastActionItem,
         },
       }),
@@ -2492,6 +2623,7 @@ REGRAS:
 - Fatura/conta: intent "add_bill", com name, amount, accountName, dueDay, targetMonth e isRecurring. Sem repetição: isRecurring=false. Repetição mensal: isRecurring=true. Se faltar valor ou vencimento essencial, pergunte antes.
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
+- Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
 - Marcar fatura como paga: "mark_bill_paid". Marcar receita recebida: "mark_income_received".
 - Para correções, edições e exclusões, identifique exatamente o registro. Se houver mais de um possível, pergunte qual. Nunca exclua por suposição.
@@ -2499,7 +2631,7 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string,
