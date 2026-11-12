@@ -2855,6 +2855,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           forecastBalance: context.forecastBalance ?? currentBalance,
           accounts: context.accounts || [],
           sharedBills: context.sharedBills || [],
+          sharedPartners: context.sharedPartners || [],
           weeklyChallenges: context.weeklyChallenges || [],
           statusRecords: context.statusRecords || [],
           currency,
@@ -2904,6 +2905,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         recurrence: bill.recurrence,
       }));
       const categoriesSummary = context.categories || [];
+      const sharedPartnersSummary = context.sharedPartners || [];
+      const sharedBillsSummary = (context.sharedBills || []).map((bill) => ({
+        id: bill.id, title: bill.title, amount: bill.amount, dueDate: bill.dueDate,
+        partnerId: bill.members.find((memberId) => memberId !== context.myUserId),
+        myPercentage: bill.percentages?.[context.myUserId || ''],
+        myShare: bill.shares?.[context.myUserId || '']?.amount,
+        myShareStatus: bill.shares?.[context.myUserId || '']?.status,
+      }));
       const savingsSummary = (context.savings || []).map((saving) => ({
         id: saving.id, name: saving.name, currentAmount: saving.currentAmount,
         targetAmount: saving.targetAmount, hasTarget: saving.hasTarget, currency: saving.currency || currency,
@@ -2922,6 +2931,8 @@ Data: ${todayStr}; mês atual: ${currentMonthStr}; moeda padrão: ${currency}; i
 Use somente os saldos individuais por conta e moeda listados abaixo; nunca some moedas diferentes. Para previsões, calcule por moeda com os registros do mês solicitado.
 Contas ativas: ${JSON.stringify(accountSummary)}
 Categorias disponíveis: ${JSON.stringify(categoriesSummary)}
+Pessoas conectadas: ${JSON.stringify(sharedPartnersSummary)}
+Contas compartilhadas: ${JSON.stringify(sharedBillsSummary)}
 Cofrinhos: ${JSON.stringify(savingsSummary)}
 Movimentações dos cofrinhos: ${JSON.stringify(savingTransactionsSummary)}
 Contas/faturas: ${JSON.stringify(billsSummary)}
@@ -2961,7 +2972,9 @@ Retorne somente JSON válido com a estrutura:
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string, "accountId": string,
     "savingName": string, "savingId": string, "categoryName": string, "categoryId": string,
-    "newName": string, "scope": string, "type": string, "currency": string, "initialBalance": number,
+    "partnerName": string, "partnerId": string, "myPercentage": number, "partnerPercentage": number,
+    "dueDate": string, "recurrenceMonthsCount": number, "newName": string, "scope": string,
+    "type": string, "currency": string, "initialBalance": number,
     "currentBalance": number, "isActive": boolean, "hasTarget": boolean, "withoutTarget": boolean,
     "targetAmount": number, "exchangeRate": number, "date": string, "note": string, "notes": string,
     "dueDay": number, "expectedDay": number, "isRecurring": boolean, "isReceived": boolean,
