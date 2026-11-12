@@ -91,6 +91,10 @@ interface MoneChatModalProps {
   onDeleteBill?: (billId: string) => Promise<any> | void;
   onToggleBillPaid?: (billId: string, month: string, isPaid: boolean) => Promise<any> | void;
   onAddIncome?: (incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<any> | void;
+  onAddIncomeAsReceived?: (
+    incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+    receivedMonth: string
+  ) => Promise<any> | void;
   onUpdateIncome?: (incomeId: string, partial: Partial<IncomeItem>) => Promise<any> | void;
   onDeleteIncome?: (incomeId: string) => Promise<any> | void;
   onToggleIncomeReceived?: (incomeId: string, month: string, isReceived: boolean) => Promise<any> | void;
@@ -144,6 +148,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   onDeleteBill,
   onToggleBillPaid,
   onAddIncome,
+  onAddIncomeAsReceived,
   onUpdateIncome,
   onDeleteIncome,
   onToggleIncomeReceived,
@@ -384,6 +389,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       onDeleteBill,
       onToggleBillPaid,
       onAddIncome,
+      onAddIncomeAsReceived,
       onUpdateIncome,
       onDeleteIncome,
       onToggleIncomeReceived,
