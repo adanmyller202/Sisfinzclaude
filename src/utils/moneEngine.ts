@@ -68,6 +68,7 @@ export interface MoneActionHandlers {
   }) => Promise<any> | void;
   onToggleMySharePaid?: (billId: string, isPaid: boolean, targetMonth?: string) => Promise<any> | void;
   onCompleteChallengeWeek?: (challengeId: string, weekNumber: number, accountId: string) => Promise<any> | void;
+  onUndoChallengeWeek?: (challengeId: string, weekNumber: number, returnAccountId: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -799,6 +800,58 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       } catch (err: any) {
         return {
           text: `Não consegui concluir a semana do desafio: ${err?.message || 'falha ao salvar'}.`,
+          isInternalCalculation: true,
+        };
+      }
+    }
+
+    // Undo a weekly challenge deposit by returning the money to a selected account.
+    if (intent === 'undo_challenge_week') {
+      if (!handlers?.onUndoChallengeWeek) {
+        return { text: 'A reversão do depósito semanal não está disponível neste momento.', isInternalCalculation: true };
+      }
+      const challenges = ctx.weeklyChallenges || [];
+      const challengeName = normalize(d.challengeName || d.name || '');
+      const challengeMatches = d.challengeId
+        ? challenges.filter((challenge) => challenge.id === d.challengeId)
+        : challenges.filter((challenge) => challengeName && normalize(challenge.title).includes(challengeName));
+      if (challengeMatches.length !== 1) {
+        return {
+          text: challengeMatches.length > 1
+            ? 'Encontrei mais de um desafio semanal. Qual deles você quer corrigir?'
+            : 'Qual desafio semanal você quer corrigir? Diga o nome do plano.',
+          isInternalCalculation: true,
+        };
+      }
+      const challenge = challengeMatches[0];
+      const weekNumber = Number(d.weekNumber);
+      if (!Number.isInteger(weekNumber) || !challenge.completedWeeks.includes(weekNumber)) {
+        return { text: `A semana ${d.weekNumber || ''} não aparece como concluída no desafio "${challenge.title}". Qual semana você deseja desfazer?`, isInternalCalculation: true };
+      }
+      const accountName = normalize(d.accountName || '');
+      const accountMatches = (ctx.accounts || []).filter((account) =>
+        account.isActive !== false &&
+        (d.accountId ? account.id === d.accountId : Boolean(accountName && normalize(account.name).includes(accountName))) &&
+        (!challenge.currency || account.currency === challenge.currency)
+      );
+      if (accountMatches.length !== 1) {
+        return {
+          text: accountMatches.length > 1
+            ? 'Encontrei mais de uma conta compatível. Em qual conta devo devolver o dinheiro?'
+            : 'Em qual conta devo devolver o dinheiro dessa semana? Diga o nome da conta.',
+          isInternalCalculation: true,
+        };
+      }
+      try {
+        await handlers.onUndoChallengeWeek(challenge.id, weekNumber, accountMatches[0].id);
+        return {
+          text: parsed.directResponse || `Desfiz a semana ${weekNumber} do desafio "${challenge.title}" e devolvi o valor para ${accountMatches[0].name}.`,
+          isInternalCalculation: true,
+          actionExecuted: 'undo_challenge_week',
+        };
+      } catch (err: any) {
+        return {
+          text: `Não consegui desfazer o depósito semanal: ${err?.message || 'falha ao salvar'}.`,
           isInternalCalculation: true,
         };
       }
