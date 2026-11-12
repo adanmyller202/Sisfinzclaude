@@ -1926,7 +1926,18 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const expenseTotals = new Map<CurrencyCode, number>();
       const billTotals = new Map<CurrencyCode, number>();
       for (const item of selectedExpenses) {
-        expenseTotals.set(item.currency, (expenseTotals.get(item.currency) || 0) + item.amount);
+        const distributions = (item as any).accountDistributions as { accountId: string; amount: number }[] | undefined;
+        if (distributions?.length) {
+          for (const distribution of distributions) {
+            const linkedAccount = ctx.accounts?.find((account) => account.id === distribution.accountId);
+            const code = linkedAccount?.currency || currency;
+            expenseTotals.set(code, (expenseTotals.get(code) || 0) + distribution.amount);
+          }
+        } else {
+          const linkedAccount = ctx.accounts?.find((account) => account.id === (item as any).accountId);
+          const code = linkedAccount?.currency || currency;
+          expenseTotals.set(code, (expenseTotals.get(code) || 0) + item.amount);
+        }
       }
       for (const item of selectedBills) {
         billTotals.set(item.currency, (billTotals.get(item.currency) || 0) + item.amount);
