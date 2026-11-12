@@ -541,16 +541,22 @@ Mensagem atual do usuário: ${message.trim()}`;
     const todayStr = today.toISOString().split('T')[0];
     const currentMonthStr = todayStr.substring(0, 7);
 
-    const billsSummary = bills.map((b: any) => ({
-      id: b.id,
-      name: b.name,
-      amount: b.amount,
-      dueDay: b.dueDay,
-      dueDate: b.dueDate,
-      category: b.category,
-      recurrence: b.recurrence,
-      recurrenceMonthsCount: b.recurrenceMonthsCount,
-    }));
+    const billsSummary = bills.map((b: any) => {
+      const linkedAccount = (accounts || []).find((account: any) => account.id === b.accountId);
+      return {
+        id: b.id,
+        name: b.name,
+        amount: b.amount,
+        currency: linkedAccount?.currency || currency,
+        accountId: b.accountId || null,
+        accountName: linkedAccount?.name || null,
+        dueDay: b.dueDay,
+        dueDate: b.dueDate,
+        category: b.category,
+        recurrence: b.recurrence,
+        recurrenceMonthsCount: b.recurrenceMonthsCount,
+      };
+    });
 
     const incomesSummary = incomes.map((i: any) => ({
       id: i.id,
@@ -654,6 +660,7 @@ Contexto financeiro do usuário:
 - Situação de pagamentos e recebimentos (registros recentes): ${JSON.stringify(completionSummary)}
 - Último item manipulado nesta conversa: ${lastActionItem ? JSON.stringify(lastActionItem) : 'Nenhum'}
 - Contas cadastradas: ${JSON.stringify(billsSummary)}
+- ATENÇÃO: cada conta/fatura usa a moeda indicada no próprio campo currency, derivada da conta vinculada. Nunca substitua essa moeda pela moeda ativa do aplicativo. Exemplo: se uma conta tem currency "ARS", informe pesos argentinos, mesmo que a moeda ativa seja USD. Se tiver currency "USD", informe dólares. Nunca adivinhe nem converta valores.
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
@@ -664,6 +671,7 @@ Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
 REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
+0. MOEDA É DADO OBRIGATÓRIO: ao consultar contas, use exclusivamente o campo currency de cada registro em Contas cadastradas. O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca transforme ARS em USD, USD em ARS, BRL em ARS ou qualquer outra conversão sem pedido explícito e cotação fornecida.
 1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
 2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
 3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
