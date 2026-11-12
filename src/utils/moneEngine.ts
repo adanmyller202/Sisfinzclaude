@@ -90,6 +90,9 @@ export interface MoneActionHandlers {
   onDeleteSavingGoal?: (savingId: string) => Promise<any> | void;
   onTransferToSaving?: (savingId: string, amount: number, exchangeRate?: number, date?: string, note?: string) => Promise<any> | void;
   onWithdrawFromSaving?: (savingId: string, amount: number, exchangeRate?: number, date?: string, note?: string) => Promise<any> | void;
+  onAddCategory?: (name: string, scope: 'all' | 'bill' | 'income' | 'expense') => Promise<any> | void;
+  onUpdateCategory?: (categoryId: string, updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string }) => Promise<any> | void;
+  onDeleteCategory?: (categoryId: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -106,6 +109,7 @@ export interface MoneContext {
   goals: ChallengeGoal[];
   savings?: SavingGoal[];
   savingTransactions?: SavingTransaction[];
+  categories?: Array<{ id: string; name: string; scope: string; isPredefined?: boolean }>;
   currency: CurrencyCode;
   language: LanguageCode;
   lastActionItem?: MoneActionItem | null;
@@ -1971,6 +1975,54 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // CUSTOM CATEGORIES: read and manage the categories configured in this SisFinz account.
+    if (intent === 'query_categories') {
+      const categories = ctx.categories || [];
+      if (!categories.length) return { text: 'Não encontrei categorias cadastradas no SisFinz.', isInternalCalculation: true };
+      const lines = categories.map((category) => `• ${category.name} (${category.scope})`);
+      return { text: `Estas são as categorias disponíveis no seu SisFinz:\n${lines.join('\n')}`, isInternalCalculation: true };
+    }
+
+    if (intent === 'create_category') {
+      if (!handlers?.onAddCategory) return { text: 'A criação de categorias não está disponível agora.', isInternalCalculation: true };
+      const name = String(d.name || d.categoryName || '').trim();
+      if (!name) return { text: 'Qual nome você quer dar à nova categoria?', isInternalCalculation: true };
+      const allowedScopes = ['all', 'bill', 'income', 'expense'];
+      const scope = allowedScopes.includes(d.scope) ? d.scope : 'all';
+      try {
+        await handlers.onAddCategory(name, scope);
+        return { text: `Criei a categoria "${name}" no SisFinz.`, isInternalCalculation: true, actionExecuted: 'create_category' };
+      } catch (err: any) {
+        return { text: `Não consegui criar a categoria: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    if (intent === 'update_category' || intent === 'delete_category') {
+      const categoryName = normalize(d.categoryName || d.name || '');
+      const matches = (ctx.categories || []).filter((category) =>
+        d.categoryId ? category.id === d.categoryId : Boolean(categoryName && normalize(category.name).includes(categoryName))
+      );
+      if (matches.length !== 1) {
+        return { text: matches.length > 1 ? 'Encontrei mais de uma categoria com esse nome. Qual delas?' : 'Qual categoria você quer alterar?', isInternalCalculation: true };
+      }
+      try {
+        if (intent === 'delete_category') {
+          if (!handlers?.onDeleteCategory) return { text: 'A exclusão de categorias não está disponível.', isInternalCalculation: true };
+          await handlers.onDeleteCategory(matches[0].id);
+          return { text: `A categoria "${matches[0].name}" foi excluída das opções do SisFinz.`, isInternalCalculation: true, actionExecuted: 'delete_category' };
+        }
+        if (!handlers?.onUpdateCategory) return { text: 'A edição de categorias não está disponível.', isInternalCalculation: true };
+        const updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string } = {};
+        if (typeof d.newName === 'string' && d.newName.trim()) updates.name = d.newName.trim();
+        if (['all', 'bill', 'income', 'expense'].includes(d.scope)) updates.scope = d.scope;
+        if (!Object.keys(updates).length) return { text: 'O que você quer mudar nessa categoria: nome ou tipo?', isInternalCalculation: true };
+        await handlers.onUpdateCategory(matches[0].id, updates);
+        return { text: `Atualizei a categoria "${matches[0].name}".`, isInternalCalculation: true, actionExecuted: 'update_category' };
+      } catch (err: any) {
+        return { text: `Não consegui alterar a categoria: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // SAVINGS JARS: read actual savings goals and transaction history.
     if (intent === 'query_savings' || intent === 'query_saving_transactions') {
       const savingGoals = ctx.savings || [];
@@ -2593,6 +2645,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           goals,
           savings: context.savings || [],
           savingTransactions: context.savingTransactions || [],
+          categories: context.categories || [],
           lastActionItem,
         },
       }),
@@ -2628,6 +2681,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         id: bill.id, name: bill.name, amount: bill.amount, dueDay: bill.dueDay,
         accountId: bill.accountId, recurrence: bill.recurrence,
       }));
+      const categoriesSummary = context.categories || [];
       const incomesSummary = incomes.map((income) => ({
         id: income.id, name: income.name, amount: income.amount,
         accountId: income.accountId, recurrence: income.recurrence,
@@ -2638,6 +2692,7 @@ Você não é um chatbot financeiro limitado: conversa sobre qualquer assunto e,
 Data: ${todayStr}; mês atual: ${currentMonthStr}; moeda padrão: ${currency}; idioma: ${language}.
 Saldo de contexto: ${currentBalance}; previsão informada pelo relatório: ${context.forecastBalance ?? 'não disponível'}.
 Contas ativas: ${JSON.stringify(accountSummary)}
+Categorias disponíveis: ${JSON.stringify(categoriesSummary)}
 Contas/faturas: ${JSON.stringify(billsSummary)}
 Receitas: ${JSON.stringify(incomesSummary)}
 Despesas: ${JSON.stringify(expenses.slice(-60))}
@@ -2655,6 +2710,7 @@ REGRAS:
 - Fatura/conta: intent "add_bill", com name, amount, accountName, dueDay, targetMonth e isRecurring. Sem repetição: isRecurring=false. Repetição mensal: isRecurring=true. Se faltar valor ou vencimento essencial, pergunte antes.
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
+- Categorias: consulte com "query_categories"; crie com "create_category"; edite com "update_category"; exclua com "delete_category". Use o nome/ID exato e o escopo bill, income, expense ou all.
 - Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; edite com "update_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
 - Marcar fatura como paga: "mark_bill_paid". Marcar receita recebida: "mark_income_received".
@@ -2663,7 +2719,7 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_categories" | "create_category" | "update_category" | "delete_category" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string,
