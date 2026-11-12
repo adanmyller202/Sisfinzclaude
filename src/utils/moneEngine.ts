@@ -904,6 +904,38 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     return savingsResult || { text: 'Não consegui consultar seus cofrinhos agora.', isInternalCalculation: true };
   }
 
+  // Directly execute explicit bill-value edits from the user's wording.
+  // For "mude o seguro residencial de 5 mil para 20 mil", use the NEW (last) amount,
+  // never the old amount, and do not send the request back to the LLM for repeated confirmation.
+  const requestsBillValueChange =
+    /\\b(?:mudar|mude|muda|alterar|altere|altera|atualizar|atualize|trocar|troque|ajustar|ajuste)\\b/i.test(norm) &&
+    /\\b(?:para|por|em)\\s+\\d/i.test(norm) &&
+    /\\b(?:seguro|residencial|aluguel|internet|luz|agua|g[aá]s|academia|plano|fatura|conta|valor)\\b/i.test(norm);
+  if (requestsBillValueChange && handlers?.onUpdateBill) {
+    const lastPara = Math.max(norm.lastIndexOf(' para '), norm.lastIndexOf(' por '), norm.lastIndexOf(' em '));
+    const newAmount = lastPara >= 0 ? parseAmountFromText(question.slice(lastPara + 4)) : null;
+    if (newAmount !== null && newAmount > 0) {
+      const billSearch = findMatchingBill(bills, undefined, undefined, question);
+      if (billSearch.ambiguous?.length) {
+        const names = billSearch.ambiguous.map((bill) => `"${bill.name}"`).join(' ou ');
+        return { text: `Encontrei mais de uma conta correspondente (${names}). Qual delas você quer alterar?`, isInternalCalculation: true };
+      }
+      if (billSearch.match) {
+        try {
+          await handlers.onUpdateBill(billSearch.match.id, { amount: newAmount });
+          return {
+            text: `Pronto! Atualizei "${billSearch.match.name}" de ${formatCurrencySpoken(billSearch.match.amount, billSearch.match.currency || currency)} para ${formatCurrencySpoken(newAmount, billSearch.match.currency || currency)}.`,
+            isInternalCalculation: true,
+            actionExecuted: 'update_bill',
+            createdItem: { type: 'bill', id: billSearch.match.id, name: billSearch.match.name, amount: newAmount },
+          };
+        } catch (err: any) {
+          return { text: `Não consegui salvar a alteração de "${billSearch.match.name}": ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+        }
+      }
+    }
+  }
+
   // 1. Math queries (e.g. "Quanto é 50.000 + 50.000?" -> "100.000.")
   const mathResult = audio ? null : trySolveMath(question);
   if (mathResult !== null) {
