@@ -1053,6 +1053,7 @@ export default function App() {
         accounts={accounts}
         sharedBills={sharedAccounts.sharedBills}
         sharedPartners={sharedAccounts.activePartners}
+        sharedInvitations={sharedAccounts.receivedInvitations}
         weeklyChallenges={fiftyTwoChallenge.challenges}
         categories={allDisplayCategories}
         myUserId={user?.uid}
@@ -1121,6 +1122,8 @@ export default function App() {
         onCreateSharedBill={(params) => sharedAccounts.createSharedBill(params)}
         onUpdateSharedBill={(billId, updates) => sharedAccounts.updateSharedBill(billId, updates)}
         onDeleteSharedBill={(billId) => sharedAccounts.deleteSharedBill(billId, true)}
+        onSendSharedInvitation={(email) => sharedAccounts.sendInvitation(email)}
+        onRespondSharedInvitation={(invitationId, accept) => sharedAccounts.respondInvitation(invitationId, accept)}
       />
 
       {/* Deposit Modal */}
