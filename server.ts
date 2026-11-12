@@ -521,6 +521,7 @@ Mensagem atual do usuário: ${message.trim()}`;
       incomes = [],
       expenses = [],
       goals = [],
+      sharedBills = [],
       lastActionItem = null,
     } = context;
 
@@ -559,6 +560,18 @@ Mensagem atual do usuário: ${message.trim()}`;
       id: g.id,
       title: g.title,
       targetAmount: g.targetAmount,
+    }));
+
+    const sharedBillsSummary = (sharedBills || []).map((b: any) => ({
+      id: b.id,
+      title: b.title,
+      amount: b.amount,
+      dueDate: b.dueDate,
+      month: b.month,
+      category: b.category,
+      status: b.status,
+      myShare: b.shares?.[verifiedUid]?.amount,
+      myShareStatus: b.shares?.[verifiedUid]?.status,
     }));
 
     const accountsSummary = (accounts || []).map((account: any) => ({
@@ -611,6 +624,7 @@ Contexto financeiro do usuário:
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
+- Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
 
 Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
@@ -676,6 +690,12 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      toAccountId: id exato da conta de destino na lista de contas
      amount: valor numérico exato
      directResponse: confirmação natural somente se a ação for executada
+   - Marcar somente minha parte de conta compartilhada como paga (ex: "marque minha parte do aluguel compartilhado como paga"):
+     intent: "mark_shared_share_paid"
+     name: título exato da conta compartilhada
+     matchedId: id exato da conta compartilhada
+     targetMonth: mês de referência "YYYY-MM"
+     directResponse: confirmação natural somente se a ação for executada
    - Marcar como pago (ex: "paguei a academia", "marca a sapatilha como paga"):
      intent: "mark_bill_paid"
      name: nome da conta
@@ -707,7 +727,7 @@ NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alte
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
