@@ -28,7 +28,7 @@ import {
   getEffectiveDateForMonth,
   getMonthDiff,
 } from './finance';
-import { formatCurrency, formatCurrencySpoken } from './currency';
+import { formatCurrencySpoken } from './currency';
 import { getLocaleForLanguage } from './i18n';
 
 export interface MoneActionItem {
@@ -699,7 +699,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: `Não consegui corrigir o lançamento: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
       }
 
-      const formatted = formatCurrency(newAmount, currency);
+      const formatted = formatCurrencySpoken(newAmount, currency);
       return {
         text: `Corrigido. Valor de ${lastActionItem.name} alterado para ${formatted}.`,
         isInternalCalculation: true,
@@ -744,7 +744,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }
 
     return {
-      text: `Você gastou ${formatCurrency(totalCat, currency)} com ${targetCat} em ${monthName}.`,
+      text: `Você gastou ${formatCurrencySpoken(totalCat, currency)} com ${targetCat} em ${monthName}.`,
       isInternalCalculation: true,
     };
   }
@@ -769,10 +769,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     const totalPending = pending.reduce((sum, bill) => sum + bill.amount, 0);
     const lines = pending.map((bill) =>
-      `• ${bill.name}: ${formatCurrency(bill.amount, currency)} (vencimento: ${bill.date})`
+      `• ${bill.name}: ${formatCurrencySpoken(bill.amount, currency)} (vencimento: ${bill.date})`
     );
     return {
-      text: `Encontrei ${pending.length} conta(s) pendente(s) em ${monthName}, totalizando ${formatCurrency(totalPending, currency)}:\n${lines.join('\n')}`,
+      text: `Encontrei ${pending.length} conta(s) pendente(s) em ${monthName}, totalizando ${formatCurrencySpoken(totalPending, currency)}:\n${lines.join('\n')}`,
       isInternalCalculation: true,
     };
   }
@@ -844,7 +844,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       try {
         await handlers.onCompleteChallengeWeek(challenge.id, weekNumber, accountMatches[0].id);
         return {
-          text: parsed.directResponse || `Semana ${weekNumber} do desafio "${challenge.title}" concluída. ${formatCurrency(amount, challenge.currency || currency)} foi separado de ${accountMatches[0].name}.`,
+          text: parsed.directResponse || `Semana ${weekNumber} do desafio "${challenge.title}" concluída. ${formatCurrencySpoken(amount, challenge.currency || currency)} foi separado de ${accountMatches[0].name}.`,
           isInternalCalculation: true,
           actionExecuted: 'complete_challenge_week',
         };
@@ -938,7 +938,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         await handlers.onToggleMySharePaid(target.id, true, targetMonth);
         const share = ctx.myUserId ? target.shares?.[ctx.myUserId]?.amount : undefined;
         return {
-          text: parsed.directResponse || `Pronto. Marquei sua parte de "${target.title}" como paga${typeof share === 'number' ? ` (${formatCurrency(share, currency)})` : ''}.`,
+          text: parsed.directResponse || `Pronto. Marquei sua parte de "${target.title}" como paga${typeof share === 'number' ? ` (${formatCurrencySpoken(share, currency)})` : ''}.`,
           isInternalCalculation: true,
           actionExecuted: 'mark_shared_share_paid',
         };
@@ -993,7 +993,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           notes: d.notes || 'Transferência solicitada à Mone',
         });
         return {
-          text: parsed.directResponse || `Transferi ${formatCurrency(amount, fromAccount.currency)} de ${fromAccount.name} para ${toAccount.name}.`,
+          text: parsed.directResponse || `Transferi ${formatCurrencySpoken(amount, fromAccount.currency)} de ${fromAccount.name} para ${toAccount.name}.`,
           isInternalCalculation: true,
           actionExecuted: 'transfer_between_accounts',
         };
@@ -1018,7 +1018,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
         return {
-          text: parsed.directResponse || `Despesa de ${expName} de ${formatCurrency(d.amount, currency)} adicionada.`,
+          text: parsed.directResponse || `Despesa de ${expName} de ${formatCurrencySpoken(d.amount, currency)} adicionada.`,
           isInternalCalculation: true,
           actionExecuted: 'add_expense',
           createdItem: { type: 'expense', id: createdId, name: expName, amount: d.amount },
@@ -1057,7 +1057,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return {
           text:
             parsed.directResponse ||
-            `Pronto. ${billName} criada em ${installments} parcelas de ${formatCurrency(instAmount, currency)}, todo dia ${dueDay}.`,
+            `Pronto. ${billName} criada em ${installments} parcelas de ${formatCurrencySpoken(instAmount, currency)}, todo dia ${dueDay}.`,
           isInternalCalculation: true,
           actionExecuted: 'add_installment',
           createdItem: { type: 'bill', id: createdId, name: billName, amount: instAmount },
@@ -1096,7 +1096,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return {
           text:
             parsed.directResponse ||
-            `Pronto. Conta ${billName} de ${formatCurrency(d.amount, currency)} criada para todo dia ${dueDay}.`,
+            `Pronto. Conta ${billName} de ${formatCurrencySpoken(d.amount, currency)} criada para todo dia ${dueDay}.`,
           isInternalCalculation: true,
           actionExecuted: 'add_bill',
           createdItem: { type: 'bill', id: createdId, name: billName, amount: d.amount },
@@ -1127,7 +1127,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         });
         const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
         return {
-          text: parsed.directResponse || `Receita de ${incName} de ${formatCurrency(d.amount, currency)} adicionada.`,
+          text: parsed.directResponse || `Receita de ${incName} de ${formatCurrencySpoken(d.amount, currency)} adicionada.`,
           isInternalCalculation: true,
           actionExecuted: 'add_income',
           createdItem: { type: 'income', id: createdId, name: incName, amount: d.amount },
@@ -1181,7 +1181,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       if (d.amount !== undefined && !isNaN(parseFloat(String(d.amount)))) {
         const amt = parseFloat(String(d.amount));
         partial.amount = amt;
-        updatesDesc.push(`valor para ${formatCurrency(amt, currency)}`);
+        updatesDesc.push(`valor para ${formatCurrencySpoken(amt, currency)}`);
       }
 
       if (d.newName) {
@@ -1260,7 +1260,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       try {
         await handlers.onUpdateExpense(targetExpense.id, partial);
         return {
-          text: parsed.directResponse || `Despesa de ${partial.name || targetExpense.name} alterada para ${formatCurrency(partial.amount ?? targetExpense.amount, currency)}.`,
+          text: parsed.directResponse || `Despesa de ${partial.name || targetExpense.name} alterada para ${formatCurrencySpoken(partial.amount ?? targetExpense.amount, currency)}.`,
           isInternalCalculation: true,
           actionExecuted: 'update_expense',
           createdItem: {
@@ -1320,7 +1320,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       try {
         await handlers.onUpdateIncome(targetIncome.id, partial);
         return {
-          text: parsed.directResponse || `Receita de ${partial.name || targetIncome.name} alterada para ${formatCurrency(partial.amount ?? targetIncome.amount, currency)}.`,
+          text: parsed.directResponse || `Receita de ${partial.name || targetIncome.name} alterada para ${formatCurrencySpoken(partial.amount ?? targetIncome.amount, currency)}.`,
           isInternalCalculation: true,
           actionExecuted: 'update_income',
           createdItem: {
@@ -1419,7 +1419,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
             await handlers.onUpdateIncome(lastActionItem.id, { amount: d.newAmount });
           }
           return {
-            text: parsed.directResponse || `Corrigido. Valor alterado para ${formatCurrency(d.newAmount, currency)}.`,
+            text: parsed.directResponse || `Corrigido. Valor alterado para ${formatCurrencySpoken(d.newAmount, currency)}.`,
             isInternalCalculation: true,
             actionExecuted: 'correction',
             createdItem: { ...lastActionItem, amount: d.newAmount },
@@ -1523,7 +1523,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           icon: '🎯',
         });
         return {
-          text: parsed.directResponse || `Meta de economia '${gTitle}' de ${formatCurrency(d.targetAmount, currency)} criada.`,
+          text: parsed.directResponse || `Meta de economia '${gTitle}' de ${formatCurrencySpoken(d.targetAmount, currency)} criada.`,
           isInternalCalculation: true,
           actionExecuted: 'create_goal',
         };
@@ -1639,7 +1639,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const data = calculateMonthFinancials(ctx, targetMonth);
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
       return {
-        text: `Em ${monthName}, você tem ${formatCurrency(data.totalOneOffExpenses, currency)} em despesas registradas e ${formatCurrency(data.totalBills, currency)} em contas previstas.`,
+        text: `Em ${monthName}, você tem ${formatCurrencySpoken(data.totalOneOffExpenses, currency)} em despesas registradas e ${formatCurrencySpoken(data.totalBills, currency)} em contas previstas.`,
         isInternalCalculation: true,
       };
     }
@@ -1653,7 +1653,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         ? ctx.forecastBalance
         : data.projectedBalance;
       return {
-        text: `A previsão de saldo para ${monthName} é ${formatCurrency(projected, currency)}.`,
+        text: `A previsão de saldo para ${monthName} é ${formatCurrencySpoken(projected, currency)}.`,
         isInternalCalculation: true,
       };
     }
@@ -1663,7 +1663,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
       return {
-        text: `${formatCurrency(data.totalIncomes, currency)} em receitas previstas.`,
+        text: `${formatCurrencySpoken(data.totalIncomes, currency)} em receitas previstas.`,
         isInternalCalculation: true,
       };
     }
@@ -1671,7 +1671,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     // 11. QUERY BALANCE
     if (intent === 'query_balance') {
       return {
-        text: `Seu saldo atual é de ${formatCurrency(currentBalance, currency)}.`,
+        text: `Seu saldo atual é de ${formatCurrencySpoken(currentBalance, currency)}.`,
         isInternalCalculation: true,
       };
     }
@@ -1692,7 +1692,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }
       const account = matches[0];
       return {
-        text: `A conta ${account.name} tem ${formatCurrency(account.currentBalance || 0, account.currency)} disponíveis.`,
+        text: `A conta ${account.name} tem ${formatCurrencySpoken(account.currentBalance || 0, account.currency)} disponíveis.`,
         isInternalCalculation: true,
       };
     }
@@ -1719,7 +1719,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         const share = ctx.myUserId ? shareMap?.[ctx.myUserId] : undefined;
         const effectiveTitle = monthOverride.title || bill.title;
         const effectiveAmount = Number(monthOverride.amount) || bill.amount;
-        return `• ${effectiveTitle}: sua parte ${formatCurrency(share?.amount || 0, currency)} de ${formatCurrency(effectiveAmount, currency)} — ${share?.status === 'paid' ? 'paga' : 'pendente'}`;
+        return `• ${effectiveTitle}: sua parte ${formatCurrencySpoken(share?.amount || 0, currency)} de ${formatCurrencySpoken(effectiveAmount, currency)} — ${share?.status === 'paid' ? 'paga' : 'pendente'}`;
       });
       return {
         text: `Suas contas compartilhadas em ${targetMonth}:\n${lines.join('\n')}`,
@@ -1741,7 +1741,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         const saved = (goal.history || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         const target = Number(goal.totalTarget || goal.targetAmount) || 0;
         const remaining = Math.max(0, target - saved);
-        return `• ${goal.title}: ${formatCurrency(saved, goal.currency || currency)} guardados de ${formatCurrency(target, goal.currency || currency)}; faltam ${formatCurrency(remaining, goal.currency || currency)}.`;
+        return `• ${goal.title}: ${formatCurrencySpoken(saved, goal.currency || currency)} guardados de ${formatCurrencySpoken(target, goal.currency || currency)}; faltam ${formatCurrencySpoken(remaining, goal.currency || currency)}.`;
       });
       return {
         text: lines.length === 1 ? lines[0] : `Progresso das suas metas:\n${lines.join('\n')}`,
@@ -1773,7 +1773,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
             : fixedWeeklyAmount), 0)
         : completed.reduce((sum, week) => sum + challenge.initialAmount * week, 0);
       return {
-        text: `O desafio "${challenge.title}" está em ${completed.length} de ${totalWeeks} semanas. Você já separou ${formatCurrency(saved, challenge.currency || currency)} e faltam ${totalWeeks - completed.length} semanas.`,
+        text: `O desafio "${challenge.title}" está em ${completed.length} de ${totalWeeks} semanas. Você já separou ${formatCurrencySpoken(saved, challenge.currency || currency)} e faltam ${totalWeeks - completed.length} semanas.`,
         isInternalCalculation: true,
       };
     }
@@ -1838,7 +1838,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     const createdId = res && typeof res === 'object' && res.id ? res.id : 'bill_' + Date.now();
     return {
-      text: `Pronto. ${name} criada em ${installments} parcelas de ${formatCurrency(instAmount, currency)}, todo dia ${dueDay}.`,
+      text: `Pronto. ${name} criada em ${installments} parcelas de ${formatCurrencySpoken(instAmount, currency)}, todo dia ${dueDay}.`,
       isInternalCalculation: true,
       actionExecuted: 'add_installment',
       createdItem: { type: 'bill', id: createdId, name, amount: instAmount },
@@ -1870,7 +1870,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'exp_' + Date.now();
       return {
-        text: `Despesa de ${name} de ${formatCurrency(parsedAmt, currency)} adicionada.`,
+        text: `Despesa de ${name} de ${formatCurrencySpoken(parsedAmt, currency)} adicionada.`,
         isInternalCalculation: true,
         actionExecuted: 'add_expense',
         createdItem: { type: 'expense', id: createdId, name, amount: parsedAmt },
@@ -1903,7 +1903,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
       const createdId = res && typeof res === 'object' && res.id ? res.id : 'inc_' + Date.now();
       return {
-        text: `Receita de ${name} de ${formatCurrency(parsedAmt, currency)} adicionada.`,
+        text: `Receita de ${name} de ${formatCurrencySpoken(parsedAmt, currency)} adicionada.`,
         isInternalCalculation: true,
         actionExecuted: 'add_income',
         createdItem: { type: 'income', id: createdId, name, amount: parsedAmt },
@@ -1980,7 +1980,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
       if (parsedAmt && parsedAmt > 0 && norm.includes('valor')) {
         partial.amount = parsedAmt;
-        updatesDesc.push(`valor para ${formatCurrency(parsedAmt, currency)}`);
+        updatesDesc.push(`valor para ${formatCurrencySpoken(parsedAmt, currency)}`);
       }
 
       if (Object.keys(partial).length > 0) {
@@ -2083,11 +2083,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
     }
     const totalSummary = [...totalsByCurrency.entries()]
-      .map(([code, amount]) => formatCurrency(amount, code))
+      .map(([code, amount]) => formatCurrencySpoken(amount, code))
       .join(' + ');
     let text = `Sim. Você tem ${totalSummary} para pagar em ${monthName}:\n`;
     data.monthBills.forEach((bill) => {
-      text += `• ${bill.name}: ${formatCurrency(bill.amount, bill.currency)}\n`;
+      text += `• ${bill.name}: ${formatCurrencySpoken(bill.amount, bill.currency)}\n`;
     });
 
     return {
@@ -2101,7 +2101,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const targetMonth = extractTargetMonth(question, currentMonthStr);
     const data = calculateMonthFinancials(context, targetMonth);
     return {
-      text: `${formatCurrency(data.totalIncomes, currency)} em receitas previstas.`,
+      text: `${formatCurrencySpoken(data.totalIncomes, currency)} em receitas previstas.`,
       isInternalCalculation: true,
     };
   }
@@ -2109,7 +2109,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // 7. Balance query (e.g. "Qual meu saldo atual?")
   if (norm.includes('saldo')) {
     return {
-      text: `Seu saldo atual é de ${formatCurrency(currentBalance, currency)}.`,
+      text: `Seu saldo atual é de ${formatCurrencySpoken(currentBalance, currency)}.`,
       isInternalCalculation: true,
     };
   }
