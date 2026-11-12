@@ -556,14 +556,30 @@ Mensagem atual do usuário: ${message.trim()}`;
     };
     const billsSummary = bills.map((b: any) => {
       const linkedAccount = (accounts || []).find((account: any) => account.id === b.accountId);
-      const billCurrency = linkedAccount?.currency || currency;
+      const distributions = (b.accountDistributions || []).map((distribution: any) => {
+        const account = (accounts || []).find((item: any) => item.id === distribution.accountId);
+        const distributionCurrency = account?.currency || currency;
+        return {
+          accountName: account?.name || null,
+          amount: distribution.amount,
+          currency: distributionCurrency,
+          currencyName: currencyNames[distributionCurrency] || 'moeda não identificada',
+          currencySymbol: currencySymbols[distributionCurrency] || '',
+        };
+      });
+      const distributionCurrencies = [...new Set(distributions.map((item: any) => item.currency))] as string[];
+      const billCurrency = linkedAccount?.currency || (
+        distributionCurrencies.length === 1 ? distributionCurrencies[0] :
+        distributionCurrencies.length > 1 ? 'MULTI' : currency
+      );
       return {
         id: b.id,
         name: b.name,
         amount: b.amount,
         currency: billCurrency,
-        currencyName: currencyNames[billCurrency] || 'moeda não identificada',
-        currencySymbol: currencySymbols[billCurrency] || '',
+        currencyName: billCurrency === 'MULTI' ? 'moedas diferentes' : currencyNames[billCurrency] || 'moeda não identificada',
+        currencySymbol: billCurrency === 'MULTI' ? '' : currencySymbols[billCurrency] || '',
+        currencyBreakdown: distributions,
         accountId: b.accountId || null,
         accountName: linkedAccount?.name || null,
         dueDay: b.dueDay,
