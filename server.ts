@@ -457,7 +457,7 @@ app.post('/api/mone', async (req, res) => {
     // Fast conversational lane: casual/general messages do not need the full financial
     // context or the structured-action prompt. This avoids turning greetings into commands
     // and reduces latency and token usage for ordinary conversation.
-    const financialIntentPattern = /\\b(saldo|contas?|faturas?|despesas?|gastos?|receitas?|sal[aá]rio|renda|dinheiro|economiz|poup|cofrinho|meta financeira|or[cç]amento|pagar|paguei|pagamento|receber|recebi|invest|cart[aã]o|banco|transfer[eê]ncia|d[oó]lar|pesos?|reais|cot[aã]ç[aã]o|parcelas?|vencimento|boleto|comprar|compra|consigo|cabe no|moto|carro|financiar|d[ií]vida)\\b/i;
+    const financialIntentPattern = /\b(saldo|contas?|faturas?|despesas?|gastos?|receitas?|sal[aá]rio|renda|dinheiro|economiz|poup|cofrinho|meta financeira|or[cç]amento|pagar|paguei|pagamento|receber|recebi|invest|cart[aã]o|banco|transfer[eê]ncia|d[oó]lar|pesos?|reais|cot[aã]ç[aã]o|parcelas?|vencimento|boleto|comprar|compra|consigo|cabe no|moto|carro|financiar|d[ií]vida)\b/i;
     const isGeneralConversation = typeof message === 'string' && message.trim().length > 0 &&
       !audio && !financialIntentPattern.test(message);
 
@@ -473,7 +473,7 @@ Converse como uma IA geral moderna: responda sobre qualquer assunto, cumprimente
 Não transforme mensagens casuais em tarefas financeiras. Não ofereça cadastrar despesas ou receitas sem que isso tenha sido pedido.
 Responda no idioma da mensagem do usuário. Seja direta quando a pergunta for simples e detalhada quando o assunto exigir. Nunca afirme que fez alterações no SisFinz neste modo.
 Histórico recente:
-${recentHistory.map((item: any) => item.role + ': ' + item.text).join('\\n') || 'Sem histórico.'}
+${recentHistory.map((item: any) => item.role + ': ' + item.text).join('\n') || 'Sem histórico.'}
 Mensagem atual do usuário: ${message.trim()}`;
 
       const fastResponse = await ai.models.generateContent({
