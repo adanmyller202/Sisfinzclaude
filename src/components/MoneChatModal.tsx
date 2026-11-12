@@ -47,7 +47,7 @@ import { GoogleGenAI, Modality, Type, Behavior, StartSensitivity, EndSensitivity
 
 const isFinancialQuestion = (value: string): boolean => {
   const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return /\b(saldo|divid\w*|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|cofrinh\w*|categorias?|planej\w*|calend[aá]rio|relat[oó]rios?|liberdade|ritmo|reservas?|poupanc\w*|aporte|resgate|quanto tenho|quanto devo)\b/.test(normalized);
+  return /\b(saldo|divid\w*|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|cofrinh\w*|guardad\w*|poupad\w*|categorias?|planej\w*|calend[aá]rio|relat[oó]rios?|liberdade|ritmo|reservas?|poupanc\w*|aporte|resgate|quanto tenho|quanto devo)\b/.test(normalized);
 };
 
 interface ChatMessage {
