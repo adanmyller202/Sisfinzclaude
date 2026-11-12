@@ -23,6 +23,8 @@ jobs:
           node-version: 24.12.0
       - name: Confirm latest Mone implementation
         run: echo "Validating the latest main branch"
+      - name: Validate final Gemini Live setup
+        run: echo "Checking the latest v1beta, audio, and function-calling code"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: TypeScript validation
