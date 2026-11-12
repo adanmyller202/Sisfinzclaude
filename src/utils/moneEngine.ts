@@ -869,7 +869,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       return `• ${expense.name}: ${formatCurrencySpoken(Number(expense.amount || 0), code)} (${dateNote})`;
     });
     return {
-      text: `Sim! Encontrei ${todayExpenses.length} despesa(s) com data de hoje ou cadastrada(s) hoje no SisFinz. Total por moeda: ${formatCurrencyBreakdown(totals)}.\\n${lines.join('\\n')}`,
+      text: `Sim! Encontrei ${todayExpenses.length} despesa(s) com data de hoje ou cadastrada(s) hoje no SisFinz. Total por moeda: ${formatCurrencyBreakdown(totals)}.\n${lines.join('\n')}`,
       isInternalCalculation: true,
     };
   }
@@ -949,9 +949,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // For "mude o seguro residencial de 5 mil para 20 mil", use the NEW (last) amount,
   // never the old amount, and do not send the request back to the LLM for repeated confirmation.
   const requestsBillValueChange =
-    /\\b(?:mudar|mude|muda|alterar|altere|altera|atualizar|atualize|trocar|troque|ajustar|ajuste)\\b/i.test(norm) &&
-    /\\b(?:para|por|em)\\s+\\d/i.test(norm) &&
-    /\\b(?:seguro|residencial|aluguel|internet|luz|agua|g[aá]s|academia|plano|fatura|conta|valor)\\b/i.test(norm);
+    /\b(?:mudar|mude|muda|alterar|altere|altera|atualizar|atualize|trocar|troque|ajustar|ajuste)\b/i.test(norm) &&
+    /\b(?:para|por|em)\s+\d/i.test(norm) &&
+    /\b(?:seguro|residencial|aluguel|internet|luz|agua|g[aá]s|academia|plano|fatura|conta|valor)\b/i.test(norm);
   if (requestsBillValueChange && handlers?.onUpdateBill) {
     const lastPara = Math.max(norm.lastIndexOf(' para '), norm.lastIndexOf(' por '), norm.lastIndexOf(' em '));
     const newAmount = lastPara >= 0 ? parseAmountFromText(question.slice(lastPara + 4)) : null;
