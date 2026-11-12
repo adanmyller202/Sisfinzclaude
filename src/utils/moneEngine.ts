@@ -57,6 +57,13 @@ export interface MoneActionHandlers {
     currency: CurrencyCode;
     notes?: string;
   }) => Promise<any> | void;
+  onTransferBetweenAccounts?: (params: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    date: string;
+    notes?: string;
+  }) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -735,6 +742,61 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const currentMonthStr = getCurrentMonthStr();
     const todayStr = getTodayStr();
     const locale = getLocaleForLanguage(ctx.language);
+
+    // TRANSFER BETWEEN OWN ACCOUNTS. Resolve both accounts uniquely and keep currencies identical.
+    if (intent === 'transfer_between_accounts') {
+      if (!handlers?.onTransferBetweenAccounts) {
+        return { text: 'A transferência entre contas não está disponível neste momento.', isInternalCalculation: true };
+      }
+      const activeAccounts = (ctx.accounts || []).filter((account) => account.isActive !== false);
+      const resolveAccount = (id?: string, name?: string) => {
+        if (id) return activeAccounts.find((account) => account.id === id);
+        const target = normalize(name || '');
+        if (!target) return undefined;
+        const matches = activeAccounts.filter((account) => {
+          const candidate = normalize(account.name);
+          return candidate === target || candidate.includes(target) || target.includes(candidate);
+        });
+        return matches.length === 1 ? matches[0] : undefined;
+      };
+      const fromAccount = resolveAccount(d.fromAccountId, d.fromAccountName);
+      const toAccount = resolveAccount(d.toAccountId, d.toAccountName);
+      if (!fromAccount || !toAccount) {
+        return {
+          text: 'Preciso identificar sem dúvida a conta de origem e a conta de destino. Diga os nomes das duas contas como aparecem no SisFinz.',
+          isInternalCalculation: true,
+        };
+      }
+      if (fromAccount.id === toAccount.id) {
+        return { text: 'A conta de origem e a de destino precisam ser diferentes.', isInternalCalculation: true };
+      }
+      if (fromAccount.currency !== toAccount.currency) {
+        return { text: 'As duas contas estão em moedas diferentes. Para evitar um câmbio incorreto, faça essa operação pela tela de transferência do SisFinz.', isInternalCalculation: true };
+      }
+      const amount = Number(d.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return { text: 'Qual valor você deseja transferir?', isInternalCalculation: true };
+      }
+      try {
+        await handlers.onTransferBetweenAccounts({
+          fromAccountId: fromAccount.id,
+          toAccountId: toAccount.id,
+          amount,
+          date: d.date || todayStr,
+          notes: d.notes || 'Transferência solicitada à Mone',
+        });
+        return {
+          text: parsed.directResponse || `Transferi ${formatCurrency(amount, currency)} de ${fromAccount.name} para ${toAccount.name}.`,
+          isInternalCalculation: true,
+          actionExecuted: 'transfer_between_accounts',
+        };
+      } catch (err: any) {
+        return {
+          text: `Não consegui concluir a transferência: ${err?.message || 'falha ao salvar'}.`,
+          isInternalCalculation: true,
+        };
+      }
+    }
 
     // 1. ADD EXPENSE
     if (intent === 'add_expense' && d.amount && handlers?.onAddExpense) {
