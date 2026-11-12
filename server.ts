@@ -476,9 +476,14 @@ app.post('/api/mone', async (req, res) => {
     // Fast conversational lane: casual/general messages do not need the full financial
     // context or the structured-action prompt. This avoids turning greetings into commands
     // and reduces latency and token usage for ordinary conversation.
-        const financialIntentPattern = /\b(saldo|contas?|faturas?|despesas?|gastos?|gastar|receitas?|sal[aá]rio|renda|dinheiro|finan[cç]as?|financeir[oa]s?|economia|economiz|poup|cofrinh\w*|metas?|or[cç]amento|sobrou|sobra|previs[aã]o|proje[cç][aã]o|desafio|pagar|paguei|pagamento|receber|recebi|invest|cart[aã]o|banco|transfer[eê]ncia|d[oó]lar|pesos?|reais|cot[aã]ç[aã]o|parcelas?|vencimento|boleto|comprar|compra|consigo|cabe no|moto|carro|financiar|d[ií]vida)\b/i;
+        const financialIntentPattern = /\b(saldo|contas?|faturas?|despesas?|gastos?|gastar|receitas?|sal[aá]rio|renda|dinheiro|finan[cç]as?|financeir[oa]s?|economia|economiz|poup|cofrinh\w*|metas?|objetivos?|or[cç]amento|sobrou|sobra|previs[aã]o|proje[cç][aã]o|desafio|semanas?|pagar|paguei|pagamento|receber|recebi|invest|cart[aã]o|banco|transfer[eê]ncia|d[oó]lar|pesos?|reais|cot[aã]ç[aã]o|parcelas?|vencimento|boleto|comprar|compra|consigo|cabe no|moto|carro|financiar|d[ií]vida|compartilh|minha parte|quanto tenho|quanto tem|na conta|no banco)\b/i;
+    const accountNamesInContext = Array.isArray(req.body?.context?.accounts)
+      ? req.body.context.accounts.map((account: any) => String(account?.name || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const mentionsKnownAccount = typeof message === 'string' &&
+      accountNamesInContext.some((name: string) => message.toLowerCase().includes(name));
     const isGeneralConversation = typeof message === 'string' && message.trim().length > 0 &&
-      !audio && !financialIntentPattern.test(message);
+      !audio && !financialIntentPattern.test(message) && !mentionsKnownAccount;
 
     if (isGeneralConversation) {
       const recentHistory = Array.isArray(history)
