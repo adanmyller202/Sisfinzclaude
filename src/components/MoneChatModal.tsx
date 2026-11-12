@@ -487,7 +487,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             if (toolCalls.length && liveSessionRef.current) {
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
-                const destructiveRequest = /\\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|edita|editar|corrige|corrigir|corrija)\\b/i.test(request);
+                const destructiveRequest = /\b(apaga|apagar|exclui|excluir|delete|remove|remover|altera|alterar|muda|mudar|edita|editar|corrige|corrigir|corrija)\b/i.test(request);
                 if (!request) {
                   return { id: call.id, name: call.name, response: { error: 'Pedido vazio. Pergunte ao usuário o que deseja fazer.' } };
                 }
