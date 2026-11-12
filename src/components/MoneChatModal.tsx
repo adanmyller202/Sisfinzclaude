@@ -358,7 +358,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     statusRecords,
     goals,
     currency,
-    language,
+    language: 'pt' as LanguageCode,
     lastActionItem,
     history: messages.slice(-24).map((item) => ({ sender: item.sender, text: item.text })),
     persona: moneStyle || 'direto',
@@ -483,7 +483,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       if (isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(response.text);
-        utterance.lang = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-AR' : 'en-US';
+        utterance.lang = 'pt-BR';
         utterance.rate = 1.08;
         window.speechSynthesis.speak(utterance);
       }
@@ -594,7 +594,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       }
       const tokenData = await tokenResponse.json();
       const financialContext = [
-        'Idioma: ' + language + '; moeda: ' + currency + '.',
+        'Idioma obrigatório da Mone: português brasileiro (pt-BR). Moeda ativa do SisFinz: ' + currency + '.', 
         'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
         'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency }))).slice(0, 4500) + '.',
         'Faturas: ' + JSON.stringify(bills.map((b) => ({ id: b.id, name: b.name, amount: b.amount, dueDay: b.dueDay }))).slice(0, 4500) + '.',
@@ -618,12 +618,24 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
-      const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Se a ferramenta retornar status diferente de "ok", informe o usuário e não repita a chamada quando retryable for false. Nunca faça mais de duas chamadas consecutivas de ferramenta sem falar com o usuário. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
+      const liveSystemInstruction = \`Você é Mone, assistente geral e copiloto financeiro do SisFinz. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto e use o histórico para manter continuidade. Não transforme papo casual em comandos.
+
+REGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas ou pagamentos DEVE chamar a ferramenta sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se a ferramenta não encontrar registros, diga claramente que não há registros correspondentes. A moeda é exatamente a moeda ativa indicada no contexto; nunca converta nem troque por BRL/R$.
+
+Quando o usuário pedir explicitamente para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Se a ferramenta retornar status diferente de "ok", informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: \${financialContext}\`
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
         config: {
           responseModalities: [Modality.AUDIO],
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+              prefixPaddingMs: 40,
+              silenceDurationMs: 700,
+            },
+          },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           sessionResumption: {},
