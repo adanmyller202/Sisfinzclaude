@@ -25,6 +25,10 @@ interface TransferFinanceOps {
 
 interface WithdrawFinanceOps {
   addIncome: (incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<IncomeItem>;
+  addIncomeAsReceived?: (
+    incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+    receivedMonth: string
+  ) => Promise<IncomeItem>;
   toggleIncomeReceived: (incomeId: string, month: string, isReceived: boolean, receivedDate?: string) => Promise<void>;
   currentMonthStr: string;
 }
@@ -404,21 +408,26 @@ export function useSavings() {
         const incomeName = goalCurrency === 'ARS'
           ? `Retiro de ahorro: ${targetGoal.name}`
           : `Retiro de ahorro: ${targetGoal.name} (${formattedGoalAmt} -> ${formattedARSAmt})`;
-        const newIncome = await financeOps.addIncome({
+        const incomePayload = {
           name: incomeName,
           amount: baseAmountARS,
           category: 'Inversiones',
           expectedDate: txDate,
           expectedDay: dayOfMonth,
-          recurrence: 'none',
+          recurrence: 'none' as const,
           startMonth: currentMonth,
           notes: note || (goalCurrency === 'ARS'
             ? `Retiro del ahorro "${targetGoal.name}" hacia el saldo disponible`
             : `Resgate de ${formattedGoalAmt} do cofrinho "${targetGoal.name}" @ cotação ${effectiveRate}`),
-        });
+        };
+        const newIncome = financeOps.addIncomeAsReceived
+          ? await financeOps.addIncomeAsReceived(incomePayload, currentMonth)
+          : await financeOps.addIncome(incomePayload);
         createdIncomeId = newIncome.id;
-        // Mark as immediately received so it increases current balance right away
-        await financeOps.toggleIncomeReceived(newIncome.id, currentMonth, true, txDate);
+        // Mark immediately received when the finance adapter does not support atomic creation.
+        if (!financeOps.addIncomeAsReceived) {
+          await financeOps.toggleIncomeReceived(newIncome.id, currentMonth, true, txDate);
+        }
       } else {
         console.error('Finance operations (addIncome/toggleIncomeReceived) missing in withdrawFromSaving');
       }
