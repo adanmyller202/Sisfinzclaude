@@ -2154,7 +2154,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const lines = accountList.map((account) =>
         `• ${account.name}: ${formatCurrencySpoken(Number(account.currentBalance) || 0, account.currency)} (${account.isActive === false ? 'inativa' : 'ativa'})`
       );
-      return { text: `Suas contas ativas somam ${formatCurrencyBreakdown(totals)}.\n${lines.join('\n')}`, isInternalCalculation: true };
+      return { text: `Suas contas ativas somam ${formatCurrencyBreakdown(totals, 'nenhum saldo em contas ativas')}.\n${lines.join('\n')}`, isInternalCalculation: true };
     }
 
     if (intent === 'create_account') {
