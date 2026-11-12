@@ -15,7 +15,6 @@ import {
   MoneStyle,
   MoneMood,
 } from '../types';
-import { MoneMascot } from './MoneMascot';
 import { SisFinzPet } from './shared/SisFinzPet';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
@@ -94,7 +93,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   language = 'pt',
   moneStyle = 'direto',
   onChangeMoneStyle,
-  mood = 'calm',
   moodLabel,
   onAddExpense,
   onUpdateExpense,
@@ -216,7 +214,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
       sender: 'user',
-      text: query,
+      text: audio ? 'Mensagem de voz' : query,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
