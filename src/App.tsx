@@ -1067,6 +1067,8 @@ export default function App() {
         onToggleIncomeReceived={toggleIncomeReceived}
         onUpdateCurrentBalance={updateCurrentBalance}
         onCreateGoal={handleSaveNewGoal}
+        onUpdateGoal={updateGoal}
+        onDeleteGoal={deleteGoal}
         onTransferBetweenAccounts={transferBetweenAccounts}
         onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
         onCompleteChallengeWeek={(challengeId, weekNumber, accountId) =>
