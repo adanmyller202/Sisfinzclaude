@@ -1530,7 +1530,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const partial: { title?: string; icon?: string; notes?: string } = {};
       if (typeof d.newName === 'string' && d.newName.trim()) partial.title = d.newName.trim();
       if (typeof d.icon === 'string' && d.icon.trim()) partial.icon = d.icon.trim();
-      if (typeof d.notes === 'string') partial.notes = d.notes;
+      if (typeof d.notes === 'string' && d.notes.trim()) partial.notes = d.notes.trim();
       if (!Object.keys(partial).length) {
         return { text: 'O que você deseja mudar nessa meta: nome, ícone ou observação?', isInternalCalculation: true };
       }
