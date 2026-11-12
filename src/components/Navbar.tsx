@@ -19,6 +19,7 @@ interface NavbarProps {
   onOpenNewGoalModal: () => void;
   hasPendingNotifications?: boolean;
   onOpenProfile: () => void;
+  onOpenCopilot?: () => void;
   alertCenter?: React.ReactNode;
 }
 
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewGoalModal,
   hasPendingNotifications = false,
   onOpenProfile,
+  onOpenCopilot,
   alertCenter,
 }) => {
   const { user } = useAuth();
@@ -107,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Finzy Virtual Pet (Independent AI Mascot) */}
-          <SisFinzPet size={38} className="shrink-0 max-w-full" />
+          <SisFinzPet onClick={onOpenCopilot} size={38} className="shrink-0 max-w-full" />
         </div>
       </div>
     </header>
