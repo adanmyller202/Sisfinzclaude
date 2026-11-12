@@ -41,7 +41,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
+import { GoogleGenAI, Modality, Type, Behavior, StartSensitivity, EndSensitivity } from '@google/genai';
 
 const isFinancialQuestion = (value: string): boolean => {
   const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -768,8 +768,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           responseModalities: [Modality.AUDIO],
           realtimeInputConfig: {
             automaticActivityDetection: {
-              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
-              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+              startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+              endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
               prefixPaddingMs: 40,
               silenceDurationMs: 700,
             },
