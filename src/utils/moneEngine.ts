@@ -8,6 +8,7 @@ import { auth } from '../firebase/config';
 import {
   BillItem,
   AccountItem,
+  AccountType,
   IncomeItem,
   ExpenseItem,
   ChallengeGoal,
@@ -93,6 +94,10 @@ export interface MoneActionHandlers {
   onAddCategory?: (name: string, scope: 'all' | 'bill' | 'income' | 'expense') => Promise<any> | void;
   onUpdateCategory?: (categoryId: string, updates: { name?: string; scope?: 'all' | 'bill' | 'income' | 'expense'; color?: string }) => Promise<any> | void;
   onDeleteCategory?: (categoryId: string) => Promise<any> | void;
+  onAddAccount?: (params: { name: string; type: AccountType; currency: CurrencyCode; initialBalance: number; currentBalance?: number; notes?: string }) => Promise<any> | void;
+  onUpdateAccount?: (accountId: string, params: Partial<AccountItem> & { currentBalance?: number }) => Promise<any> | void;
+  onDeleteAccount?: (accountId: string) => Promise<any> | void;
+  onToggleAccountActive?: (accountId: string) => Promise<any> | void;
 }
 
 export interface MoneContext {
@@ -1975,6 +1980,72 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
+    // ACCOUNTS: query and manage the user's real SisFinz wallets.
+    if (intent === 'query_accounts') {
+      const accountList = (ctx.accounts || []).filter((account) => account.isActive !== false);
+      if (!accountList.length) return { text: 'Não há contas ativas cadastradas no SisFinz.', isInternalCalculation: true };
+      const totals = new Map<CurrencyCode, number>();
+      for (const account of accountList) {
+        totals.set(account.currency, (totals.get(account.currency) || 0) + (Number(account.currentBalance) || 0));
+      }
+      const lines = accountList.map((account) =>
+        `• ${account.name}: ${formatCurrencySpoken(Number(account.currentBalance) || 0, account.currency)}`
+      );
+      return { text: `Suas contas ativas somam ${formatCurrencyBreakdown(totals)}.\n${lines.join('\n')}`, isInternalCalculation: true };
+    }
+
+    if (intent === 'create_account') {
+      if (!handlers?.onAddAccount) return { text: 'A criação de contas não está disponível agora.', isInternalCalculation: true };
+      const name = String(d.name || d.accountName || '').trim();
+      if (!name) return { text: 'Qual nome você quer dar à nova conta?', isInternalCalculation: true };
+      const validTypes: AccountType[] = ['bank', 'wallet', 'cash', 'safe', 'other'];
+      const type = validTypes.includes(d.type) ? d.type : 'bank';
+      const code = (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency) ? d.currency : currency) as CurrencyCode;
+      const initialBalance = Number(d.initialBalance ?? d.currentBalance ?? 0);
+      if (!Number.isFinite(initialBalance) || initialBalance < 0) return { text: 'Qual é o saldo inicial dessa conta?', isInternalCalculation: true };
+      try {
+        await handlers.onAddAccount({ name, type, currency: code, initialBalance, currentBalance: initialBalance, ...(d.notes ? { notes: d.notes } : {}) });
+        return { text: `Criei a conta "${name}" com saldo inicial de ${formatCurrencySpoken(initialBalance, code)}.`, isInternalCalculation: true, actionExecuted: 'create_account' };
+      } catch (err: any) {
+        return { text: `Não consegui criar a conta: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
+    if (intent === 'update_account' || intent === 'delete_account' || intent === 'toggle_account_active') {
+      const accountName = normalize(d.accountName || d.name || '');
+      const matches = (ctx.accounts || []).filter((account) =>
+        d.accountId ? account.id === d.accountId : Boolean(accountName && normalize(account.name).includes(accountName))
+      );
+      if (matches.length !== 1) {
+        return { text: matches.length > 1 ? 'Encontrei mais de uma conta com esse nome. Qual delas?' : 'Qual conta você quer alterar?', isInternalCalculation: true };
+      }
+      const account = matches[0];
+      try {
+        if (intent === 'delete_account') {
+          if (!handlers?.onDeleteAccount) return { text: 'A exclusão de contas não está disponível.', isInternalCalculation: true };
+          await handlers.onDeleteAccount(account.id);
+          return { text: `A conta "${account.name}" foi excluída.`, isInternalCalculation: true, actionExecuted: 'delete_account' };
+        }
+        if (intent === 'toggle_account_active') {
+          if (!handlers?.onToggleAccountActive) return { text: 'A alteração do status da conta não está disponível.', isInternalCalculation: true };
+          await handlers.onToggleAccountActive(account.id);
+          return { text: `Atualizei o status da conta "${account.name}".`, isInternalCalculation: true, actionExecuted: 'toggle_account_active' };
+        }
+        if (!handlers?.onUpdateAccount) return { text: 'A edição de contas não está disponível.', isInternalCalculation: true };
+        const updates: Partial<AccountItem> & { currentBalance?: number } = {};
+        if (typeof d.newName === 'string' && d.newName.trim()) updates.name = d.newName.trim();
+        if (['ARS', 'USD', 'BRL', 'EUR'].includes(d.currency)) updates.currency = d.currency;
+        if (['bank', 'wallet', 'cash', 'safe', 'other'].includes(d.type)) updates.type = d.type;
+        if (typeof d.currentBalance === 'number' && Number.isFinite(d.currentBalance)) updates.currentBalance = d.currentBalance;
+        if (typeof d.notes === 'string') updates.notes = d.notes;
+        if (!Object.keys(updates).length) return { text: 'O que você quer mudar nessa conta: nome, moeda, tipo ou saldo?', isInternalCalculation: true };
+        await handlers.onUpdateAccount(account.id, updates);
+        return { text: `Atualizei a conta "${account.name}" com as alterações solicitadas.`, isInternalCalculation: true, actionExecuted: 'update_account' };
+      } catch (err: any) {
+        return { text: `Não consegui alterar a conta: ${err?.message || 'falha ao salvar'}.`, isInternalCalculation: true };
+      }
+    }
+
     // CUSTOM CATEGORIES: read and manage the categories configured in this SisFinz account.
     if (intent === 'query_categories') {
       const categories = ctx.categories || [];
@@ -2710,6 +2781,7 @@ REGRAS:
 - Fatura/conta: intent "add_bill", com name, amount, accountName, dueDay, targetMonth e isRecurring. Sem repetição: isRecurring=false. Repetição mensal: isRecurring=true. Se faltar valor ou vencimento essencial, pergunte antes.
 - Compra parcelada: intent "add_installment_bill", com name, totalAmount, installmentsCount, dueDay, accountName e targetMonth.
 - Uma despesa recorrente deve ser cadastrada como fatura recorrente, não como despesa avulsa.
+- Contas: consulte com "query_accounts"; crie com "create_account"; edite com "update_account"; exclua com "delete_account"; ative/desative com "toggle_account_active". Use o ID/nome exato, moeda e saldo informados.
 - Categorias: consulte com "query_categories"; crie com "create_category"; edite com "update_category"; exclua com "delete_category". Use o nome/ID exato e o escopo bill, income, expense ou all.
 - Cofrinhos: consulte com "query_savings"; histórico com "query_saving_transactions"; crie com "create_saving_goal"; edite com "update_saving_goal"; aporte com "deposit_to_saving"; resgate com "withdraw_from_saving"; exclusão com "delete_saving_goal". Use o nome/ID exato do cofrinho. Para USD/BRL/EUR, pergunte a cotação em ARS se não foi informada.
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
@@ -2719,7 +2791,7 @@ REGRAS:
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_categories" | "create_category" | "update_category" | "delete_category" | "navigate_to_section" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "query_savings" | "query_saving_transactions" | "create_saving_goal" | "update_saving_goal" | "deposit_to_saving" | "withdraw_from_saving" | "delete_saving_goal" | "query_accounts" | "create_account" | "update_account" | "delete_account" | "toggle_account_active" | "query_categories" | "create_category" | "update_category" | "delete_category" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string,
