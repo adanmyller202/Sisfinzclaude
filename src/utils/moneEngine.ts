@@ -821,8 +821,11 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const locale = getLocaleForLanguage(language);
 
   // Mone identity is deterministic: never expose the underlying AI model name.
-  if (/\b(?:qual\s+(?:era\s+)?(?:o\s+)?nome\s+(?:dela|seu)|qual\s+(?:e|era)\s+(?:o\s+)?seu\s+nome|como\s+voce\s+se\s+chama|quem\s+e\s+voce|seu\s+nome)\b/i.test(norm)) {
-    return { text: 'Meu nome é Mone. Sou a inteligência integrada ao SisFinz e estou aqui para conversar e cuidar das suas finanças com você.', isInternalCalculation: true };
+  if (/\b(?:qual\s+(?:(?:e|era)\s+)?(?:o\s+)?nome(?:\s+proprio)?(?:\s+(?:dela|dele|seu|da\s+mone))?|como\s+(?:voce|ela)\s+se\s+chama|quem\s+(?:e|sou)\s+(?:voce|a\s+mone)|seu\s+nome)\b/i.test(norm)) {
+    return {
+      text: 'Sou a Mone, assistente oficial do SisFinz e parte integrante deste aplicativo. Estou aqui para conversar com você, acompanhar o contexto das nossas conversas e ajudar a consultar, organizar e atualizar suas finanças usando os dados reais da sua conta no SisFinz.',
+      isInternalCalculation: true,
+    };
   }
 
   // Route core financial questions directly to real SisFinz data before asking an LLM.
@@ -832,6 +835,44 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     (/\bsaldo\b/i.test(norm) && /\b(?:em|de|no|na|para|do|da)\s+(?:pr[oó]xim[oa]\s+m[eê]s|m[eê]s\s+que\s+vem|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/i.test(norm));
   const asksBills = /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) && /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm);
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
+
+  // Questions about expenses registered today must be answered from the signed-in user's
+  // real SisFinz records, not delegated to the language model.
+  const asksExpensesToday =
+    /\b(?:hoje|nesta\s+data|no\s+dia\s+de\s+hoje)\b/i.test(norm) &&
+    /\b(?:despesas?|gastos?|lancamentos?|cadastrei|registrei|lancei|adicionei|tem|tenho|existe|alguma|quais|quantas?)\b/i.test(norm);
+  if (asksExpensesToday) {
+    const isLocalToday = (value?: string) => {
+      if (!value) return false;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return value.slice(0, 10) === todayStr;
+      const localDate = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+      return localDate === todayStr;
+    };
+    const todayExpenses = expenses.filter((expense) =>
+      (!context.myUserId || !expense.userId || expense.userId === context.myUserId) &&
+      (expense.date === todayStr || isLocalToday(expense.createdAt))
+    );
+    const dateLabel = new Date(`${todayStr}T12:00:00`).toLocaleDateString('pt-BR');
+    if (!todayExpenses.length) {
+      return {
+        text: `Consultei os lançamentos disponíveis da sua conta no SisFinz. Não encontrei nenhuma despesa com data de hoje ou cadastrada hoje (${dateLabel}).`,
+        isInternalCalculation: true,
+      };
+    }
+    const totals = new Map<CurrencyCode, number>();
+    const lines = todayExpenses.map((expense) => {
+      const account = context.accounts?.find((item) => item.id === expense.accountId);
+      const code = account?.currency || currency;
+      totals.set(code, (totals.get(code) || 0) + Number(expense.amount || 0));
+      const dateNote = expense.date === todayStr ? 'data do lançamento: hoje' : `data do lançamento: ${expense.date}`;
+      return `• ${expense.name}: ${formatCurrencySpoken(Number(expense.amount || 0), code)} (${dateNote})`;
+    });
+    return {
+      text: `Sim! Encontrei ${todayExpenses.length} despesa(s) com data de hoje ou cadastrada(s) hoje no SisFinz. Total por moeda: ${formatCurrencyBreakdown(totals)}.\\n${lines.join('\\n')}`,
+      isInternalCalculation: true,
+    };
+  }
 
   if (asksForecast) {
     if (targetMonth !== currentMonthStr && handlers?.onViewForecastMonth) {
