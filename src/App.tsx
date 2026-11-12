@@ -702,6 +702,7 @@ export default function App() {
         language={currentLang}
         onOpenNewGoalModal={() => setIsNewGoalOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenCopilot={() => setIsMoneChatOpen(true)}
         hasPendingNotifications={sharedAccounts.pendingReceivedInvitationsCount > 0 || sharedAccounts.unreadNotificationsCount > 0}
         alertCenter={<AlertCenter bills={bills} monthBills={monthBills} incomes={incomes} expenses={expenses} statusRecords={statusRecords} currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance} forecastBalance={forecastBalance} safetyReserveAmount={financeSettings.ritmoDiarioConfig?.safetyReserveAmount || 0} currency={activeCurrency} onOpenBill={(id, month) => handleNavigateToFinanceWithParams('bills', { month, selectedTransaction: { type: 'bill', id } })} onOpenDailyPace={() => setCurrentView('daily_pace')} onOpenGoals={() => setCurrentView('goals')} />}
       />
