@@ -796,13 +796,7 @@ export default function App() {
                       await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
                       await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
                     }}
-                    onAddExpense={async (expenseData) => {
-          const created = await addExpense(expenseData);
-          if (expenseData.accountId) {
-            await adjustAccountBalanceForFinancialItem(expenseData.accountId, -expenseData.amount);
-          }
-          return created;
-        }}
+                    onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
                 ) : currentView === 'report' ? (
@@ -1060,7 +1054,13 @@ export default function App() {
         onChangeMoneStyle={(style) => updateSettings({ moneStyle: style })}
         mood={moneMoodObj.mood}
         moodLabel={moneMoodLabel}
-        onAddExpense={addExpense}
+        onAddExpense={async (expenseData: Parameters<typeof addExpense>[0]) => {
+          const created = await addExpense(expenseData);
+          if (expenseData.accountId) {
+            await adjustAccountBalanceForFinancialItem(expenseData.accountId, -expenseData.amount);
+          }
+          return created;
+        }}
         onUpdateExpense={updateExpense}
         onDeleteExpense={deleteExpense}
         onAddBill={addBill}
