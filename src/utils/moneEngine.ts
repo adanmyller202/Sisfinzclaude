@@ -339,7 +339,7 @@ function getCurrentBalancesByCurrency(context: MoneContext): Map<CurrencyCode, n
 
 function formatCurrencyBreakdown(totals: Map<CurrencyCode, number>, emptyText = 'nenhum valor previsto'): string {
   const parts = [...totals.entries()]
-    .filter(([, amount]) => Number.isFinite(amount) && Math.abs(amount) > 0.000001)
+    .filter(([, amount]) => Number.isFinite(amount))
     .map(([code, amount]) => formatCurrencySpoken(amount, code));
   return parts.length ? parts.join(' + ') : emptyText;
 }
@@ -2475,10 +2475,11 @@ REGRAS:
 - Consultas: use "query_balance", "query_account_balance", "query_bills", "query_incomes", "query_forecast", "query_spending", "query_shared_bills", "query_goal_progress" ou "query_weekly_challenge" conforme a pergunta.
 - Marcar fatura como paga: "mark_bill_paid". Marcar receita recebida: "mark_income_received".
 - Para correções, edições e exclusões, identifique exatamente o registro. Se houver mais de um possível, pergunte qual. Nunca exclua por suposição.
+- Para abrir uma tela solicitada explicitamente, use "navigate_to_section" e data.section com o nome exato da seção. Exemplos: contas=accounts, planejamento=planejar, calendário=financial_calendar, relatório=report, metas=goals, cofrinhos=savings, compartilhadas=shared_accounts.
 - Para conversa geral, use "conversation" e responda naturalmente, sem transformar tudo em tarefa financeira.
 Retorne somente JSON válido com a estrutura:
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "ask_clarification",
+  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "transfer_between_accounts" | "mark_bill_paid" | "mark_income_received" | "update_bill" | "update_income" | "update_expense" | "delete_item" | "query_balance" | "query_account_balance" | "query_bills" | "query_incomes" | "query_forecast" | "query_spending" | "query_shared_bills" | "query_goal_progress" | "query_weekly_challenge" | "navigate_to_section" | "ask_clarification",
   "data": {
     "name": string, "amount": number, "totalAmount": number, "installmentsCount": number,
     "fromAccountName": string, "toAccountName": string, "accountName": string,
