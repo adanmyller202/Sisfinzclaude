@@ -863,7 +863,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
    - Criar conta: intent "create_account", name, type (bank, wallet, cash, safe ou other), currency e initialBalance.
    - Editar conta: intent "update_account", accountId ou accountName exato e newName, type, currency, currentBalance ou notes conforme pedido.
    - Excluir conta: intent "delete_account", accountId ou accountName exato.
-   - Ativar/desativar conta: intent "toggle_account_active", accountId ou accountName exato.
+   - Ativar/desativar conta: intent "toggle_account_active", accountId ou accountName exato e isActive true para ativar ou false para desativar.
    - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
      intent: "query_account_balance"
      accountId: id exato da conta
