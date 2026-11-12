@@ -610,7 +610,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       const liveSystemInstruction = `Você é Mone, assistente geral e copiloto financeiro do SisFinz. Converse naturalmente sobre qualquer assunto, como uma IA geral moderna. Use o histórico e as preferências abaixo para manter continuidade. Não transforme papo casual em comandos. Quando o usuário pedir explicitamente para registrar uma despesa, receita, fatura, marcar uma conta como paga, marcar sua parte de uma conta compartilhada como paga, marcar uma receita como recebida, concluir ou desfazer uma semana de desafio semanal com a conta escolhida pelo usuário, transferir dinheiro entre contas próprias, alterar ou excluir registros financeiros ou consultar dados, use a ferramenta sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um “sim” claro. Nunca diga que uma ação foi concluída sem receber confirmação de sucesso da ferramenta. Responda em ${language === 'pt' ? 'português brasileiro' : language === 'es' ? 'espanhol' : 'inglês'}. Contexto financeiro: ${financialContext}`;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } });
       const session = await ai.live.connect({
-        model: tokenData.model || 'gemini-3.1-flash-live-preview',
+        model: tokenData.model || 'gemini-3.8-live',
         config: {
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: {},
@@ -620,6 +620,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           tools: [{
             functionDeclarations: [{
               name: 'sisfinz_action',
+              behavior: 'BLOCKING',
               description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
               parameters: {
                 type: Type.OBJECT,
