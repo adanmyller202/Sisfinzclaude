@@ -43,6 +43,11 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
 
+const isFinancialQuestion = (value: string): boolean => {
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  return /\\b(saldo|dividas?|devo|contas?|faturas?|vencimentos?|pagamentos?|pagar|receitas?|despesas?|gastos?|dinheiro|quanto tenho|quanto devo)\\b/.test(normalized);
+};
+
 interface ChatMessage {
   id: string;
   sender: 'user' | 'mone';
@@ -277,6 +282,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const pendingVoiceActionRef = useRef<string | null>(null);
   const liveUserTextRef = useRef('');
   const liveMoneTextRef = useRef('');
+  const liveFinanceToolUsedRef = useRef(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'idle' | 'connecting' | 'listening' | 'speaking'>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -659,6 +665,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           },
           onmessage: async (message: any) => {
             const toolCalls = message?.toolCall?.functionCalls || [];
+            if (toolCalls.length) liveFinanceToolUsedRef.current = true;
             if (toolCalls.length && liveSessionRef.current) {
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
@@ -709,6 +716,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             }
             const content = message?.serverContent;
             if (content?.inputTranscription?.text) {
+              if (!liveUserTextRef.current) liveFinanceToolUsedRef.current = false;
               const spoken = content.inputTranscription.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[,.!?]+/g, ' ').replace(/\s+/g, ' ').trim();
               if (/^(?:nao\s+)?(?:cancela|cancelar|deixa|no|cancel|never mind)$/.test(spoken)) {
                 pendingVoiceActionRef.current = null;
@@ -716,14 +724,14 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               liveUserTextRef.current += content.inputTranscription.text;
               setLiveTranscript(liveUserTextRef.current);
             }
-            if (content?.outputTranscription?.text) {
+            if (content?.outputTranscription?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
               liveMoneTextRef.current += content.outputTranscription.text;
               setLiveTranscript(liveMoneTextRef.current);
               setLiveStatus('speaking');
             }
             (content?.modelTurn?.parts || []).forEach((part: any) => {
-              if (part?.inlineData?.data) playLiveAudio(part.inlineData.data);
-              if (part?.text) {
+              if (part?.inlineData?.data && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) playLiveAudio(part.inlineData.data);
+              if (part?.text && !(isFinancialQuestion(liveUserTextRef.current) && !liveFinanceToolUsedRef.current)) {
                 liveMoneTextRef.current += part.text;
                 setLiveTranscript(liveMoneTextRef.current);
               }
@@ -739,7 +747,28 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             if (content?.turnComplete) {
               const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               const userText = liveUserTextRef.current.trim();
-              const moneText = liveMoneTextRef.current.trim();
+              let moneText = liveMoneTextRef.current.trim();
+
+              // Audio models can occasionally skip a function call. Never show or play an
+              // unverified financial answer: fall back to the deterministic SisFinz engine.
+              if (userText && isFinancialQuestion(userText) && !liveFinanceToolUsedRef.current) {
+                const verified = await askMone(userText, {
+                  ...moneContextRef.current,
+                  lastActionItem: lastActionItemRef.current,
+                });
+                moneText = verified.text;
+                liveAudioSourcesRef.current.forEach((source) => { try { source.stop(); } catch {} });
+                liveAudioSourcesRef.current = [];
+                livePlaybackTimeRef.current = liveOutputContextRef.current?.currentTime || 0;
+                if (isVoiceReplyEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                  const utterance = new SpeechSynthesisUtterance(moneText);
+                  utterance.lang = 'pt-BR';
+                  utterance.rate = 1.04;
+                  window.speechSynthesis.speak(utterance);
+                }
+              }
+
               setMessages((prev) => [
                 ...prev,
                 ...(userText ? [{ id: 'live_user_' + Date.now(), sender: 'user' as const, text: userText, timestamp: stamp }] : []),
@@ -747,6 +776,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               ]);
               liveUserTextRef.current = '';
               liveMoneTextRef.current = '';
+              liveFinanceToolUsedRef.current = false;
               setLiveTranscript('');
               setLiveStatus('listening');
             }
