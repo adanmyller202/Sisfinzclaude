@@ -613,6 +613,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         model: tokenData.model || 'gemini-3.1-flash-live-preview',
         config: {
           responseModalities: [Modality.AUDIO],
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          sessionResumption: {},
           systemInstruction: { parts: [{ text: liveSystemInstruction }] },
           tools: [{
             functionDeclarations: [{
