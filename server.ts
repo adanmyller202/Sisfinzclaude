@@ -761,7 +761,7 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      matchedId: id do item correspondente
      directResponse: "Registro excluído."
    - Consultas financeiras (quanto gastei este mês?, quanto vou receber?, tenho algo para pagar?, qual meu saldo?):
-     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress"
+     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress" | "update_goal" | "delete_goal"
      targetMonth: "YYYY-MM"
      directResponse: resposta direta e exata.
    - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
@@ -778,6 +778,17 @@ REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
      challengeName: nome do desafio
    - Consultar progresso de metas de economia (ex: "quanto falta para minha meta da moto?"):
      intent: "query_goal_progress"
+     goalId: id exato da meta
+     goalName: nome da meta
+   - Editar uma meta de economia (ex: "renomeie minha meta da moto para viagem"):
+     intent: "update_goal"
+     goalId: id exato da meta
+     goalName: nome atual da meta
+     newName: novo nome, se solicitado
+     icon: novo ícone, se solicitado
+     notes: nova observação, se solicitada
+   - Excluir uma meta de economia (ex: "exclua a meta da moto"):
+     intent: "delete_goal"
      goalId: id exato da meta
      goalName: nome da meta
 
