@@ -1314,18 +1314,22 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
     // 2. ADD INSTALLMENT BILL
     if (intent === 'add_installment_bill' && handlers?.onAddBill) {
-      if (!Number(d.amount || d.totalAmount) || Number(d.amount || d.totalAmount) <= 0) {
+      if (!Number(d.totalAmount) || Number(d.totalAmount) <= 0) {
         return { text: 'Qual é o valor total dessa compra parcelada?', isInternalCalculation: true };
       }
       if (!Number(d.installmentsCount) || Number(d.installmentsCount) < 2) {
         return { text: 'Em quantas parcelas você quer dividir essa compra?', isInternalCalculation: true };
       }
+      const parsedDueDay = Number(d.dueDay || (typeof d.dueDate === 'string' ? d.dueDate.slice(8, 10) : 0));
+      if (!Number.isInteger(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > 31) {
+        return { text: 'Qual será o dia de vencimento da primeira parcela?', isInternalCalculation: true };
+      }
       try {
-        const installments = d.installmentsCount || 1;
-        const instAmount = d.amount || (d.totalAmount ? Math.round((d.totalAmount / installments) * 100) / 100 : 0);
-        const dueDay = d.dueDay || new Date().getDate();
-        const startMonth = d.targetMonth || currentMonthStr;
-        const dueDate = getEffectiveDateForMonth(startMonth, dueDay);
+        const installments = Number(d.installmentsCount);
+        const instAmount = Math.round((Number(d.totalAmount) / installments) * 100) / 100;
+        const dueDay = parsedDueDay;
+        const startMonth = d.targetMonth || (typeof d.dueDate === 'string' ? d.dueDate.slice(0, 7) : currentMonthStr);
+        const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
         const billName = d.name || 'Compra parcelada';
 
         const selectedAccount = resolveMoneAccount(ctx, d.accountId, d.accountName);
@@ -1415,8 +1419,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         if (selectedAccount.needsChoice) {
           return { text: 'Em qual conta você recebe essa receita?', isInternalCalculation: true };
         }
-        const expDay = d.expectedDay || 5;
-        const startMonth = d.targetMonth || currentMonthStr;
+        const startMonth = d.targetMonth || (typeof d.expectedDate === 'string' ? d.expectedDate.slice(0, 7) : currentMonthStr);
+        const expDay = d.expectedDay || (typeof d.expectedDate === 'string' ? Number(d.expectedDate.slice(8, 10)) : d.isReceived ? Number(todayStr.slice(8, 10)) : 5);
+        const expectedDate = d.expectedDate || (d.isReceived ? todayStr : getEffectiveDateForMonth(startMonth, expDay));
         const isRecur = typeof d.isRecurring === 'boolean'
           ? d.isRecurring
           : incName.toLowerCase().includes('salario') || incName.toLowerCase().includes('salário');
@@ -1424,7 +1429,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
           name: incName,
           amount: d.amount,
           expectedDay: expDay,
-          expectedDate: getEffectiveDateForMonth(startMonth, expDay),
+          expectedDate,
           category: getMentionedCategory(ctx, question, 'income') || d.category || inferCategory(incName, 'income'),
           recurrence: isRecur ? 'monthly' as const : 'none' as const,
           ...(d.recurrenceMonthsCount ? { recurrenceMonthsCount: Number(d.recurrenceMonthsCount) } : {}),
@@ -2703,8 +2708,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const incomePayload = {
         name,
         amount: parsedAmt,
-        expectedDay: 5,
-        expectedDate: getEffectiveDateForMonth(currentMonthStr, 5),
+        expectedDay: receivedNow ? Number(todayStr.slice(8, 10)) : 5,
+        expectedDate: receivedNow ? todayStr : getEffectiveDateForMonth(currentMonthStr, 5),
         category: getMentionedCategory(context, question, 'income') || inferCategory(name, 'income'),
         recurrence: /\b(?:sem\s+repeticao|nao\s+repetir|uma\s+vez|avulso)\b/.test(norm)
           ? 'none' as const
