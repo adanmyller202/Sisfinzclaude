@@ -612,7 +612,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             if (toolCalls.length && liveSessionRef.current) {
               const functionResponses = await Promise.all(toolCalls.map(async (call: any) => {
                 const request = typeof call?.args?.request === 'string' ? call.args.request.trim() : '';
-                const destructiveRequest = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|corrig\w*|coloc\w*|defin\w*)\b/i.test(request);
+                const destructiveRequest = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(request);
                 const normalizedReply = request.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.!?]+$/g, '').trim();
                 const isVoiceConfirmation = /^(sim|confirmo|confirmar|pode fazer|pode confirmar|isso mesmo|yes|confirm|go ahead|si|dale|ok|okay)$/.test(normalizedReply);
                 const isVoiceCancellation = /^(nao|cancela|cancelar|deixa|no|cancel|never mind)$/.test(normalizedReply);
