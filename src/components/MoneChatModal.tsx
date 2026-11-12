@@ -131,6 +131,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [showTextMode, setShowTextMode] = useState(false);
   const [isVoiceReplyEnabled, setIsVoiceReplyEnabled] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -351,236 +352,163 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
+  const latestMoneMessage = [...messages].reverse().find((message) => message.sender === 'mone');
+  const latestUserMessage = [...messages].reverse().find((message) => message.sender === 'user');
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden overscroll-contain">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="glass-overlay"
-            onClick={onClose}
-          />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F2FBF6] text-slate-800"
+          style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -top-28 -right-20 h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl" />
+            <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-teal-100/70 blur-3xl" />
+            <div className="absolute inset-0 opacity-[0.22]" style={{ backgroundImage: 'radial-gradient(#7CC9A5 0.7px, transparent 0.7px)', backgroundSize: '19px 19px' }} />
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="glass-modal w-full max-w-lg h-[calc(100dvh-4rem)] sm:h-[680px] rounded-[2.5rem] flex flex-col overflow-hidden relative z-10"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-6 py-5 border-b border-slate-200/60 flex items-center justify-between shrink-0 relative overflow-hidden bg-white/40">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-50" />
-              
-              <div className="flex items-center gap-3 relative z-10">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30 shadow-xs">
-                  <MoneMascot mood={mood} size="sm" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
-                      Mone
-                      <span className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                        isOnline 
-                          ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30' 
-                          : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
-                      }`}>
-                        {!isOnline && <WifiOff className="w-3 h-3" />}
-                        {isOnline ? 'Online' : 'Offline'}
-                      </span>
-                    </h3>
-                  </div>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
-                    {moodLabel || (t as any).smartAssistant || 'Assistente Financeiro'}
-                  </p>
-                </div>
+          <header className="relative z-10 flex shrink-0 items-center justify-between px-5 py-4 sm:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-100 bg-white shadow-sm">
+                <Sparkles className="h-5 w-5 text-emerald-600" />
               </div>
-
-              <div className="flex items-center gap-2 relative z-10">
-                {/* Style Selector */}
-                <div className="relative">
-                  <button
-                    onClick={() => setIsStyleMenuOpen(!isStyleMenuOpen)}
-                    className="h-10 px-3 rounded-2xl bg-white/70 hover:bg-white border border-slate-200/80 text-slate-700 flex items-center gap-2 transition-all cursor-pointer shadow-xs"
-                  >
-                    <span className="text-lg">{currentStyleObj.emoji}</span>
-                    <ChevronDown className="w-4 h-4 text-slate-500" />
-                  </button>
-
-                  <AnimatePresence>
-                    {isStyleMenuOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute right-0 top-full mt-2 w-64 glass-dropdown p-2 rounded-3xl z-50 overflow-hidden"
-                      >
-                        <div className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100 mb-1">
-                          Personalidade do Assistente
-                        </div>
-                        {STYLE_OPTIONS.map((opt) => {
-                          const isSelected = opt.id === (moneStyle || 'direto');
-                          return (
-                            <button
-                              key={opt.id}
-                              onClick={() => handleSelectStyle(opt.id)}
-                              className={`w-full p-3 rounded-2xl flex items-start gap-3 transition-all cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 font-bold' 
-                                  : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <span className="text-xl shrink-0">{opt.emoji}</span>
-                              <div className="text-left">
-                                <div className="text-xs font-black flex items-center justify-between text-slate-900">
-                                  {t[opt.nameKey]}
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                                </div>
-                                <p className="text-[10px] font-medium text-slate-500 leading-tight mt-1">
-                                  {t[opt.descKey]}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <button
-                  onClick={handleClearChat}
-                  className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div>
+                <h2 className="text-lg font-black tracking-tight text-slate-900">SisFinz <span className="text-emerald-600">AI</span></h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700/70">Sua assistente inteligente</p>
               </div>
             </div>
-
-            {/* Message Stream */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-              {messages.map((msg, idx) => {
-                const isMone = msg.sender === 'mone';
-                return (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, x: isMone ? -10 : 10, y: 10 }}
-                    animate={{ opacity: 1, x: 0, y: 0 }}
-                    transition={{ delay: idx === messages.length - 1 ? 0.1 : 0 }}
-                    className={`flex gap-3 max-w-[90%] ${isMone ? 'self-start' : 'self-end flex-row-reverse'}`}
-                  >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
-                      isMone ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-emerald-600 border border-emerald-500'
-                    }`}>
-                      {isMone ? <MoneMascot mood={mood} size="sm" className="scale-90" /> : <User className="w-4 h-4 text-white" />}
-                    </div>
-
-                    <div className={`p-4 rounded-2xl shadow-sm relative overflow-hidden ${
-                      isMone 
-                        ? 'bg-white/80 border border-slate-200/80 text-slate-800' 
-                        : 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white font-medium border border-emerald-500/30'
-                    }`}>
-                      {isMone && <div className="absolute top-0 right-0 p-2 opacity-50"><Sparkles className="w-3 h-3 text-emerald-600" /></div>}
-                      <div className="text-[13px] leading-relaxed whitespace-pre-wrap">
-                        {msg.text.split('\n\n').map((para, i) => (
-                          <p key={i} className="mb-2 last:mb-0">
-                            {para.split(/(\*\*.*?\*\*)/g).map((part, j) => {
-                              if (part.startsWith('**') && part.endsWith('**')) {
-                                return <strong key={j} className="font-black text-slate-900">{part.slice(2, -2)}</strong>;
-                              }
-                              return part;
-                            })}
-                          </p>
-                        ))}
-                      </div>
-                      <div className={`text-[9px] mt-2 font-black uppercase tracking-widest text-right ${isMone ? 'text-slate-400' : 'text-emerald-100'}`}>
-                        {msg.timestamp}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-              
-              {isLoading && (
-                <div className="flex gap-3 max-w-[85%] self-start">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
-                  </div>
-                  <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 text-slate-500 italic text-xs shadow-xs">
-                    Mone está pensando...
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+            <div className="flex items-center gap-2">
+              <span className={`hidden rounded-full border px-3 py-1.5 text-[10px] font-bold sm:inline-flex ${isOnline ? 'border-emerald-200 bg-white/80 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                {isOnline ? '● Conectada' : '● Sem conexão'}
+              </span>
+              <button type="button" onClick={onClose} aria-label="Fechar assistente" className="flex h-10 w-10 items-center justify-center rounded-full border border-white bg-white/90 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900">
+                <X className="h-5 w-5" />
+              </button>
             </div>
+          </header>
 
-            {/* Bottom Section */}
-            <div className="p-4 bg-white/40 border-t border-slate-200/60 space-y-4">
-              <div className="flex items-center justify-between -mb-2 px-1">
-                <span className="text-[10px] font-semibold text-slate-500">{isRecording ? 'Estou ouvindo… toque no botão para enviar' : 'Toque no microfone e fale naturalmente'}</span>
-                <button type="button" onClick={() => setIsVoiceReplyEnabled((value) => !value)} className="flex items-center gap-1 text-[10px] font-bold text-emerald-700" aria-label="Alternar resposta falada">
-                  <Volume2 className="w-3.5 h-3.5" /> {isVoiceReplyEnabled ? 'Voz ativada' : 'Voz desativada'}
-                </button>
+          <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 pb-5">
+            <div className="flex w-full max-w-xl flex-col items-center text-center">
+              <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
+                <motion.div
+                  className="absolute h-56 w-56 rounded-full border border-emerald-200/80 sm:h-64 sm:w-64"
+                  animate={{ scale: isRecording ? [1, 1.12, 1] : [1, 1.035, 1], opacity: isRecording ? [0.45, 0.95, 0.45] : [0.35, 0.65, 0.35] }}
+                  transition={{ duration: isRecording ? 1.25 : 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <motion.div
+                  className="absolute h-44 w-44 rounded-full bg-gradient-to-br from-emerald-200/80 to-teal-100/50 blur-xl sm:h-52 sm:w-52"
+                  animate={{ scale: isRecording || isLoading ? [0.92, 1.16, 0.92] : [0.96, 1.04, 0.96] }}
+                  transition={{ duration: isRecording ? 0.9 : 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <motion.div
+                  className="relative z-10 flex h-40 w-40 items-center justify-center rounded-[3rem] border border-white/90 bg-white/80 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-sm sm:h-48 sm:w-48"
+                  animate={{ y: isLoading ? [0, -5, 0] : [0, -4, 0], scale: isRecording ? [1, 1.035, 1] : 1 }}
+                  transition={{ duration: isRecording ? 1 : 3, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <MoneMascot mood={isRecording ? 'happy' : mood} size="lg" />
+                </motion.div>
+                <motion.div
+                  className={`absolute bottom-5 right-7 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-[#F2FBF6] shadow-lg ${isRecording ? 'bg-rose-500 text-white' : isLoading ? 'bg-amber-400 text-white' : 'bg-emerald-500 text-white'}`}
+                  animate={isRecording || isLoading ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+                  transition={{ duration: 0.8, repeat: isRecording || isLoading ? Infinity : 0 }}
+                >
+                  {isRecording ? <Mic className="h-5 w-5" /> : isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+                </motion.div>
               </div>
-              {/* Quick Suggestions */}
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-                {quickSuggestions.map((sug, idx) => (
-                  <motion.button
-                    key={idx}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleSendMessage(sug)}
-                    className="px-4 py-2 rounded-2xl bg-white/70 hover:bg-white border border-slate-200/80 text-slate-700 text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shadow-xs"
+
+              <div className="mb-2 min-h-[58px]">
+                <AnimatePresence mode="wait">
+                  <motion.h1
+                    key={isRecording ? 'listening' : isLoading ? 'thinking' : 'ready'}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl"
                   >
-                    {sug}
-                  </motion.button>
+                    {isRecording ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
+                  </motion.h1>
+                </AnimatePresence>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                  {isRecording ? 'Pode falar naturalmente. Quando terminar, toque no botão para enviar.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre suas finanças ou peça para eu fazer algo no SisFinz.'}
+                </p>
+              </div>
+
+              <div className="mb-7 flex h-10 items-center justify-center gap-1.5" aria-hidden="true">
+                {Array.from({ length: 25 }).map((_, index) => (
+                  <motion.span
+                    key={index}
+                    className={`w-1 rounded-full ${isRecording ? 'bg-rose-400' : isLoading ? 'bg-amber-400' : 'bg-emerald-300'}`}
+                    animate={{ height: isRecording || isLoading ? [7, 12 + ((index * 7) % 23), 7] : [5, 9 + ((index * 3) % 8), 5], opacity: isRecording || isLoading ? [0.5, 1, 0.5] : 0.65 }}
+                    transition={{ duration: isRecording ? 0.55 + (index % 5) * 0.08 : 1.5 + (index % 4) * 0.12, repeat: Infinity, delay: index * 0.025, ease: 'easeInOut' }}
+                  />
                 ))}
               </div>
 
-              {/* Input Bar */}
-              <form
-                onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
-                className="relative flex items-center gap-2"
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Envie uma mensagem para Mone..."
-                  className="flex-1 h-14 bg-white/80 border border-slate-200/80 rounded-3xl px-6 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/60 transition-all shadow-xs"
-                  disabled={isLoading}
-                />
-                <button
+              {latestMoneMessage && messages.length > 1 && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mb-5 w-full max-w-md rounded-3xl border border-white bg-white/75 px-5 py-4 text-left shadow-sm">
+                  <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-700"><Sparkles className="h-3 w-3" /> Mone</div>
+                  <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{latestMoneMessage.text}</p>
+                </motion.div>
+              )}
+
+              {latestUserMessage && (
+                <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
+              )}
+
+              <div className="flex w-full max-w-md items-center justify-center gap-5">
+                <button type="button" onClick={() => setShowTextMode((value) => !value)} className="flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 text-slate-500 transition hover:bg-white/80 hover:text-emerald-700" aria-label="Alternar conversa escrita">
+                  <Bot className="h-5 w-5" />
+                  <span className="text-[9px] font-bold">{showTextMode ? 'Ocultar texto' : 'Texto'}</span>
+                </button>
+
+                <motion.button
                   type="button"
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isLoading}
-                  aria-label={isRecording ? 'Finalizar gravação' : 'Falar com Mone'}
-                  className={`w-14 h-14 rounded-3xl flex items-center justify-center shrink-0 transition-all border ${isRecording ? 'bg-rose-500 text-white border-rose-400 animate-pulse' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'} disabled:opacity-40`}
+                  whileTap={{ scale: 0.94 }}
+                  className={`flex h-24 w-24 items-center justify-center rounded-full border-[6px] border-white shadow-[0_14px_40px_rgba(16,185,129,0.25)] transition-all disabled:opacity-50 ${isRecording ? 'bg-gradient-to-br from-rose-400 to-rose-600 text-white' : 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'}`}
+                  aria-label={isRecording ? 'Enviar áudio' : 'Começar a falar'}
                 >
-                  {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  type="submit"
-                  disabled={!inputValue.trim() || isLoading}
-                  className="w-14 h-14 rounded-3xl bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-600/20 disabled:opacity-40 transition-all cursor-pointer shrink-0"
-                >
-                  <Send className="w-5 h-5" />
+                  {isRecording ? <Square className="h-8 w-8 fill-current" /> : <Mic className="h-9 w-9" />}
                 </motion.button>
-              </form>
+
+                <button type="button" onClick={() => { setIsVoiceReplyEnabled((value) => !value); if (typeof window !== 'undefined' && 'speechSynthesis' in window && isVoiceReplyEnabled) window.speechSynthesis.cancel(); }} className={`flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 transition hover:bg-white/80 ${isVoiceReplyEnabled ? 'text-emerald-700' : 'text-slate-400'}`} aria-label="Alternar resposta falada">
+                  <Volume2 className="h-5 w-5" />
+                  <span className="text-[9px] font-bold">{isVoiceReplyEnabled ? 'Voz ligada' : 'Voz desligada'}</span>
+                </button>
+              </div>
+
+              <p className="mt-4 text-[10px] font-medium text-slate-400">
+                {isRecording ? 'Toque no botão vermelho quando terminar de falar' : 'Toque no microfone para começar'}
+              </p>
             </div>
-          </motion.div>
-        </div>
+
+            <AnimatePresence>
+              {showTextMode && (
+                <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }} className="mt-6 w-full max-w-xl rounded-3xl border border-white bg-white/85 p-4 shadow-lg">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
+                    <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
+                  </div>
+                  <div className="mb-3 max-h-40 space-y-2 overflow-y-auto text-left">
+                    {messages.map((message) => (
+                      <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
+                    ))}
+                    {isLoading && <p className="text-xs text-emerald-600">Mone está pensando…</p>}
+                  </div>
+                  <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="flex gap-2">
+                    <input ref={inputRef} value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Escreva para a Mone…" className="h-12 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" disabled={isLoading} />
+                    <button type="submit" disabled={!inputValue.trim() || isLoading} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"><Send className="h-4 w-4" /></button>
+                  </form>
+                </motion.section>
+              )}
+            </AnimatePresence>
+          </main>
+        </motion.div>
       )}
     </AnimatePresence>
   );
