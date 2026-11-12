@@ -757,10 +757,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       }
       const challenges = ctx.weeklyChallenges || [];
       const challengeName = normalize(d.challengeName || d.name || '');
-      const challengeMatches = challenges.filter((challenge) =>
-        (d.challengeId && challenge.id === d.challengeId) ||
-        (challengeName && normalize(challenge.title).includes(challengeName))
-      );
+      const challengeMatches = d.challengeId
+        ? challenges.filter((challenge) => challenge.id === d.challengeId)
+        : challenges.filter((challenge) => challengeName && normalize(challenge.title).includes(challengeName));
       if (challengeMatches.length !== 1) {
         return {
           text: challengeMatches.length > 1
@@ -781,8 +780,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const accountName = normalize(d.accountName || '');
       const accountMatches = (ctx.accounts || []).filter((account) =>
         account.isActive !== false &&
-        ((d.accountId && account.id === d.accountId) ||
-          (accountName && normalize(account.name).includes(accountName))) &&
+        (d.accountId ? account.id === d.accountId : Boolean(accountName && normalize(account.name).includes(accountName))) &&
         (!challenge.currency || account.currency === challenge.currency)
       );
       if (accountMatches.length !== 1) {
@@ -823,11 +821,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         !ctx.myUserId || bill.members.includes(ctx.myUserId)
       );
       const requestedName = normalize(d.name || '');
-      const matches = available.filter((bill) => {
-        if (d.matchedId && bill.id === d.matchedId) return true;
-        const title = normalize(bill.title);
-        return requestedName ? title === requestedName || title.includes(requestedName) || requestedName.includes(title) : false;
-      });
+      const matches = d.matchedId
+        ? available.filter((bill) => bill.id === d.matchedId)
+        : available.filter((bill) => {
+            const title = normalize(bill.title);
+            return requestedName ? title === requestedName || title.includes(requestedName) || requestedName.includes(title) : false;
+          });
       if (matches.length !== 1) {
         return {
           text: matches.length > 1
