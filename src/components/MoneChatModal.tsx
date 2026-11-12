@@ -709,15 +709,29 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Saldo atual: ' + currentBalance + '; saldo projetado: ' + forecastBalance + '.',
         'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency, currencyName: currencyNames[a.currency] || 'moeda não identificada', currencySymbol: currencySymbols[a.currency] || '' }))).slice(0, 4500) + '.',
         'Faturas: ' + JSON.stringify(bills.map((b) => {
-          const linkedAccount = accounts.find((account) => account.id === b.accountId);
-          const billCurrency = linkedAccount?.currency || currency;
+          const linkedAccount = accounts.find((account) => account.id === b.accountId)
+            || accounts.find((account) => account.id === b.accountDistributions?.[0]?.accountId);
+          const currencyBreakdown = (b.accountDistributions || []).map((distribution) => {
+            const distributionAccount = accounts.find((account) => account.id === distribution.accountId);
+            const distributionCurrency = distributionAccount?.currency || currency;
+            return {
+              accountName: distributionAccount?.name || null,
+              amount: distribution.amount,
+              currency: distributionCurrency,
+              currencyName: currencyNames[distributionCurrency] || 'moeda não identificada',
+              currencySymbol: currencySymbols[distributionCurrency] || '',
+            };
+          });
+          const distinctCurrencies = [...new Set(currencyBreakdown.map((item) => item.currency))];
+          const billCurrency = linkedAccount?.currency || (distinctCurrencies.length === 1 ? distinctCurrencies[0] : distinctCurrencies.length > 1 ? 'MULTI' : currency);
           return {
             id: b.id,
             name: b.name,
             amount: b.amount,
             currency: billCurrency,
-            currencyName: currencyNames[billCurrency] || 'moeda não identificada',
-            currencySymbol: currencySymbols[billCurrency] || '',
+            currencyName: billCurrency === 'MULTI' ? 'moedas diferentes' : currencyNames[billCurrency] || 'moeda não identificada',
+            currencySymbol: billCurrency === 'MULTI' ? '' : currencySymbols[billCurrency] || '',
+            currencyBreakdown,
             accountName: linkedAccount?.name || null,
             dueDay: b.dueDay,
           };
@@ -742,7 +756,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
-      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas ou pagamentos DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um sim claro. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
+      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas ou pagamentos DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. Se houver currencyBreakdown, use cada parcela com a moeda da respectiva conta e não misture moedas. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um sim claro. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
