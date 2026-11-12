@@ -675,7 +675,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const locale = getLocaleForLanguage(language);
 
   // Mone identity is deterministic: never expose the underlying AI model name.
-  if (/\b(?:qual\s+(?:e|é|eh)\s+(?:o\s+)?seu\s+nome|como\s+voce\s+se\s+chama|quem\s+e\s+voce|seu\s+nome)\b/i.test(norm)) {
+  if (/\b(?:qual\s+(?:era\s+)?(?:o\s+)?nome\s+(?:dela|seu)|qual\s+(?:e|era)\s+(?:o\s+)?seu\s+nome|como\s+voce\s+se\s+chama|quem\s+e\s+voce|seu\s+nome)\b/i.test(norm)) {
     return { text: 'Meu nome é Mone. Sou a inteligência integrada ao SisFinz e estou aqui para conversar e cuidar das suas finanças com você.', isInternalCalculation: true };
   }
 
