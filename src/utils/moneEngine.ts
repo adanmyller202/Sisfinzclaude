@@ -346,15 +346,33 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
       const effDate = exc?.expectedDate ?? getEffectiveDateForMonth(targetMonthStr, effDay);
       const isCompleted = statusMap.get(`income_${inc.id}_${targetMonthStr}`)?.isCompleted === true;
 
-      monthIncomes.push({
-        id: inc.id,
-        name: inc.name,
-        amount: effAmount,
-        currency: context.currency,
-        category: inc.category,
-        date: effDate,
-        isCompleted,
-      });
+      const effectiveDistributions = exc?.accountDistributions ?? inc.accountDistributions;
+      if (effectiveDistributions?.length) {
+        for (const distribution of effectiveDistributions) {
+          const distributionAccount = context.accounts?.find((account) => account.id === distribution.accountId);
+          monthIncomes.push({
+            id: inc.id,
+            name: inc.name,
+            amount: distribution.amount,
+            currency: distributionAccount?.currency || context.currency,
+            category: inc.category,
+            date: effDate,
+            isCompleted,
+          });
+        }
+      } else {
+        const linkedAccountId = exc?.accountId ?? inc.accountId;
+        const linkedAccount = context.accounts?.find((account) => account.id === linkedAccountId);
+        monthIncomes.push({
+          id: inc.id,
+          name: inc.name,
+          amount: effAmount,
+          currency: linkedAccount?.currency || context.currency,
+          category: inc.category,
+          date: effDate,
+          isCompleted,
+        });
+      }
     }
   }
 
@@ -1678,8 +1696,15 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     if (intent === 'query_incomes') {
       const targetMonth = d.targetMonth || extractTargetMonth(question, currentMonthStr);
       const data = calculateMonthFinancials(ctx, targetMonth);
+      const totalsByCurrency = new Map<CurrencyCode, number>();
+      for (const income of data.monthIncomes) {
+        totalsByCurrency.set(income.currency, (totalsByCurrency.get(income.currency) || 0) + income.amount);
+      }
+      const summary = [...totalsByCurrency.entries()]
+        .map(([code, amount]) => formatCurrencySpoken(amount, code))
+        .join(' + ');
       return {
-        text: `${formatCurrencySpoken(data.totalIncomes, currency)} em receitas previstas.`,
+        text: `${summary || 'Nenhuma receita prevista'} em receitas previstas.`,
         isInternalCalculation: true,
       };
     }
@@ -2116,8 +2141,15 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   if (norm.includes('receber') || norm.includes('receitas')) {
     const targetMonth = extractTargetMonth(question, currentMonthStr);
     const data = calculateMonthFinancials(context, targetMonth);
+    const totalsByCurrency = new Map<CurrencyCode, number>();
+    for (const income of data.monthIncomes) {
+      totalsByCurrency.set(income.currency, (totalsByCurrency.get(income.currency) || 0) + income.amount);
+    }
+    const summary = [...totalsByCurrency.entries()]
+      .map(([code, amount]) => formatCurrencySpoken(amount, code))
+      .join(' + ');
     return {
-      text: `${formatCurrencySpoken(data.totalIncomes, currency)} em receitas previstas.`,
+      text: `${summary || 'Nenhuma receita prevista'} em receitas previstas.`,
       isInternalCalculation: true,
     };
   }
