@@ -63,7 +63,8 @@ const isFinancialMutationRequest = (value: string): boolean => {
   const hasMutationVerb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|alter\w*|mud\w*|troc\w*|substitu\w*|atualiz\w*|modific\w*|ajust\w*|aument\w*|reduz\w*|edit\w*|renome\w*|rename\w*|corrig\w*|coloc\w*|defin\w*|desfaz\w*|estorn\w*|revert\w*)\b/i.test(normalized);
   const isDelete = /\b(apag\w*|exclu\w*|delet\w*|remov\w*)\b/i.test(normalized);
   const hasFinancialTarget = /\b(fatura|conta|despesa|receita|meta|cofrinho|reserva|poupanca|categoria|lancamento|registro|valor|data|vencimento|saldo|semana|desafio|dinheiro|transferencia|parcelamento|parcela|isso|esse|essa|ultimo|ultima)\b|\bpara\s+\d/i.test(normalized);
-  return hasMutationVerb && (isDelete || hasFinancialTarget);
+  // Explicit edits are authorization to update; ask for an extra confirmation only before deletion.
+  return isDelete && hasFinancialTarget;
 };
 
 interface MoneChatModalProps {
@@ -329,6 +330,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const livePlaybackTimeRef = useRef(0);
   const liveCompressorRef = useRef<DynamicsCompressorNode | null>(null);
   const liveOutputGainRef = useRef<GainNode | null>(null);
+  const liveOutputLevelRef = useRef(1);
   const liveTurnWatchdogRef = useRef<number | null>(null);
   const liveTurnSequenceRef = useRef(0);
   const liveAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
@@ -660,7 +662,23 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     const pcm = new Int16Array(bytes.buffer);
     const buffer = context.createBuffer(1, pcm.length, 24000);
     const channel = buffer.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+    // Automatic loudness leveling: normalize each received speech chunk with a smoothed gain,
+    // then apply a hard peak ceiling so Mone does not jump between quiet and loud phrases.
+    let sumSquares = 0;
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i++) {
+      const sample = pcm[i] / 32768;
+      sumSquares += sample * sample;
+      peak = Math.max(peak, Math.abs(sample));
+    }
+    const rms = Math.sqrt(sumSquares / Math.max(1, pcm.length));
+    const desiredGain = rms > 0.0005 ? Math.min(2.8, Math.max(0.7, 0.16 / rms)) : 1;
+    const smoothedGain = liveOutputLevelRef.current * 0.72 + desiredGain * 0.28;
+    liveOutputLevelRef.current = smoothedGain;
+    const peakLimitedGain = peak > 0 ? Math.min(smoothedGain, 0.88 / peak) : smoothedGain;
+    for (let i = 0; i < pcm.length; i++) {
+      channel[i] = Math.max(-0.88, Math.min(0.88, (pcm[i] / 32768) * peakLimitedGain));
+    }
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(liveCompressorRef.current || context.destination);
@@ -761,13 +779,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       liveOutputContextRef.current = outputContext;
       // Smooth loudness swings in generated speech without changing the device volume.
       const outputCompressor = outputContext.createDynamicsCompressor();
-      outputCompressor.threshold.value = -22;
-      outputCompressor.knee.value = 18;
-      outputCompressor.ratio.value = 6;
-      outputCompressor.attack.value = 0.003;
-      outputCompressor.release.value = 0.22;
+      outputCompressor.threshold.value = -28;
+      outputCompressor.knee.value = 8;
+      outputCompressor.ratio.value = 12;
+      outputCompressor.attack.value = 0.002;
+      outputCompressor.release.value = 0.16;
       const outputGain = outputContext.createGain();
-      outputGain.gain.value = 1;
+      outputGain.gain.value = 1.08;
       outputCompressor.connect(outputGain);
       outputGain.connect(outputContext.destination);
       liveCompressorRef.current = outputCompressor;
@@ -862,7 +880,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
         'Preferência de estilo da Mone: ' + moneStyle + '.',
       ].join(' ');
-      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Seu nome é Mone; se perguntarem como você se chama, responda Meu nome é Mone. Nunca se identifique como Gemini, Google, Flash ou qualquer modelo de IA. O nome do modelo é apenas tecnologia interna. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas, pagamentos, cofrinhos, reservas, metas de economia, aportes, resgates, convites ou conexões compartilhadas DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. Se houver currencyBreakdown, use cada parcela com a moeda da respectiva conta e não misture moedas. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para abrir ou mostrar uma tela/seção do SisFinz, use sisfinz_action com navigate_to_section. Quando pedir para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Para alterações e exclusões, peça confirmação explícita antes de executar; só execute depois de um sim claro. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
+      const liveSystemInstruction = "Você é Mone, assistente geral e copiloto financeiro do SisFinz. Seu nome é Mone; se perguntarem como você se chama, responda Meu nome é Mone. Nunca se identifique como Gemini, Google, Flash ou qualquer modelo de IA. O nome do modelo é apenas tecnologia interna. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas, pagamentos, cofrinhos, reservas, metas de economia, aportes, resgates, convites ou conexões compartilhadas DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. Se houver currencyBreakdown, use cada parcela com a moeda da respectiva conta e não misture moedas. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para abrir ou mostrar uma tela/seção do SisFinz, use sisfinz_action com navigate_to_section. Quando pedir para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Execute alterações de valores/dados quando o usuário pedir claramente, sem pedir confirmação repetida. Peça uma única confirmação explícita somente antes de excluir registros. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
       const session = await ai.live.connect({
         model: tokenData.model || 'gemini-3.8-live',
