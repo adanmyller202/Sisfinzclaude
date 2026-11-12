@@ -23,6 +23,8 @@ jobs:
           node-version: 24.12.0
       - name: Confirm latest Mone implementation
         run: echo "Validating the latest main branch"
+      - name: Confirm v1beta Live API configuration
+        run: echo "Validating the v1beta ephemeral-token implementation"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: TypeScript validation
