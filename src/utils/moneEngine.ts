@@ -2119,7 +2119,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       if (!title) return { text: 'Qual é o nome dessa conta compartilhada?', isInternalCalculation: true };
       const amount = Number(d.amount);
       if (!Number.isFinite(amount) || amount <= 0) return { text: 'Qual é o valor total da conta compartilhada?', isInternalCalculation: true };
-      const dueDay = Number(d.dueDay);
+      const dueDay = Number(d.dueDay || (typeof d.dueDate === 'string' ? d.dueDate.slice(8, 10) : 0));
       if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return { text: 'Qual é o dia de vencimento dessa conta?', isInternalCalculation: true };
       const partners = ctx.sharedPartners || [];
       const partnerName = normalize(d.partnerName || '');
@@ -2145,7 +2145,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         return { text: 'Como você quer dividir a conta em porcentagens? A soma precisa ser 100%.', isInternalCalculation: true };
       }
       const splitMethod: SplitMethod = myPercentage === 50 && partnerPercentage === 50 ? 'fifty_fifty' : 'custom_percentage';
-      const startMonth = d.targetMonth || currentMonthStr;
+      const startMonth = d.targetMonth || (typeof d.dueDate === 'string' ? d.dueDate.slice(0, 7) : currentMonthStr);
       const dueDate = d.dueDate || getEffectiveDateForMonth(startMonth, dueDay);
       try {
         await handlers.onCreateSharedBill({
