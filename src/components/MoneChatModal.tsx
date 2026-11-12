@@ -215,6 +215,10 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!isOpen && liveSessionRef.current) stopLiveVoice();
+  }, [isOpen]);
+
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState(false);
 
   const STYLE_OPTIONS = React.useMemo(() => [
@@ -721,6 +725,12 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
 
               {latestUserMessage && (
                 <p className="mb-4 max-w-sm truncate text-xs text-slate-400">{latestUserMessage.text}</p>
+              )}
+              {isLiveConnected && liveTranscript && (
+                <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
+                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
+                  {liveTranscript}
+                </div>
               )}
 
               <div className="flex w-full max-w-md items-center justify-center gap-5">
