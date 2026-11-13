@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Users, AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { getTranslations } from '../../utils/i18n';
 import { LanguageCode } from '../../types';
@@ -34,7 +35,7 @@ export const StopSharingModal: React.FC<StopSharingModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
@@ -109,5 +110,5 @@ export const StopSharingModal: React.FC<StopSharingModalProps> = ({
         </button>
       </div>
     </div>
-  );
+  ), document.body);
 };
