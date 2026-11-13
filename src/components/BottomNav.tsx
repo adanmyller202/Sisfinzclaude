@@ -50,8 +50,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     : { type: 'spring' as const, stiffness: 430, damping: 28, mass: 0.72 };
 
   const handleTabClick = (area: MainNavArea) => {
-    if (area === currentArea) window.scrollTo({ top: 0, behavior: 'smooth' });
-    else onChangeArea(area);
+    if (area === currentArea) {
+      const reset = () => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      };
+      reset();
+      requestAnimationFrame(reset);
+    } else {
+      onChangeArea(area);
+    }
   };
 
   return (
