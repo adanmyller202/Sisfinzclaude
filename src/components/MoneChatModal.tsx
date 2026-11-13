@@ -1207,7 +1207,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F2FBF6] text-slate-800"
-          style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          style={{ height: '100dvh', minHeight: 0, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute -top-28 -right-20 h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl" />
@@ -1235,118 +1235,124 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             </div>
           </header>
 
-          <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 pb-5">
-            <div className="flex w-full max-w-xl flex-col items-center text-center">
-              <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
-                <motion.div
-                  className="absolute h-56 w-56 rounded-full border border-emerald-200/80 sm:h-64 sm:w-64"
-                  animate={{ scale: isRecording ? [1, 1.12, 1] : [1, 1.035, 1], opacity: isRecording ? [0.45, 0.95, 0.45] : [0.35, 0.65, 0.35] }}
-                  transition={{ duration: isRecording ? 1.25 : 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <motion.div
-                  className="absolute h-44 w-44 rounded-full bg-gradient-to-br from-emerald-200/80 to-teal-100/50 blur-xl sm:h-52 sm:w-52"
-                  animate={{ scale: isRecording || isLoading ? [0.92, 1.16, 0.92] : [0.96, 1.04, 0.96] }}
-                  transition={{ duration: isRecording ? 0.9 : 2.8, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <motion.div
-                  className="relative z-10 flex h-40 w-40 items-center justify-center rounded-[3rem] border border-white/90 bg-white/80 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-sm sm:h-48 sm:w-48"
-                  animate={{ y: isLoading ? [0, -5, 0] : [0, -4, 0], scale: isRecording ? [1, 1.035, 1] : 1 }}
-                  transition={{ duration: isRecording ? 1 : 3, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <SisFinzPet size={142} className="drop-shadow-[0_10px_24px_rgba(16,185,129,0.22)]" />
-                </motion.div>
-                <motion.div
-                  className={`absolute bottom-5 right-7 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-[#F2FBF6] shadow-lg ${isRecording ? 'bg-rose-500 text-white' : isLoading ? 'bg-amber-400 text-white' : 'bg-emerald-500 text-white'}`}
-                  animate={isRecording || isLoading ? { scale: [1, 1.12, 1] } : { scale: 1 }}
-                  transition={{ duration: 0.8, repeat: isRecording || isLoading ? Infinity : 0 }}
-                >
-                  {isRecording ? <Mic className="h-5 w-5" /> : isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-                </motion.div>
-              </div>
+          <main className={`relative z-10 flex min-h-0 flex-1 flex-col items-center px-3 pb-2 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start overflow-hidden' : 'justify-center overflow-y-auto'}`}>
+            {!showTextMode && (
+                          <div className="flex w-full max-w-xl flex-col items-center text-center">
+                            <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
+                              <motion.div
+                                className="absolute h-56 w-56 rounded-full border border-emerald-200/80 sm:h-64 sm:w-64"
+                                animate={{ scale: isRecording ? [1, 1.12, 1] : [1, 1.035, 1], opacity: isRecording ? [0.45, 0.95, 0.45] : [0.35, 0.65, 0.35] }}
+                                transition={{ duration: isRecording ? 1.25 : 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                              />
+                              <motion.div
+                                className="absolute h-44 w-44 rounded-full bg-gradient-to-br from-emerald-200/80 to-teal-100/50 blur-xl sm:h-52 sm:w-52"
+                                animate={{ scale: isRecording || isLoading ? [0.92, 1.16, 0.92] : [0.96, 1.04, 0.96] }}
+                                transition={{ duration: isRecording ? 0.9 : 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                              />
+                              <motion.div
+                                className="relative z-10 flex h-40 w-40 items-center justify-center rounded-[3rem] border border-white/90 bg-white/80 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-sm sm:h-48 sm:w-48"
+                                animate={{ y: isLoading ? [0, -5, 0] : [0, -4, 0], scale: isRecording ? [1, 1.035, 1] : 1 }}
+                                transition={{ duration: isRecording ? 1 : 3, repeat: Infinity, ease: 'easeInOut' }}
+                              >
+                                <SisFinzPet size={142} className="drop-shadow-[0_10px_24px_rgba(16,185,129,0.22)]" />
+                              </motion.div>
+                              <motion.div
+                                className={`absolute bottom-5 right-7 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border-4 border-[#F2FBF6] shadow-lg ${isRecording ? 'bg-rose-500 text-white' : isLoading ? 'bg-amber-400 text-white' : 'bg-emerald-500 text-white'}`}
+                                animate={isRecording || isLoading ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+                                transition={{ duration: 0.8, repeat: isRecording || isLoading ? Infinity : 0 }}
+                              >
+                                {isRecording ? <Mic className="h-5 w-5" /> : isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+                              </motion.div>
+                            </div>
+              
+                            <div className="mb-2 min-h-[58px]">
+                              <AnimatePresence mode="wait">
+                                <motion.h1
+                                  key={isRecording ? 'listening' : isLoading ? 'thinking' : 'ready'}
+                                  initial={{ opacity: 0, y: 8 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -8 }}
+                                  className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl"
+                                >
+                                  {liveStatus === 'connecting' ? 'Conectando à Mone…' : liveStatus === 'processing' ? 'Estou preparando sua resposta…' : liveStatus === 'speaking' ? 'Mone está falando…' : isLiveConnected ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
+                                </motion.h1>
+                              </AnimatePresence>
+                              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                                {liveStatus === 'processing' || liveStatus === 'speaking' ? 'Aguarde eu terminar. O microfone fica pausado durante toda a resposta.' : isLiveConnected ? 'Estou ouvindo você. Quando terminar de falar, vou processar e responder sem interrupções.' : liveStatus === 'connecting' ? 'Preparando o microfone e a conexão segura.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre qualquer assunto ou suas finanças.'}
+                              </p>
+                            </div>
+              
+                            <div className="mb-7 flex h-10 items-center justify-center gap-1.5" aria-hidden="true">
+                              {Array.from({ length: 25 }).map((_, index) => (
+                                <motion.span
+                                  key={index}
+                                  className={`w-1 rounded-full ${isRecording ? 'bg-rose-400' : isLoading ? 'bg-amber-400' : 'bg-emerald-300'}`}
+                                  animate={{ height: isRecording || isLoading ? [7, 12 + ((index * 7) % 23), 7] : [5, 9 + ((index * 3) % 8), 5], opacity: isRecording || isLoading ? [0.5, 1, 0.5] : 0.65 }}
+                                  transition={{ duration: isRecording ? 0.55 + (index % 5) * 0.08 : 1.5 + (index % 4) * 0.12, repeat: Infinity, delay: index * 0.025, ease: 'easeInOut' }}
+                                />
+                              ))}
+                            </div>
+              
+                            {isLiveConnected && liveTranscript && (
+                              <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
+                                <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
+                                {liveTranscript}
+                              </div>
+                            )}
+              
+                            <div className="flex w-full max-w-md items-center justify-center gap-5">
+                              <button type="button" onClick={() => setShowTextMode((value) => !value)} className="flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 text-slate-500 transition hover:bg-white/80 hover:text-emerald-700" aria-label="Alternar conversa escrita">
+                                <Bot className="h-5 w-5" />
+                                <span className="text-[9px] font-bold">{showTextMode ? 'Ocultar texto' : 'Texto'}</span>
+                              </button>
+              
+                              <motion.button
+                                type="button"
+                                onClick={isLiveConnected ? stopRecording : startLiveVoice}
+                                disabled={isLoading || liveStatus === 'connecting' || !memoryReady}
+                                whileTap={{ scale: 0.94 }}
+                                className={`flex h-24 w-24 items-center justify-center rounded-full border-[6px] border-white shadow-[0_14px_40px_rgba(16,185,129,0.25)] transition-all disabled:opacity-50 ${isRecording ? 'bg-gradient-to-br from-rose-400 to-rose-600 text-white' : 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'}`}
+                                aria-label={isLiveConnected ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
+                              >
+                                {liveStatus === 'connecting' ? <Loader2 className="h-8 w-8 animate-spin" /> : isLiveConnected ? <Square className="h-8 w-8 fill-current" /> : <Mic className="h-9 w-9" />}
+                              </motion.button>
+              
+                              <button type="button" onClick={() => { setIsVoiceReplyEnabled((value) => !value); if (typeof window !== 'undefined' && 'speechSynthesis' in window && isVoiceReplyEnabled) window.speechSynthesis.cancel(); }} className={`flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 transition hover:bg-white/80 ${isVoiceReplyEnabled ? 'text-emerald-700' : 'text-slate-400'}`} aria-label="Alternar resposta falada">
+                                <Volume2 className="h-5 w-5" />
+                                <span className="text-[9px] font-bold">{isVoiceReplyEnabled ? 'Voz ligada' : 'Voz desligada'}</span>
+                              </button>
+                            </div>
+              
+                            <p className="mt-4 text-[10px] font-medium text-slate-400">
+                              {isLiveConnected ? 'Toque no botão para encerrar a conversa' : 'Toque no microfone para iniciar uma conversa ao vivo'}
+                            </p>
+                          </div>
+            )}
 
-              <div className="mb-2 min-h-[58px]">
-                <AnimatePresence mode="wait">
-                  <motion.h1
-                    key={isRecording ? 'listening' : isLoading ? 'thinking' : 'ready'}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl"
-                  >
-                    {liveStatus === 'connecting' ? 'Conectando à Mone…' : liveStatus === 'processing' ? 'Estou preparando sua resposta…' : liveStatus === 'speaking' ? 'Mone está falando…' : isLiveConnected ? 'Estou ouvindo você…' : isLoading ? 'Entendendo seu pedido…' : 'Oi! Sou a Mone.'}
-                  </motion.h1>
-                </AnimatePresence>
-                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
-                  {liveStatus === 'processing' || liveStatus === 'speaking' ? 'Aguarde eu terminar. O microfone fica pausado durante toda a resposta.' : isLiveConnected ? 'Estou ouvindo você. Quando terminar de falar, vou processar e responder sem interrupções.' : liveStatus === 'connecting' ? 'Preparando o microfone e a conexão segura.' : isLoading ? 'Estou cuidando disso para você.' : 'Converse comigo sobre qualquer assunto ou suas finanças.'}
-                </p>
-              </div>
-
-              <div className="mb-7 flex h-10 items-center justify-center gap-1.5" aria-hidden="true">
-                {Array.from({ length: 25 }).map((_, index) => (
-                  <motion.span
-                    key={index}
-                    className={`w-1 rounded-full ${isRecording ? 'bg-rose-400' : isLoading ? 'bg-amber-400' : 'bg-emerald-300'}`}
-                    animate={{ height: isRecording || isLoading ? [7, 12 + ((index * 7) % 23), 7] : [5, 9 + ((index * 3) % 8), 5], opacity: isRecording || isLoading ? [0.5, 1, 0.5] : 0.65 }}
-                    transition={{ duration: isRecording ? 0.55 + (index % 5) * 0.08 : 1.5 + (index % 4) * 0.12, repeat: Infinity, delay: index * 0.025, ease: 'easeInOut' }}
-                  />
-                ))}
-              </div>
-
-              {isLiveConnected && liveTranscript && (
-                <div className="mb-4 w-full max-w-md rounded-2xl border border-emerald-100 bg-white/75 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
-                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-emerald-700">Transcrição ao vivo</span>
-                  {liveTranscript}
+            {showTextMode && (
+              <motion.section
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                className="flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden rounded-3xl border border-white bg-white/90 p-3 shadow-lg sm:p-4"
+              >
+                <div className="mb-2 flex shrink-0 items-center justify-between">
+                  <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
+                  <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
                 </div>
-              )}
-
-              <div className="flex w-full max-w-md items-center justify-center gap-5">
-                <button type="button" onClick={() => setShowTextMode((value) => !value)} className="flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 text-slate-500 transition hover:bg-white/80 hover:text-emerald-700" aria-label="Alternar conversa escrita">
-                  <Bot className="h-5 w-5" />
-                  <span className="text-[9px] font-bold">{showTextMode ? 'Ocultar texto' : 'Texto'}</span>
-                </button>
-
-                <motion.button
-                  type="button"
-                  onClick={isLiveConnected ? stopRecording : startLiveVoice}
-                  disabled={isLoading || liveStatus === 'connecting' || !memoryReady}
-                  whileTap={{ scale: 0.94 }}
-                  className={`flex h-24 w-24 items-center justify-center rounded-full border-[6px] border-white shadow-[0_14px_40px_rgba(16,185,129,0.25)] transition-all disabled:opacity-50 ${isRecording ? 'bg-gradient-to-br from-rose-400 to-rose-600 text-white' : 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'}`}
-                  aria-label={isLiveConnected ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
-                >
-                  {liveStatus === 'connecting' ? <Loader2 className="h-8 w-8 animate-spin" /> : isLiveConnected ? <Square className="h-8 w-8 fill-current" /> : <Mic className="h-9 w-9" />}
-                </motion.button>
-
-                <button type="button" onClick={() => { setIsVoiceReplyEnabled((value) => !value); if (typeof window !== 'undefined' && 'speechSynthesis' in window && isVoiceReplyEnabled) window.speechSynthesis.cancel(); }} className={`flex h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-2xl px-3 transition hover:bg-white/80 ${isVoiceReplyEnabled ? 'text-emerald-700' : 'text-slate-400'}`} aria-label="Alternar resposta falada">
-                  <Volume2 className="h-5 w-5" />
-                  <span className="text-[9px] font-bold">{isVoiceReplyEnabled ? 'Voz ligada' : 'Voz desligada'}</span>
-                </button>
-              </div>
-
-              <p className="mt-4 text-[10px] font-medium text-slate-400">
-                {isLiveConnected ? 'Toque no botão para encerrar a conversa' : 'Toque no microfone para iniciar uma conversa ao vivo'}
-              </p>
-            </div>
-
-            <AnimatePresence>
-              {showTextMode && (
-                <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }} className="mt-6 w-full max-w-xl rounded-3xl border border-white bg-white/85 p-4 shadow-lg">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
-                    <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
-                  </div>
-                  <div className="mb-3 max-h-40 space-y-2 overflow-y-auto text-left">
-                    {messages.map((message) => (
-                      <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
-                    ))}
-                    {isLoading && <p className="text-xs text-emerald-600">Mone está pensando…</p>}
-                  </div>
-                  <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="flex gap-2">
-                    <input ref={inputRef} value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Escreva para a Mone…" className="h-12 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" disabled={isLoading} />
-                    <button type="submit" disabled={!inputValue.trim() || isLoading} className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"><Send className="h-4 w-4" /></button>
-                  </form>
-                </motion.section>
-              )}
-            </AnimatePresence>
+                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 text-left" aria-live="polite">
+                  {messages.map((message) => (
+                    <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
+                  ))}
+                  {isLoading && <p className="text-xs text-emerald-600">Mone está pensando…</p>}
+                  <div ref={messagesEndRef} />
+                </div>
+                <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="flex shrink-0 gap-2 border-t border-emerald-50 pt-2">
+                  <input ref={inputRef} value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Escreva para a Mone…" enterKeyHint="send" className="h-12 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" disabled={isLoading} />
+                  <button type="submit" disabled={!inputValue.trim() || isLoading} aria-label="Enviar mensagem" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"><Send className="h-4 w-4" /></button>
+                </form>
+              </motion.section>
+            )}
           </main>
         </motion.div>
       )}
