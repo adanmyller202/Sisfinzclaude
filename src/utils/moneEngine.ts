@@ -3126,6 +3126,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
         ...(audio ? { audio: audio.data, audioMimeType: audio.mimeType } : {}),
         history: context.history || [],
         persona: context.persona || 'direto',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         context: {
           currentBalance,
           forecastBalance: context.forecastBalance ?? currentBalance,
