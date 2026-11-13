@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -51,13 +52,13 @@ export const BalanceModal: React.FC<BalanceModalProps> = ({
     }
   };
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="glass-overlay p-4 overflow-hidden pt-safe pb-safe"
+          className="fixed inset-0 z-[10010] flex items-center justify-center glass-overlay p-3 sm:p-4 overflow-hidden overscroll-none pt-safe pb-safe"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
@@ -166,5 +167,5 @@ export const BalanceModal: React.FC<BalanceModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
