@@ -19,6 +19,8 @@ interface MonthlyReportSectionProps {
   expenses: ExpenseItem[];
   currency: CurrencyCode;
   language?: LanguageCode;
+  selectedMonth: string;
+  onSelectedMonthChange: (month: string) => void;
 }
 
 // 14 high-contrast, beautiful accessible palette colors for category slices
@@ -64,10 +66,13 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
   expenses = [],
   currency,
   language = 'pt',
+  selectedMonth,
+  onSelectedMonthChange,
 }) => {
   const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentMonthStr());
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState<number>(() => Number(selectedMonth.slice(0, 4)) || new Date().getFullYear());
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   // Month navigation helpers
@@ -79,7 +84,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
     const d = new Date(y, (m || 1) - 2, 1);
     const yStr = d.getFullYear();
     const mStr = String(d.getMonth() + 1).padStart(2, '0');
-    setSelectedMonth(`${yStr}-${mStr}`);
+    onSelectedMonthChange(`${yStr}-${mStr}`);
   };
 
   const handleNextMonth = () => {
@@ -90,7 +95,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
     const d = new Date(y, (m || 1), 1);
     const yStr = d.getFullYear();
     const mStr = String(d.getMonth() + 1).padStart(2, '0');
-    setSelectedMonth(`${yStr}-${mStr}`);
+    onSelectedMonthChange(`${yStr}-${mStr}`);
   };
 
   // 1. Total monthly income
@@ -246,7 +251,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
           </span>
           <select
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
+            onChange={(e) => onSelectedMonthChange(e.target.value)}
             className="text-xs font-extrabold text-slate-900 bg-white/80 border border-slate-200/80 rounded-lg px-2 py-1 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 cursor-pointer capitalize shadow-2xs"
           >
             {(() => {
