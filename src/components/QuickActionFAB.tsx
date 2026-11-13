@@ -14,8 +14,6 @@ import {
   Receipt,
   ArrowRightLeft,
   Users,
-  Mic,
-  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -247,28 +245,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
                   </div>
                 </motion.button>
 
-                {onOpenVoice && (
-                  <motion.button
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleAction(onOpenVoice)}
-                    className="col-span-2 p-5 rounded-[2rem] bg-purple-50/80 border border-purple-200/80 hover:bg-purple-100/80 transition-all flex items-center justify-between group cursor-pointer"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-purple-600/20 group-hover:scale-110 transition-transform">
-                        <Mic className="w-6 h-6" />
-                      </div>
-                      <div className="text-left">
-                        <div className="flex items-center gap-2 text-sm font-black text-slate-900 group-hover:text-purple-700 transition-colors">
-                          Lançamento por Voz
-                          <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                        </div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">IA identifica tudo automaticamente</div>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-purple-600 group-hover:translate-x-1 transition-transform" />
-                  </motion.button>
-                )}
+
               </div>
             </motion.div>
           </div>
@@ -278,6 +255,3 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   );
 };
 
-const ChevronRight = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-);
