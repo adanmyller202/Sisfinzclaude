@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../types';
 import { getTodayStr } from '../utils/finance';
@@ -56,7 +56,9 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
   const [date, setDate] = useState(getTodayStr());
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const transferContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -76,6 +78,12 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
     setDate(getTodayStr());
     setNotes('');
     setError(null);
+    setIsSubmitting(false);
+    setIsSuccess(false);
+    // Always open the form at its first field, never at a stale scroll offset.
+    requestAnimationFrame(() => {
+      if (transferContentRef.current) transferContentRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    });
   }, [isOpen, activeAccounts.length]);
 
   const fromAccountObj = activeAccounts.find((a) => a.id === fromAccountId);
@@ -122,6 +130,8 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
         date,
         notes: notes.trim(),
       });
+      setIsSuccess(true);
+      await new Promise((resolve) => window.setTimeout(resolve, 480));
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Falha ao executar transferência.');
@@ -188,7 +198,7 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
             )}
 
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-8 space-y-8 no-scrollbar">
+              <div ref={transferContentRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-8 space-y-8 no-scrollbar">
                 
                 {activeAccounts.length < 2 && (
                   <div className="p-5 rounded-[1.5rem] bg-amber-500/10 border border-amber-500/20 text-amber-700 text-[11px] font-black uppercase tracking-widest flex items-center gap-3">
@@ -346,8 +356,24 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
                   disabled={isSubmitting || activeAccounts.length < 2}
                   className="px-10 py-5 text-[11px] font-black text-white bg-emerald-600 rounded-2xl shadow-2xl shadow-emerald-600/30 disabled:opacity-50 uppercase tracking-[0.3em] cursor-pointer flex items-center gap-3 active:scale-95 transition-all"
                 >
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                  <span>{isSubmitting ? 'PROCESSANDO...' : 'CONFIRMAR TRANSFERÊNCIA'}</span>
+                  <AnimatePresence mode="wait" initial={false}>
+                    {isSuccess ? (
+                      <motion.span key="success" initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }} className="flex items-center gap-2">
+                        <Check className="w-5 h-5" />
+                        <span>CONCLUÍDO!</span>
+                      </motion.span>
+                    ) : isSubmitting ? (
+                      <motion.span key="loading" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} className="flex items-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>PROCESSANDO...</span>
+                      </motion.span>
+                    ) : (
+                      <motion.span key="idle" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2">
+                        <Check className="w-5 h-5" />
+                        <span>CONFIRMAR TRANSFERÊNCIA</span>
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </motion.button>
               </div>
             </form>
