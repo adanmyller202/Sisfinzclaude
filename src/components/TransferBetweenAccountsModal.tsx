@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../types';
 import { getTodayStr } from '../utils/finance';
@@ -59,6 +60,7 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const transferContentRef = useRef<HTMLDivElement>(null);
+  const transferDialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -80,9 +82,14 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
     setError(null);
     setIsSubmitting(false);
     setIsSuccess(false);
-    // Always open the form at its first field, never at a stale scroll offset.
+    // Never inherit focus from a previous input: on iOS this can summon the
+    // keyboard as soon as the modal appears. Focus the non-editable dialog shell.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
     requestAnimationFrame(() => {
-      if (transferContentRef.current) transferContentRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      transferContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      transferDialogRef.current?.focus({ preventScroll: true });
     });
   }, [isOpen, activeAccounts.length]);
 
@@ -140,20 +147,23 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
     }
   };
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="glass-overlay p-4 overflow-hidden pt-safe pb-safe"
+          className="fixed inset-0 z-[10001] flex items-start justify-center overflow-y-auto overscroll-contain p-4 pt-safe pb-safe"
+          style={{ background: 'rgba(15, 23, 42, 0.24)', isolation: 'isolate', WebkitOverflowScrolling: 'touch' }}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 30 }}
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="glass-modal rounded-[2.5rem] max-w-md w-full max-h-[calc(100dvh-4rem)] flex flex-col overflow-hidden relative"
+            ref={transferDialogRef}
+            tabIndex={-1}
+            className="glass-modal rounded-[2.5rem] max-w-md w-full max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden relative outline-none"
           >
             {/* Header with Mesh Gradient */}
             <div className="relative p-8 shrink-0 overflow-hidden">
@@ -385,5 +395,5 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
