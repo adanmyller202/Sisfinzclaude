@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -41,13 +42,14 @@ export const BalanceBreakdownModal: React.FC<BalanceBreakdownModalProps> = ({
   const activeAccounts = accounts.filter((a) => a.isActive !== false);
   const totalSum = activeAccounts.reduce((sum, a) => sum + (a.currentBalance || 0), 0);
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[150] flex items-center justify-center p-4 glass-overlay overflow-hidden pt-safe pb-safe"
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-4 overflow-hidden pt-safe pb-safe"
+          style={{ background: 'rgba(15, 23, 42, 0.24)', isolation: 'isolate' }}
           onClick={onClose}
         >
           <motion.div
@@ -236,5 +238,5 @@ export const BalanceBreakdownModal: React.FC<BalanceBreakdownModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
