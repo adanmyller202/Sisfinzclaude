@@ -866,6 +866,8 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
         expenses={expenses}
         currency={currency}
         language={language}
+        selectedMonth={selectedMonth}
+        onSelectedMonthChange={setSelectedMonth}
       />
 
       {/* SECTION 1: FILTRO DEL INFORME */}
@@ -917,17 +919,7 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
 
         <div className="pt-4 border-t border-slate-200/30 dark:border-slate-800 flex items-center gap-4 flex-wrap">
           {filterMode === 'monthly' ? (
-            <div className="flex items-center gap-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t.selectMonthLabel || 'Mês:'}
-              </label>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-xs font-black text-slate-900 focus:ring-2 focus:ring-emerald-500/20 outline-hidden"
-              />
-            </div>
+            <div className="text-xs font-semibold text-slate-500">{formatMonthName(selectedMonth, locale)}</div>
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-3">
