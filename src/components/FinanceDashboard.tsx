@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
 const NumberTicker = ({ value, currency, className }: { value: number; currency: CurrencyCode; className?: string }) => {
@@ -1556,7 +1557,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       )}
 
       {/* RECURRING BILL DELETE CONFIRMATION MODAL */}
-      {billToDelete && (
+      {billToDelete && createPortal((
         <div
           role="dialog"
           aria-modal="true"
@@ -1632,7 +1633,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* Balance Breakdown Modal */}
       <ConfirmationModal
