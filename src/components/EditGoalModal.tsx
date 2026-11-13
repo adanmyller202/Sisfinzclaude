@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChallengeGoal, LanguageCode } from '../types';
 import { getTranslations } from '../utils/i18n';
 import { X, Edit3 } from 'lucide-react';
@@ -43,11 +44,11 @@ export const EditGoalModal: React.FC<EditGoalModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden overscroll-none glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -146,5 +147,5 @@ export const EditGoalModal: React.FC<EditGoalModalProps> = ({
         </form>
       </div>
     </div>
-  );
+  ), document.body);
 };
