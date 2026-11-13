@@ -112,19 +112,26 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       {isOpen && (
         <div key="nav-drawer-root" className="fixed inset-0 z-[60] flex items-stretch justify-start overflow-hidden overscroll-contain pointer-events-none">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-0 bg-slate-900/40 pointer-events-auto"
+            initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            animate={{ opacity: 1, backdropFilter: 'blur(5px)' }}
+            exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute inset-0 z-0 bg-emerald-950/20 pointer-events-auto"
             onClick={onClose}
           />
 
           <motion.div
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="solid-container bg-white w-full max-w-[320px] sm:max-w-sm flex flex-col h-full relative z-10 pt-safe pb-safe pointer-events-auto"
+            initial={{ x: '-105%', opacity: 0.82, scale: 0.965 }}
+            animate={{ x: 0, opacity: 1, scale: 1 }}
+            exit={{ x: '-105%', opacity: 0.88, scale: 0.97 }}
+            transition={{ type: 'spring', damping: 27, stiffness: 270, mass: 0.82 }}
+            drag="x"
+            dragConstraints={{ left: -42, right: 0 }}
+            dragElastic={{ left: 0.12, right: 0 }}
+            onDragEnd={(_, info) => {
+              if (info.offset.x < -85 || info.velocity.x < -520) onClose();
+            }}
+            className="solid-container bg-white w-[calc(100%-1.25rem)] max-w-[340px] sm:max-w-sm flex flex-col h-[calc(100%-1.25rem)] my-2.5 ml-2.5 rounded-[28px] border border-emerald-100 shadow-[0_24px_70px_rgba(6,78,59,0.22)] overflow-hidden relative z-10 pt-safe pb-safe pointer-events-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
