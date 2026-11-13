@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChallengeGoal, CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -30,7 +31,7 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({
 }) => {
   const t = getTranslations(language);
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
@@ -178,5 +179,5 @@ export const CelebrationModal: React.FC<CelebrationModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
