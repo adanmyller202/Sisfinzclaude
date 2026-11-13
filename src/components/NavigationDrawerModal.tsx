@@ -5,7 +5,6 @@ import { getTranslations } from '../utils/i18n';
 import {
   Wallet,
   PiggyBank,
-  Target,
   Bot,
   Settings,
   User as UserIcon,
@@ -111,8 +110,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       title: language === 'es' ? 'Metas y Ahorro' : 'Metas e Poupança',
       items: [
         { id: 'savings', label: t.tabSavings, icon: PiggyBank, color: 'emerald', desc: 'Reserva e cofrinhos', badge: savingsCount },
-        { id: 'goals', label: t.myGoals, icon: Target, color: 'amber', desc: 'Desafio dos quadrados', badge: goalsCount },
-        { id: 'challenge_52', label: '52 Semanas', icon: Award, color: 'amber', desc: 'Poupança progressiva' },
+        { id: 'challenge_52', label: language === 'es' ? 'Plan Semanal' : 'Plano Semanal', icon: Award, color: 'amber', desc: language === 'es' ? 'Ahorro organizado por semana' : 'Poupança organizada por semana' },
         { id: 'freedom', label: 'Liberdade', icon: Sparkles, color: 'cyan', desc: 'Escala de liberdade' },
       ]
     },
