@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { BillItem, CurrencyCode, RecurrenceType, LanguageCode } from '../types';
 import { getTodayStr, formatMonthName } from '../utils/finance';
@@ -232,13 +233,13 @@ export const BillModal: React.FC<BillModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="glass-overlay p-4 overflow-hidden pt-safe pb-safe"
+          className="fixed inset-0 z-[10010] flex items-center justify-center p-2.5 sm:p-4 glass-overlay overflow-hidden pt-safe pb-safe"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
@@ -626,6 +627,7 @@ export const BillModal: React.FC<BillModalProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
