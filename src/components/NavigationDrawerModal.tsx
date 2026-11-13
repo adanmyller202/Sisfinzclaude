@@ -161,7 +161,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">SisFinz</h2>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mt-1.5">Premium Fintech</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mt-1.5">Gestão Financeira</p>
                 </div>
               </div>
               <button 
