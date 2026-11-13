@@ -348,6 +348,41 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Freeze the page behind the modal (especially Safari/PWA on iOS).
+  // The chat's own message list remains the only scrollable area.
+  useEffect(() => {
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBody = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    const previousHtmlOverflow = html.style.overflow;
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    html.style.overflow = 'hidden';
+    return () => {
+      body.style.position = previousBody.position;
+      body.style.top = previousBody.top;
+      body.style.left = previousBody.left;
+      body.style.right = previousBody.right;
+      body.style.width = previousBody.width;
+      body.style.overflow = previousBody.overflow;
+      html.style.overflow = previousHtmlOverflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
   // Track the visual viewport so the composer stays above the iOS/Android keyboard.
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -1267,7 +1302,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             </div>
           </header>
 
-          <main className={`relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-y-auto overscroll-contain px-3 pb-3 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start' : 'justify-center'}`}>
+          <main className={`relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-hidden px-3 pb-3 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start' : 'justify-center'}`}>
             {!showTextMode && (
                           <div className="flex w-full max-w-xl flex-col items-center text-center">
                             <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
@@ -1372,7 +1407,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                   <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
                   <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
                 </div>
-                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 text-left" aria-live="polite">
+                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 text-left [webkit-overflow-scrolling:touch]" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }} aria-live="polite">
                   {messages.map((message) => (
                     <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
                   ))}
