@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { LanguageCode, SharedNotification, SharedInvitation } from '../../types';
 import { getTranslations } from '../../utils/i18n';
 import {
@@ -90,11 +91,11 @@ export const SharedNotificationsModal: React.FC<SharedNotificationsModalProps> =
     }
   };
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
-      className="glass-overlay p-2.5 sm:p-4 overflow-hidden overscroll-contain"
+      className="fixed inset-0 z-[10010] flex items-center justify-center glass-overlay p-3 sm:p-4 overflow-hidden overscroll-none"
     >
       <div className="glass-modal rounded-3xl max-w-lg w-full overflow-hidden my-auto animate-in zoom-in-95 duration-200 flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)]">
         {/* Header (pinned) */}
@@ -293,5 +294,5 @@ export const SharedNotificationsModal: React.FC<SharedNotificationsModalProps> =
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 };
