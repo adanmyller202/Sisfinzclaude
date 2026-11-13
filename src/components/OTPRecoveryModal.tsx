@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, CheckCircle2, Loader2, X, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 import { LanguageCode } from '../types';
@@ -40,7 +41,7 @@ export const OTPRecoveryModal: React.FC<OTPRecoveryModalProps> = ({ onClose, lan
     ? 'Enviamos un enlace a tu e-mail. Revisa también el spam.'
     : 'Enviamos um link para o seu e-mail. Verifique também o spam.';
 
-  return (
+  return createPortal((
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-hidden overscroll-contain">
       <motion.div
         initial={{ opacity: 0 }}
@@ -151,5 +152,5 @@ export const OTPRecoveryModal: React.FC<OTPRecoveryModalProps> = ({ onClose, lan
         )}
       </motion.div>
     </div>
-  );
+  ), document.body);
 };
