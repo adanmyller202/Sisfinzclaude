@@ -264,6 +264,8 @@ export interface SavingTransaction {
   baseAmountARS?: number; // valor equivalente em pesos argentinos (amount * exchangeRate)
   date: string; // YYYY-MM-DD
   note?: string;
+  accountId?: string;
+  accountName?: string;
   createdAt: string;
   expenseId?: string;
   incomeId?: string;
