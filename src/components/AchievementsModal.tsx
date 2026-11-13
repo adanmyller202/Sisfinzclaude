@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { ChallengeGoal } from '../types';
 import { ACHIEVEMENTS } from '../utils/achievements';
 import { Award, X, Check, Lock } from 'lucide-react';
@@ -37,7 +38,7 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } }
   };
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-hidden overscroll-contain">
@@ -177,5 +178,5 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
