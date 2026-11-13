@@ -71,11 +71,35 @@ jobs:
             --image="$IMAGE" \
             --quiet
 
-      - name: Deployment result
-        if: always()
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "SisFinz deployment completed successfully."
-          else
-            echo "SisFinz deployment failed. The previous Cloud Run revision remains available for rollback."
-          fi
+  notify:
+    name: Email deployment result
+    if: always()
+    needs: [validate, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success or failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.NOTIFY_SMTP_USERNAME }}
+          password: ${{ secrets.NOTIFY_SMTP_APP_PASSWORD }}
+          subject: "${{ needs.deploy.result == 'success' && 'SisFinz publicado com sucesso' || 'SisFinz: publicação não concluída' }}"
+          to: adairtonjr.ar@gmail.com
+          from: SisFinz Deploy <${{ secrets.NOTIFY_SMTP_USERNAME }}>
+          body: |
+            Resultado da publicação automática do SisFinz.
+
+            Validação: ${{ needs.validate.result }}
+            Publicação no Cloud Run: ${{ needs.deploy.result }}
+
+            Projeto: prismatic-spring-ksmzh
+            Serviço: sisfinz2-11
+            Região: us-west2
+            Commit: ${{ github.sha }}
+
+            Consulte os detalhes da execução:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Se a publicação falhou, a revisão anterior do Cloud Run não é removida automaticamente.
