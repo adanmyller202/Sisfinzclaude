@@ -2,7 +2,6 @@ import React from 'react';
 import { ChallengeGoal, LanguageCode } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getTranslations } from '../utils/i18n';
-import { SyncStatusBadge } from './SyncStatusBadge';
 import { SisFinzPet } from './shared/SisFinzPet';
 import {
   Menu,
@@ -83,8 +82,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Discreet Sync Status Badge */}
-          <SyncStatusBadge language={language} />
         </div>
 
         {/* Right Side: Quick Tools (Alerts, New Goal Shortcut, Finzy Mascot) */}
