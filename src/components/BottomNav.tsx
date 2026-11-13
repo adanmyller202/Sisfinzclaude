@@ -68,11 +68,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     <nav
       role="navigation"
       aria-label={t.financialControl}
-      className="fixed bottom-0 left-0 right-0 z-40 print:hidden"
+      className="sisfinz-bottom-nav-shell fixed bottom-0 left-0 right-0 z-40 print:hidden"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
       <div className="mx-auto max-w-xl px-3 pb-0">
-        <div className="relative h-[calc(90px+env(safe-area-inset-bottom,0px))] overflow-visible">
+        <div className="sisfinz-bottom-nav-height relative h-[calc(90px+env(safe-area-inset-bottom,0px))] overflow-visible">
           {/* Dock surface reaches the physical screen edge; controls stay above the iPhone home-indicator safe area. */}
           <div className="absolute inset-x-0 bottom-0 top-[22px] rounded-[32px] border border-emerald-100 bg-white shadow-[0_12px_34px_rgba(5,150,105,0.13),0_3px_10px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.98)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_12px_34px_rgba(0,0,0,0.35)]" />
 
