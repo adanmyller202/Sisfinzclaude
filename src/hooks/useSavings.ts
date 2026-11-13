@@ -21,6 +21,9 @@ import { registerPendingWrite, registerResolvedWrite } from './useSyncStatus';
 interface TransferFinanceOps {
   addExpense: (expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
   currency: CurrencyCode;
+  accountId?: string;
+  accountName?: string;
+  adjustAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>;
 }
 
 interface WithdrawFinanceOps {
@@ -31,6 +34,9 @@ interface WithdrawFinanceOps {
   ) => Promise<IncomeItem>;
   toggleIncomeReceived: (incomeId: string, month: string, isReceived: boolean, receivedDate?: string) => Promise<void>;
   currentMonthStr: string;
+  accountId?: string;
+  accountName?: string;
+  adjustAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>;
 }
 
 export function useSavings() {
@@ -317,11 +323,11 @@ export function useSavings() {
           amount: baseAmountARS,
           category: 'Inversiones',
           date: txDate,
-          notes: note || (goalCurrency === 'ARS'
-            ? `Transferencia hacia ahorro "${targetGoal.name}"`
-            : `Aporte a "${targetGoal.name}": ${formattedGoalAmt} @ cotação ${effectiveRate} ARS`),
+          accountId: financeOps.accountId,
+          notes: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps.accountName || 'Conta não informada'} | Reservado: ${formattedGoalAmt} | Debitado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | Observações: ${note}` : ''}`,
         });
         createdExpenseId = createdExp?.id;
+        if (financeOps.accountId && financeOps.adjustAccountBalance) await financeOps.adjustAccountBalance(financeOps.accountId, -baseAmountARS);
       }
 
       // 2. Update saving goal balance (in foreign currency)
@@ -341,9 +347,9 @@ export function useSavings() {
         exchangeRate: effectiveRate,
         baseAmountARS,
         date: txDate,
-        note: note || (goalCurrency === 'ARS'
-          ? `Transferencia desde saldo disponible`
-          : `Aporte de ${formattedGoalAmt} (Cot. ${effectiveRate})`),
+        note: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | ${note}` : ''}`,
+        accountId: financeOps?.accountId,
+        accountName: financeOps?.accountName,
         createdAt: now,
         expenseId: createdExpenseId,
       };
@@ -416,14 +422,14 @@ export function useSavings() {
           expectedDay: dayOfMonth,
           recurrence: 'none' as const,
           startMonth: currentMonth,
-          notes: note || (goalCurrency === 'ARS'
-            ? `Retiro del ahorro "${targetGoal.name}" hacia el saldo disponible`
-            : `Resgate de ${formattedGoalAmt} do cofrinho "${targetGoal.name}" @ cotação ${effectiveRate}`),
+          accountId: financeOps.accountId,
+          notes: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps.accountName || 'Conta não informada'} | Resgatado: ${formattedGoalAmt} | Creditado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | Observações: ${note}` : ''}`,
         };
         const newIncome = financeOps.addIncomeAsReceived
           ? await financeOps.addIncomeAsReceived(incomePayload, currentMonth)
           : await financeOps.addIncome(incomePayload);
         createdIncomeId = newIncome.id;
+        if (financeOps.accountId && financeOps.adjustAccountBalance) await financeOps.adjustAccountBalance(financeOps.accountId, baseAmountARS);
         // Mark immediately received when the finance adapter does not support atomic creation.
         if (!financeOps.addIncomeAsReceived) {
           await financeOps.toggleIncomeReceived(newIncome.id, currentMonth, true, txDate);
@@ -449,9 +455,9 @@ export function useSavings() {
         exchangeRate: effectiveRate,
         baseAmountARS,
         date: txDate,
-        note: note || (goalCurrency === 'ARS'
-          ? `Retiro hacia saldo disponible`
-          : `Resgate de ${formattedGoalAmt} (Cot. ${effectiveRate})`),
+        note: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | ${note}` : ''}`,
+        accountId: financeOps?.accountId,
+        accountName: financeOps?.accountName,
         createdAt: now,
         incomeId: createdIncomeId,
       };
