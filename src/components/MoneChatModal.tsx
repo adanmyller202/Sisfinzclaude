@@ -316,6 +316,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     return () => window.clearTimeout(timeout);
   }, [memoryReady, memoryOwnerUid, messages, lastActionItem]);
 
+  const [viewportFrame, setViewportFrame] = useState<{ height: number; top: number } | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -346,6 +347,26 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [liveTranscript, setLiveTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Track the visual viewport so the composer stays above the iOS/Android keyboard.
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    const updateViewport = () => {
+      setViewportFrame({
+        height: visualViewport?.height ?? window.innerHeight,
+        top: visualViewport?.offsetTop ?? 0,
+      });
+    };
+    updateViewport();
+    visualViewport?.addEventListener('resize', updateViewport);
+    visualViewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    return () => {
+      visualViewport?.removeEventListener('resize', updateViewport);
+      visualViewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen && liveSessionRef.current) {
@@ -1206,8 +1227,8 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F2FBF6] text-slate-800"
-          style={{ height: '100dvh', minHeight: 0, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          className="fixed inset-x-0 top-0 z-[100] flex flex-col overflow-hidden bg-[#F2FBF6] text-slate-800"
+          style={{ top: viewportFrame ? `${viewportFrame.top}px` : 0, height: viewportFrame ? `${viewportFrame.height}px` : '100dvh', minHeight: 0, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute -top-28 -right-20 h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl" />
