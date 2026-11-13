@@ -137,8 +137,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   // Impact on base financial balance (in ARS)
   const afterBalanceARS =
     mode === 'deposit'
-      ? currentBalance - baseAmountARS
-      : currentBalance + baseAmountARS;
+      ? accountBalance - baseAmountARS
+      : accountBalance + baseAmountARS;
 
   // Impact on saving goal (in goal's own currency)
   const afterSavingAmount = selectedGoal
@@ -423,6 +423,47 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   )}
                 </div>
 
+                {/* Foreign Currency Conversion Field */}
+                {isForeignCurrency && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-5 rounded-[1.5rem] bg-amber-500/5 border border-amber-500/20 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-amber-900 uppercase tracking-[0.25em] flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
+                        {mode === 'deposit' ? 'COTAÇÃO UTILIZADA (EM ARS)' : 'COTAÇÃO DO RESGATE (EM ARS)'}
+                      </label>
+                      <span className="text-[9px] font-black uppercase text-amber-700">
+                        1 {goalCurrency} = ? ARS
+                      </span>
+                    </div>
+
+                    <div className="relative group">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={exchangeRate}
+                        onChange={(e) => handleRateChange(e.target.value)}
+                        placeholder="Ex: 1575.00"
+                        className="w-full pl-16 pr-4 py-3.5 text-sm font-mono-numbers font-black bg-white border border-amber-300/80 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 text-slate-900 transition-all"
+                        required={isForeignCurrency}
+                      />
+                    </div>
+                    <p className="text-[10px] font-medium text-amber-800 flex items-center gap-1">
+                      <Info className="w-3 h-3 text-amber-600 shrink-0" />
+                      {mode === 'deposit'
+                        ? 'O valor em pesos correspondente será debitado do seu saldo disponível em ARS.'
+                        : 'O valor em pesos correspondente será creditado no seu saldo disponível em ARS.'}
+                    </p>
+                  </motion.div>
+                )}
+
                 {/* Amount in Goal Currency */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between ml-1">
@@ -481,47 +522,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   </div>
                 </div>
 
-                {/* Foreign Currency Conversion Field */}
-                {isForeignCurrency && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-5 rounded-[1.5rem] bg-amber-500/5 border border-amber-500/20 space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-black text-amber-900 uppercase tracking-[0.25em] flex items-center gap-1.5">
-                        <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
-                        {mode === 'deposit' ? 'COTAÇÃO UTILIZADA (EM ARS)' : 'COTAÇÃO DO RESGATE (EM ARS)'}
-                      </label>
-                      <span className="text-[9px] font-black uppercase text-amber-700">
-                        1 {goalCurrency} = ? ARS
-                      </span>
-                    </div>
-
-                    <div className="relative group">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">
-                        $
-                      </span>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={exchangeRate}
-                        onChange={(e) => handleRateChange(e.target.value)}
-                        placeholder="Ex: 1575.00"
-                        className="w-full pl-16 pr-4 py-3.5 text-sm font-mono-numbers font-black bg-white border border-amber-300/80 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 text-slate-900 transition-all"
-                        required={isForeignCurrency}
-                      />
-                    </div>
-                    <p className="text-[10px] font-medium text-amber-800 flex items-center gap-1">
-                      <Info className="w-3 h-3 text-amber-600 shrink-0" />
-                      {mode === 'deposit'
-                        ? 'O valor em pesos correspondente será debitado do seu saldo disponível em ARS.'
-                        : 'O valor em pesos correspondente será creditado no seu saldo disponível em ARS.'}
-                    </p>
-                  </motion.div>
-                )}
-
                 {/* Impact Preview Card */}
                 <AnimatePresence>
                   {selectedGoal && parsedAmount > 0 && (
@@ -539,7 +539,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600">
-                            <Wallet className="w-3.5 h-3.5 text-emerald-600" /> SALDO EM ARS
+                            <Wallet className="w-3.5 h-3.5 text-emerald-600" /> SALDO DA CONTA {selectedAccount?.name || ''}
                           </div>
                           <div className="text-lg font-black font-mono-numbers tracking-tight text-slate-900">
                             {formatCurrency(afterBalanceARS, 'ARS')}
