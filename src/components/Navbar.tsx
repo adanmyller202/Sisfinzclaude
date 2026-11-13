@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 SisFinz
               </span>
               {userName && (
-                <span className="text-[11px] leading-tight text-slate-600 truncate max-w-[5.5rem] xs:max-w-[7rem] sm:max-w-xs font-medium">
+                <span className="text-[10px] sm:text-[11px] leading-tight text-slate-600 truncate max-w-[11rem] sm:max-w-xs font-medium" title={`${t.welcomeGreeting}, ${userName}`}>
                   {t.welcomeGreeting}, {userName}
                 </span>
               )}
