@@ -169,7 +169,6 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
         onClose={() => setIsTransferModalOpen(false)}
         savings={savings}
         accounts={accounts}
-        onAdjustAccountBalance={onAdjustAccountBalance}
         defaultSavingId={transferDefaultSavingId}
         defaultType={transferDefaultType}
         currentBalance={currentBalance}
