@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IncomeItem, CurrencyCode, RecurrenceType, LanguageCode } from '../types';
 import { getTodayStr } from '../utils/finance';
 import { formatCurrency, CURRENCIES } from '../utils/currency';
@@ -156,11 +157,11 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      className="glass-overlay p-2.5 sm:p-4 overflow-hidden overscroll-contain"
+      className="fixed inset-0 z-[10010] flex items-center justify-center p-2.5 sm:p-4 glass-overlay overflow-hidden overscroll-contain"
     >
       <div className="glass-modal rounded-3xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden">
         {/* Header (pinned) */}
@@ -441,6 +442,7 @@ export const IncomeModal: React.FC<IncomeModalProps> = ({
             </div>
           </form>
         </div>
-    </div>
+    </div>,
+    document.body
   );
 };
