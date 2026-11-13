@@ -917,7 +917,7 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-200/30 dark:border-slate-800 flex items-center gap-4 flex-wrap">
+        <div className={`${filterMode === 'monthly' ? 'hidden' : 'pt-4 border-t border-slate-200/30 dark:border-slate-800 flex items-center gap-4 flex-wrap'}`}>
           {filterMode === 'monthly' ? (
             <div className="text-xs font-semibold text-slate-500">{formatMonthName(selectedMonth, locale)}</div>
           ) : (
