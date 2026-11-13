@@ -153,7 +153,7 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[10001] flex items-start justify-center overflow-y-auto overscroll-contain p-4 pt-safe pb-safe"
+          className="fixed inset-0 z-[10001] flex items-center justify-center overflow-hidden overscroll-none p-4 pt-safe pb-safe"
           style={{ background: 'rgba(15, 23, 42, 0.24)', isolation: 'isolate', WebkitOverflowScrolling: 'touch' }}
         >
           <motion.div
