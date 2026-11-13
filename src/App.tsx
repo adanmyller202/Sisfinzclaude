@@ -389,12 +389,23 @@ export default function App() {
     'finance' | 'planejar' | 'goals' | 'savings' | 'categories' | 'report' | 'shared_accounts' | 'challenge_52' | 'full_report' | 'accounts' | 'financial_calendar' | 'freedom' | 'daily_pace'
   >('finance');
 
-  // Reset the document scroll whenever a main section changes. This prevents
-  // Accounts (and other long screens) from inheriting the previous section's
-  // scroll offset, especially when navigating from a modal on iOS.
-  React.useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-  }, [currentView]);
+  // Universal navigation reset: clear page/body/document scroll before and
+  // after animated route transitions (including iOS Safari scroll restoration).
+  const resetAppScroll = React.useCallback(() => {
+    const reset = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      document.querySelectorAll<HTMLElement>('[data-app-scroll]').forEach((el) => { el.scrollTop = 0; });
+    };
+    reset();
+    requestAnimationFrame(() => { reset(); requestAnimationFrame(reset); });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    resetAppScroll();
+  }, [currentView, resetAppScroll]);
 
   const currentNavArea: MainNavArea = useMemo(() => {
     if (currentView === 'planejar' || currentView === 'financial_calendar' || currentView === 'freedom') {
@@ -413,6 +424,9 @@ export default function App() {
   }, [currentView]);
 
   const handleChangeNavArea = useCallback((area: MainNavArea) => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
     setCurrentView(area);
   }, []);
 
