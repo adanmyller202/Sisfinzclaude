@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { createPortal } from 'react-dom';
 import { Bell, X, AlertTriangle, CalendarClock, TrendingDown, Wallet, Target, ArrowUpRight, CheckCircle2 } from 'lucide-react';
@@ -18,6 +18,28 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
   const [readAlertIds, setReadAlertIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('sisfinz_read_alerts') || '[]'); } catch { return []; }
   });
+  const [alertTimes, setAlertTimes] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('sisfinz_alert_times') || '{}'); } catch { return {}; }
+  });
+  useEffect(() => {
+    if (!alerts.length) return;
+    setAlertTimes((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      alerts.forEach((alert) => {
+        if (!next[alert.id]) { next[alert.id] = Date.now(); changed = true; }
+      });
+      if (changed) {
+        try { localStorage.setItem('sisfinz_alert_times', JSON.stringify(next)); } catch {}
+      }
+      return changed ? next : previous;
+    });
+  }, [alerts]);
+  const formatAlertTime = (id: string) => {
+    const timestamp = alertTimes[id];
+    if (!timestamp) return 'Agora';
+    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
+  };
   const markAlertRead = (id: string) => {
     setReadAlertIds((previous) => {
       const next = previous.includes(id) ? previous : [...previous, id];
@@ -74,6 +96,7 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2"><h3 className="font-extrabold text-sm">{a.title}</h3>{isRead && <span className="text-[9px] font-black uppercase tracking-wider">Lida</span>}</div>
                 <p className="text-xs leading-relaxed mt-1 opacity-90">{a.description}</p>
+                <p className="text-[10px] font-semibold mt-2 opacity-65" aria-label={'Horário da notificação: ' + formatAlertTime(a.id)}>{formatAlertTime(a.id)}</p>
                 <div className="mt-3 flex items-center gap-4 flex-wrap">
                   <button type="button" onClick={() => { setOpen(false); a.action(); }} className="inline-flex items-center gap-1 text-xs font-extrabold underline underline-offset-2">{a.actionLabel}<ArrowUpRight className="w-3.5 h-3.5" /></button>
                   {!isRead && <button type="button" onClick={() => markAlertRead(a.id)} className="text-xs font-bold underline underline-offset-2">Marcar como lida</button>}
