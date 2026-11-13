@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CurrencyCode,
@@ -475,7 +476,44 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const themeBorder = type === 'income' ? 'border-emerald-500/30' : type === 'expense' ? 'border-amber-500/30' : 'border-rose-500/30';
   const themeShadow = type === 'income' ? 'shadow-emerald-600/20' : type === 'expense' ? 'shadow-amber-600/20' : 'shadow-rose-600/20';
 
-  return (
+  // Render outside transformed dashboard/layout ancestors so the dialog is truly viewport-fixed.
+  // Lock the page underneath while keeping the modal's own form area independently scrollable.
+  useEffect(() => {
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBody = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    const previousHtmlOverflow = html.style.overflow;
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    html.style.overflow = 'hidden';
+
+    return () => {
+      body.style.position = previousBody.position;
+      body.style.top = previousBody.top;
+      body.style.left = previousBody.left;
+      body.style.right = previousBody.right;
+      body.style.width = previousBody.width;
+      body.style.overflow = previousBody.overflow;
+      html.style.overflow = previousHtmlOverflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div
@@ -1088,6 +1126,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
