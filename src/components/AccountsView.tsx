@@ -25,6 +25,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { BankLogo } from './BankLogo';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface AccountsViewProps {
   currency: CurrencyCode;
@@ -58,36 +59,51 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [accountToEdit, setAccountToEdit] = useState<AccountItem | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ title: string; message: string; confirmLabel: string; action: () => Promise<void> } | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const activeAccountsCount = accounts.filter((a) => a.isActive !== false).length;
 
-  const handleDeleteAccountConfirm = async (acc: AccountItem) => {
-    const msg =
-      language === 'es'
-        ? `¿Estás seguro de que deseas eliminar la cuenta "${acc.name}"?`
-        : `Tem certeza que deseja excluir a conta "${acc.name}"?`;
-    if (confirm(msg)) {
-      await deleteAccount(acc.id);
-    }
-  };
+  const handleDeleteAccountConfirm = (acc: AccountItem) => setPendingConfirmation({
+    title: language === 'es' ? 'Eliminar cuenta' : 'Excluir conta',
+    message: language === 'es' ? `¿Seguro que deseas eliminar "${acc.name}"? Esta acción no se puede deshacer.` : `Tem certeza que deseja excluir "${acc.name}"? Esta ação não pode ser desfeita.`,
+    confirmLabel: language === 'es' ? 'Sí, eliminar' : 'Sim, excluir',
+    action: async () => { await deleteAccount(acc.id); },
+  });
 
-  const handleDeleteTransferConfirm = async (tx: AccountTransferRecord) => {
-    const msg =
-      language === 'es'
-        ? `¿Deseas deshacer la transferencia de ${formatCurrency(tx.amount, currency)} de "${tx.fromAccountName}" a "${tx.toAccountName}"? Los saldos se ajustarán automáticamente.`
-        : `Deseja desfazer a transferência de ${formatCurrency(tx.amount, currency)} de "${tx.fromAccountName}" para "${tx.toAccountName}"? Os saldos serão ajustados automaticamente.`;
-    if (confirm(msg)) {
-      await deleteTransfer(tx.id);
-    }
-  };
+  const handleZeroAccountConfirm = (acc: AccountItem) => setPendingConfirmation({
+    title: language === 'es' ? 'Poner saldo en cero' : 'Zerar conta',
+    message: language === 'es' ? `El saldo de "${acc.name}" se cambiará a 0. Los movimientos e historial no serán eliminados.` : `O saldo de "${acc.name}" será alterado para 0. Os lançamentos e o histórico não serão apagados.`,
+    confirmLabel: language === 'es' ? 'Confirmar saldo 0' : 'Confirmar saldo zero',
+    action: async () => { await updateAccount(acc.id, { currentBalance: 0, initialBalance: 0 }); },
+  });
 
-  const handleClearHistoryConfirm = async () => {
-    const msg =
-      language === 'es'
-        ? 'Esta acción no se puede deshacer. ¿Deseas eliminar todo el historial de transferencias? Los saldos actuales de tus cuentas no serán alterados.'
-        : 'Esta ação não pode ser desfeita. Deseja limpar todo o histórico de transferências? Os saldos atuais das contas não serão alterados.';
-    if (confirm(msg)) {
-      await clearAllTransfers();
+  const handleDeleteTransferConfirm = (tx: AccountTransferRecord) => setPendingConfirmation({
+    title: language === 'es' ? 'Deshacer transferencia' : 'Desfazer transferência',
+    message: language === 'es'
+      ? `¿Deshacer la transferencia de ${formatCurrency(tx.amount, currency)} de "${tx.fromAccountName}" a "${tx.toAccountName}"? Los saldos se ajustarán automáticamente.`
+      : `Deseja desfazer a transferência de ${formatCurrency(tx.amount, currency)} de "${tx.fromAccountName}" para "${tx.toAccountName}"? Os saldos serão ajustados automaticamente.`,
+    confirmLabel: language === 'es' ? 'Deshacer' : 'Desfazer',
+    action: async () => { await deleteTransfer(tx.id); },
+  });
+
+  const handleClearHistoryConfirm = () => setPendingConfirmation({
+    title: language === 'es' ? 'Limpiar historial' : 'Limpar histórico',
+    message: language === 'es'
+      ? 'Esta acción no se puede deshacer. ¿Deseas eliminar todo el historial de transferencias? Los saldos actuales no serán alterados.'
+      : 'Esta ação não pode ser desfeita. Deseja limpar todo o histórico de transferências? Os saldos atuais não serão alterados.',
+    confirmLabel: language === 'es' ? 'Limpiar' : 'Limpar histórico',
+    action: async () => { await clearAllTransfers(); },
+  });
+
+  const executePendingConfirmation = async () => {
+    if (!pendingConfirmation || isConfirming) return;
+    try {
+      setIsConfirming(true);
+      await pendingConfirmation.action();
+      setPendingConfirmation(null);
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -205,7 +221,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
                     <div className="flex items-center justify-end gap-2 mt-8 pt-4 border-t border-slate-200/60">
                       <button onClick={() => { setAccountToEdit(acc); setIsAccountModalOpen(true); }} className="p-3 rounded-xl bg-white/80 hover:bg-white text-slate-500 hover:text-slate-900 border border-slate-200/60 transition-all cursor-pointer"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => handleDeleteAccountConfirm(acc)} className="p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-rose-200/60 transition-all cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => handleZeroAccountConfirm(acc)} title={language === "es" ? "Poner saldo en cero" : "Zerar conta"} className="p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 transition-all cursor-pointer"><RotateCcw className="w-4 h-4" /></button>
+                      <button onClick={() => handleDeleteAccountConfirm(acc)} title={language === "es" ? "Eliminar cuenta" : "Excluir conta"} className="p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-rose-200/60 transition-all cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </motion.div>
                 );
@@ -275,6 +292,17 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         )}
       </AnimatePresence>
 
+      <ConfirmationModal
+        isOpen={!!pendingConfirmation}
+        title={pendingConfirmation?.title || ''}
+        message={pendingConfirmation?.message || ''}
+        confirmLabel={pendingConfirmation?.confirmLabel || (language === 'es' ? 'Confirmar' : 'Confirmar')}
+        cancelLabel={language === 'es' ? 'Cancelar' : 'Cancelar'}
+        loadingLabel={language === 'es' ? 'Procesando...' : 'Processando...'}
+        isLoading={isConfirming}
+        onConfirm={() => { void executePendingConfirmation(); }}
+        onCancel={() => { if (!isConfirming) setPendingConfirmation(null); }}
+      />
       <AccountModal isOpen={isAccountModalOpen} onClose={() => setIsAccountModalOpen(false)} currency={currency} language={language} editingAccount={accountToEdit} onSave={async (p) => accountToEdit ? await updateAccount(accountToEdit.id, p) : await addAccount(p)} />
       <TransferBetweenAccountsModal isOpen={isTransferModalOpen} onClose={() => setIsTransferModalOpen(false)} accounts={accounts} currency={currency} language={language} onExecuteTransfer={transferBetweenAccounts} />
     </div>
