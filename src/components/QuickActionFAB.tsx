@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LanguageCode } from '../types';
 import { getTranslations } from '../utils/i18n';
 import {
@@ -41,7 +41,72 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   onMenuToggle,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [fabPosition, setFabPosition] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem('sisfinz-quick-fab-position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) return parsed;
+      }
+    } catch {}
+    return null;
+  });
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const didDragRef = useRef(false);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const FAB_SIZE = 48;
+  const EDGE_GAP = 12;
   const t = getTranslations(language);
+
+  useEffect(() => {
+    if (!fabPosition) return;
+    try {
+      localStorage.setItem('sisfinz-quick-fab-position', JSON.stringify(fabPosition));
+    } catch {}
+  }, [fabPosition]);
+
+  const clampFabPosition = (x: number, y: number) => ({
+    x: Math.max(EDGE_GAP, Math.min(window.innerWidth - FAB_SIZE - EDGE_GAP, x)),
+    y: Math.max(EDGE_GAP, Math.min(window.innerHeight - FAB_SIZE - EDGE_GAP, y)),
+  });
+
+  const handleFabPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (isOpen || e.button !== 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: rect.left,
+      originY: rect.top,
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleFabPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    didDragRef.current = true;
+    setFabPosition(clampFabPosition(drag.originX + dx, drag.originY + dy));
+  };
+
+  const handleFabPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.moved) {
+      const current = clampFabPosition(drag.originX + (e.clientX - drag.startX), drag.originY + (e.clientY - drag.startY));
+      const snapX = e.clientX + FAB_SIZE / 2 < window.innerWidth / 2
+        ? EDGE_GAP
+        : window.innerWidth - FAB_SIZE - EDGE_GAP;
+      setFabPosition({ x: snapX, y: current.y });
+    }
+    dragRef.current = null;
+  };
 
   const toggleOpen = (newVal: boolean) => {
     setIsOpen(newVal);
@@ -71,14 +136,27 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   return (
     <>
       <div
-        className="fixed z-50 transition-all duration-300 print:hidden"
-        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))', right: '1.25rem' }}
+        className="fixed z-50 print:hidden"
+        style={fabPosition
+          ? { left: fabPosition.x, top: fabPosition.y, touchAction: 'none' }
+          : { bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))', right: '1.25rem', touchAction: 'none' }}
       >
         <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => toggleOpen(!isOpen)}
-          className={`w-14 h-14 rounded-[1.75rem] flex items-center justify-center transition-all duration-300 relative overflow-hidden cursor-pointer ${
+          ref={fabRef}
+          whileHover={isOpen ? undefined : { scale: 1.06 }}
+          whileTap={isOpen ? undefined : { scale: 0.96 }}
+          onPointerDown={handleFabPointerDown}
+          onPointerMove={handleFabPointerMove}
+          onPointerUp={handleFabPointerUp}
+          onPointerCancel={handleFabPointerUp}
+          onClick={() => {
+            if (didDragRef.current) {
+              didDragRef.current = false;
+              return;
+            }
+            toggleOpen(!isOpen);
+          }}
+          className={`w-12 h-12 rounded-[1.75rem] flex items-center justify-center transition-all duration-300 relative overflow-hidden cursor-pointer select-none ${
             isOpen 
               ? 'bg-slate-900/80 text-white rotate-90 scale-90 shadow-xl' 
               : 'text-white shadow-2xl shadow-emerald-500/30'
@@ -101,7 +179,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
             }}
           />
           <div className="relative z-10 flex items-center justify-center text-white drop-shadow-md">
-            {isOpen ? <X className="w-6 h-6 stroke-[3]" /> : <Plus className="w-8 h-8 stroke-[3]" />}
+            {isOpen ? <X className="w-5 h-5 stroke-[3]" /> : <Plus className="w-7 h-7 stroke-[3]" />}
           </div>
         </motion.button>
       </div>
