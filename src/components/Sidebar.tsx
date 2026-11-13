@@ -1,14 +1,10 @@
 import React from 'react';
 import { ChallengeGoal, CurrencyCode, LanguageCode } from '../types';
-import { formatCurrency, getGoalSquares, getGoalSavedAmount } from '../utils/currency';
 import { getTranslations } from '../utils/i18n';
 import { useAuth } from '../context/AuthContext';
 import { SyncStatusBadge } from './SyncStatusBadge';
 import {
-  Plus,
-  Target,
   Settings,
-  Trash2,
   LogOut,
   User as UserIcon,
   Wallet,
@@ -143,110 +139,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <UserIcon className="w-3.5 h-3.5 text-slate-500" />
           <span>{t.profile}</span>
         </button>
-      </div>
-
-      {/* Objectives Section - Compact with Adicionar objetivo */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        <div className="flex items-center justify-between px-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            {t.myGoals} ({goals.length})
-          </span>
-          <button
-            type="button"
-            onClick={onOpenNewGoalModal}
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-          >
-            <Plus className="w-3 h-3" />
-            {t.addGoalBtn}
-          </button>
-        </div>
-
-        {goals.length === 0 ? (
-          <div className="p-3 text-center border border-dashed border-slate-200 rounded-xl space-y-1.5">
-            <Target className="w-5 h-5 mx-auto text-emerald-500/70" />
-            <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              {t.noGoalsActive}
-            </p>
-            <button
-              type="button"
-              onClick={onOpenNewGoalModal}
-              className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
-              <span>{t.addGoalBtn}</span>
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {goals.map((goal) => {
-              const goalCur = goal.currency || currency;
-              const isActive = goal.id === activeGoalId;
-              const saved = getGoalSavedAmount(goal);
-              const percent = goal.totalTarget > 0 ? (saved / goal.totalTarget) * 100 : 0;
-              const squaresCount = goal.totalSquares || getGoalSquares(goal).length;
-              const isCompleted = goal.completedSquares.length >= squaresCount && squaresCount > 0;
-
-              return (
-                <div
-                  key={goal.id}
-                  onClick={() => onSwitchGoal(goal.id)}
-                  className={`group relative p-2.5 rounded-xl border transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-emerald-50/70 border-emerald-300 shadow-xs'
-                      : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base shrink-0 p-1 bg-white rounded-md shadow-xs border border-slate-200/60">
-                        {goal.icon}
-                      </span>
-                      <div className="min-w-0">
-                        <h4
-                          className={`text-xs font-bold truncate ${
-                            isActive
-                              ? 'text-emerald-900 dark:text-emerald-200'
-                              : 'text-slate-800 dark:text-slate-200'
-                          }`}
-                        >
-                          {goal.title}
-                        </h4>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono-numbers truncate">
-                          {formatCurrency(saved, goalCur)} / {formatCurrency(goal.totalTarget, goalCur)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`${t.deleteConfirmGoal} "${goal.title}"?`)) {
-                          onDeleteGoal(goal.id);
-                        }
-                      }}
-                      className="p-1 rounded text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      title={t.deleteItem}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <div className="mt-1.5">
-                    <div className="h-1 w-full bg-[#D1FAEB]/80 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          isCompleted ? 'bg-emerald-500' : 'bg-emerald-500/80'
-                        }`}
-                        style={{ width: `${Math.min(100, percent)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Sync status moved from the top bar into the side menu */}
