@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { ConfirmationModal } from '../ConfirmationModal';
 import { LanguageCode, SharedNotification, SharedInvitation } from '../../types';
 import { getTranslations } from '../../utils/i18n';
 import {
@@ -50,6 +51,7 @@ export const SharedNotificationsModal: React.FC<SharedNotificationsModalProps> =
   onClearNotifications,
 }) => {
   const t = getTranslations(language);
+  const [confirmClear, setConfirmClear] = React.useState(false);
 
   if (!isOpen) return null;
 
@@ -121,11 +123,7 @@ export const SharedNotificationsModal: React.FC<SharedNotificationsModalProps> =
             {notifications.length > 0 && (
               <button
                 type="button"
-                 onClick={() => {
-                    if (confirm('Tem certeza que deseja limpar suas notificações?')) {
-                      onClearNotifications();
-                    }
-                 }}
+                 onClick={() => setConfirmClear(true)}
                  className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1 cursor-pointer"
                  title="Limpar notificações"
                >
@@ -293,6 +291,14 @@ export const SharedNotificationsModal: React.FC<SharedNotificationsModalProps> =
           )}
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={confirmClear}
+        title={language === 'es' ? 'Limpiar notificaciones' : 'Limpar notificações'}
+        message={language === 'es' ? '¿Deseas eliminar todas las notificaciones?' : 'Deseja apagar todas as notificações?'}
+        confirmLabel={language === 'es' ? 'Limpiar' : 'Limpar'}
+        onCancel={() => setConfirmClear(false)}
+        onConfirm={async () => { await onClearNotifications(); setConfirmClear(false); }}
+      />
     </div>
   ), document.body);
 };
