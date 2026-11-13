@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ParsedLancamentoItem } from '../types/voice';
 import { AccountItem, CurrencyCode, LanguageCode } from '../types';
@@ -103,13 +104,13 @@ export const VoiceConfirmationSheet: React.FC<VoiceConfirmationSheetProps> = ({
 
   const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'R$';
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="glass-overlay flex items-end sm:items-center justify-center p-4 overflow-hidden pt-safe pb-safe"
+          className="glass-overlay flex items-center justify-center p-4 overflow-hidden pt-safe pb-safe"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 50 }}
@@ -350,5 +351,5 @@ export const VoiceConfirmationSheet: React.FC<VoiceConfirmationSheetProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
