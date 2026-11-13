@@ -126,7 +126,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             exit={{ x: '-105%', opacity: 0.88, scale: 0.97 }}
             transition={{ type: 'spring', damping: 27, stiffness: 270, mass: 0.82 }}
             drag="x"
-            dragConstraints={{ left: -42, right: 0 }}
+            dragConstraints={{ left: -120, right: 0 }}
             dragElastic={{ left: 0.12, right: 0 }}
             onDragEnd={(_, info) => {
               if (info.offset.x < -85 || info.velocity.x < -520) onClose();
