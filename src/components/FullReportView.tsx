@@ -45,7 +45,6 @@ import {
   Users,
   ArrowUpRight,
   ArrowDownLeft,
-  Filter,
   Tag,
   Sparkles,
   Info,
