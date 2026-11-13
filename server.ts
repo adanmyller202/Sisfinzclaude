@@ -455,6 +455,15 @@ app.post('/api/mone', async (req, res) => {
     }
 
     const { message, audio, audioMimeType, history = [], context = {}, persona: rawPersona } = req.body;
+    const requestedTimeZone = typeof req.body?.timeZone === 'string' ? req.body.timeZone : 'UTC';
+    let userTimeZone = 'UTC';
+    try {
+      // Validate the browser-provided IANA timezone before using it in date calculations.
+      new Intl.DateTimeFormat('en-US', { timeZone: requestedTimeZone }).format(new Date());
+      userTimeZone = requestedTimeZone;
+    } catch {
+      userTimeZone = 'UTC';
+    }
 
     if ((!message || typeof message !== 'string') && (!audio || typeof audio !== 'string')) {
       res.status(400).json({ error: 'Message is required' });
@@ -544,7 +553,14 @@ Mensagem atual do usuário: ${message.trim()}`;
     } = context;
 
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const dateParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: userTimeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(today);
+    const datePart = (type: string) => dateParts.find((part) => part.type === type)?.value || '';
+    const todayStr = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
     const currentMonthStr = todayStr.substring(0, 7);
 
     const DOLLAR_SIGN = String.fromCharCode(36);
