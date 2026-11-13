@@ -531,7 +531,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         </div>
                         {isForeign && tx.baseAmountARS !== undefined && (
                           <div className="text-[10px] font-black text-slate-500 font-mono mt-0.5">
-                            ARS ${tx.baseAmountARS.toLocaleString()} • Cot: ${tx.exchangeRate || 1}
+                            ${tx.baseAmountARS.toLocaleString()} • Cot: ${tx.exchangeRate || 1}
                           </div>
                         )}
                       </div>
