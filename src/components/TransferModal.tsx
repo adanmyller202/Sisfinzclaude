@@ -465,8 +465,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   </motion.div>
                 )}
 
-                {/* Amount in Goal Currency */}
-                <div className="space-y-3">
+                {/* Amount fields appear after the exchange quote is supplied. */}
+                {(!isForeignCurrency || parsedRate > 0) && (
+                  <div className="space-y-3">
                   <div className="flex items-center justify-between ml-1">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
                       {mode === 'deposit' ? 'VALOR A APORTAR' : 'VALOR A RESGATAR'} ({goalCurrency})
@@ -522,6 +523,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     ))}
                   </div>
                 </div>
+                )}
+                {isForeignCurrency && parsedRate <= 0 && <p className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs font-semibold text-amber-800">Informe a cotação utilizada para liberar os dois campos de conversão.</p>}
 
                 {/* Impact Preview Card */}
                 <AnimatePresence>
