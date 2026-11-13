@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LanguageCode } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getTranslations } from '../utils/i18n';
@@ -60,6 +60,19 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
 }) => {
   const t = getTranslations(language);
   const { user, signOutUser } = useAuth();
+  const [pendingView, setPendingView] = useState<string | null>(null);
+  const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      if (selectionTimer.current) clearTimeout(selectionTimer.current);
+      selectionTimer.current = null;
+      setPendingView(null);
+    }
+    return () => {
+      if (selectionTimer.current) clearTimeout(selectionTimer.current);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,8 +83,18 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   }, [isOpen, onClose]);
 
   const handleSelectView = (view: any) => {
-    onChangeView(view);
-    onClose();
+    if (pendingView || view === currentView) {
+      if (view === currentView && !pendingView) onClose();
+      return;
+    }
+    setPendingView(view);
+    // Let the selected row's fill, icon and label animation be clearly seen
+    // before changing the page and dismissing the drawer.
+    selectionTimer.current = setTimeout(() => {
+      onChangeView(view);
+      onClose();
+      selectionTimer.current = null;
+    }, 820);
   };
 
   const navGroups = [
@@ -190,42 +213,98 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       const isActive = currentView === item.id;
+                      const isSelected = pendingView === item.id;
+                      const isHighlighted = isActive || isSelected;
                       const Icon = item.icon;
                       return (
-                        <button
+                        <motion.button
                           key={item.id}
+                          type="button"
+                          disabled={!!pendingView}
                           onClick={() => handleSelectView(item.id)}
-                          className={`w-full p-3 rounded-2xl transition-all flex items-center justify-between group cursor-pointer ${
-                            isActive 
-                              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25' 
-                              : 'hover:bg-emerald-500/10 text-slate-700'
+                          initial={false}
+                          whileTap={!pendingView ? { scale: 0.975 } : undefined}
+                          animate={{
+                            scale: isSelected ? 1.025 : 1,
+                            x: isSelected ? 5 : 0,
+                          }}
+                          transition={{ type: 'spring', stiffness: 340, damping: 24 }}
+                          className={`relative isolate w-full p-3 rounded-2xl flex items-center justify-between group overflow-hidden text-left cursor-pointer disabled:cursor-default ${
+                            isHighlighted
+                              ? 'text-white shadow-[0_10px_28px_rgba(5,150,105,0.28)]'
+                              : 'text-slate-700 hover:bg-emerald-500/10'
                           }`}
                         >
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
-                              isActive 
-                                ? 'bg-white/20 text-white shadow-inner' 
-                                : 'bg-emerald-600 text-white shadow-sm'
-                            }`}>
-                              <Icon className="w-5 h-5 text-white" />
-                            </div>
+                          {isHighlighted && (
+                            <motion.span
+                              layoutId="sisfinz-nav-active-fill"
+                              className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500"
+                              initial={false}
+                              animate={{ opacity: 1, scale: isSelected ? 1 : 0.99 }}
+                              transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                            />
+                          )}
+                          {isSelected && (
+                            <>
+                              <motion.span
+                                className="absolute inset-y-0 left-0 w-1/2 -z-0 pointer-events-none bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                                initial={{ x: '-130%' }}
+                                animate={{ x: '260%' }}
+                                transition={{ duration: 0.72, ease: 'easeInOut' }}
+                              />
+                              <motion.span
+                                className="absolute -inset-2 -z-10 rounded-3xl border border-emerald-300/70"
+                                initial={{ opacity: 0, scale: 0.92 }}
+                                animate={{ opacity: [0, 0.9, 0], scale: [0.92, 1.04, 1.12] }}
+                                transition={{ duration: 0.78, ease: 'easeOut' }}
+                              />
+                            </>
+                          )}
+                          <div className="relative z-10 flex items-center gap-3.5 min-w-0">
+                            <motion.div
+                              animate={{
+                                scale: isSelected ? [1, 1.2, 1.08] : isActive ? 1.04 : 1,
+                                rotate: isSelected ? [0, -8, 7, 0] : 0,
+                                backgroundColor: isHighlighted ? 'rgba(255,255,255,0.22)' : '#059669',
+                              }}
+                              transition={{ duration: isSelected ? 0.62 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                              className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 text-white shadow-sm"
+                            >
+                              <Icon className="w-5 h-5" />
+                            </motion.div>
                             <div className="text-left min-w-0">
-                              <div className={`text-sm font-black truncate ${isActive ? 'text-white' : 'text-slate-900'}`}>
+                              <motion.div
+                                animate={{ x: isSelected ? 3 : 0, letterSpacing: isSelected ? '0.01em' : '0em' }}
+                                transition={{ duration: 0.32 }}
+                                className={`text-sm font-black truncate ${isHighlighted ? 'text-white' : 'text-slate-900'}`}
+                              >
                                 {item.label}
-                              </div>
-                              <div className={`text-[10px] font-medium truncate ${isActive ? 'text-emerald-100' : 'text-slate-500'}`}>
-                                {item.desc}
+                              </motion.div>
+                              <div className={`text-[10px] font-medium truncate ${isHighlighted ? 'text-emerald-50' : 'text-slate-500'}`}>
+                                {isSelected ? (language === 'es' ? 'Abriendo sección…' : 'Preparando seção…') : item.desc}
                               </div>
                             </div>
                           </div>
-                          {item.badge !== undefined && item.badge > 0 && (
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              isActive ? 'bg-white text-emerald-700' : 'bg-rose-500 text-white shadow-xs'
-                            }`}>
-                              {item.badge}
-                            </span>
-                          )}
-                        </button>
+                          <div className="relative z-10 flex items-center gap-2">
+                            {item.badge !== undefined && item.badge > 0 && (
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                                isHighlighted ? 'bg-white text-emerald-700' : 'bg-rose-500 text-white shadow-xs'
+                              }`}>
+                                {item.badge}
+                              </span>
+                            )}
+                            {isSelected && (
+                              <motion.span
+                                initial={{ opacity: 0, scale: 0.5, rotate: -90 }}
+                                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                                transition={{ type: 'spring', stiffness: 360, damping: 18 }}
+                                className="text-white"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                              </motion.span>
+                            )}
+                          </div>
+                        </motion.button>
                       );
                     })}
                   </div>
