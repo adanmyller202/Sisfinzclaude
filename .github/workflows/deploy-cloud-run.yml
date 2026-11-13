@@ -1,0 +1,81 @@
+name: SisFinz automatic deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sisfinz-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript validation
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+
+  deploy:
+    name: Deploy to Google Cloud Run
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud using Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-west2-docker.pkg.dev --quiet
+
+      - name: Build and push container image
+        env:
+          PROJECT_ID: prismatic-spring-ksmzh
+          IMAGE: us-west2-docker.pkg.dev/prismatic-spring-ksmzh/sisfinz-images/sisfinz:${{ github.sha }}
+        run: |
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy existing SisFinz service
+        env:
+          PROJECT_ID: prismatic-spring-ksmzh
+          IMAGE: us-west2-docker.pkg.dev/prismatic-spring-ksmzh/sisfinz-images/sisfinz:${{ github.sha }}
+        run: |
+          gcloud run deploy sisfinz2-11 \
+            --project="$PROJECT_ID" \
+            --region="us-west2" \
+            --image="$IMAGE" \
+            --quiet
+
+      - name: Deployment result
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "SisFinz deployment completed successfully."
+          else
+            echo "SisFinz deployment failed. The previous Cloud Run revision remains available for rollback."
+          fi
