@@ -285,7 +285,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                 <div className="space-y-1">
                   <h3 className="text-xl font-black text-slate-900">Nenhuma reserva encontrada</h3>
                   <p className="text-sm font-medium text-slate-600 max-w-sm mx-auto">
-                    Crie reservas com meta ou valores livres em pesos (ARS), dólares (USD) ou reais (BRL).
+                    Crie reservas com meta ou valores livres em pesos ($), dólares (US$) ou reais (R$).
                   </p>
                 </div>
                 <button
