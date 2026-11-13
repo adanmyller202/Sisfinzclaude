@@ -54,8 +54,13 @@ interface SettingsAccordionProps {
   id: string; title: string; subtitle: string; icon: React.ElementType;
   open: boolean; onToggle: () => void; children: React.ReactNode;
 }
-const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtitle, icon: Icon, open, onToggle, children }) => (
-  <section className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden" data-section={id}>
+const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtitle, icon: Icon, open, onToggle, children }) => {
+  const sectionRef = useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    if (open) sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [open]);
+  return (
+  <section ref={sectionRef} className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden" data-section={id}>
     <button type="button" aria-expanded={open} onClick={onToggle}
       className={`w-full flex items-center gap-3 p-4 text-left transition-colors active:bg-emerald-50 hover:bg-emerald-50/70 ${open ? 'bg-emerald-50/70' : 'bg-white'}`}>
       <span className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
@@ -69,7 +74,8 @@ const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtit
       </motion.div>}
     </AnimatePresence>
   </section>
-);
+  );
+};
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -93,6 +99,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localLang, setLocalLang] = useState<LanguageCode>(language || settings.language || 'pt');
   const [openSection, setOpenSection] = useState<string | null>(null);
   const { user } = useAuth();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setOpenSection(null);
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: 'auto' }));
+    }
+  }, [isOpen]);
 
   React.useEffect(() => {
     if (language) setLocalLang(language);
@@ -215,7 +229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Content */}
-            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto overscroll-y-contain flex-1 min-h-0 custom-scrollbar touch-pan-y" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+            <div ref={contentRef} className="p-5 sm:p-6 space-y-5 overflow-y-auto overscroll-y-contain flex-1 min-h-0 custom-scrollbar touch-pan-y" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
               <div className="flex items-center gap-3 rounded-3xl border border-emerald-100 bg-[#F0FDF7] p-4">
                 <div className="w-12 h-12 rounded-2xl overflow-hidden bg-emerald-600 text-white flex items-center justify-center text-lg font-black shrink-0 border border-white shadow-sm">
                   {user?.photoURL ? <img src={user.photoURL} alt="Foto de perfil" className="w-full h-full object-cover" /> : (user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}
