@@ -5,6 +5,7 @@ import { LANGUAGES, getTranslations } from '../utils/i18n';
 import { CategoryManager } from './CategoryManager';
 import { DisplayCategory } from '../hooks/useCategories';
 import { CategoryScope, CustomCategory } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   Settings,
   X,
@@ -19,6 +20,7 @@ import {
   VolumeX,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Sparkles,
   Layout,
   Palette,
@@ -47,6 +49,28 @@ interface SettingsModalProps {
   onResetPredefinedCategories?: () => Promise<void>;
 }
 
+
+interface SettingsAccordionProps {
+  id: string; title: string; subtitle: string; icon: React.ElementType;
+  open: boolean; onToggle: () => void; children: React.ReactNode;
+}
+const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtitle, icon: Icon, open, onToggle, children }) => (
+  <section className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden" data-section={id}>
+    <button type="button" aria-expanded={open} onClick={onToggle}
+      className={`w-full flex items-center gap-3 p-4 text-left transition-colors active:bg-emerald-50 hover:bg-emerald-50/70 ${open ? 'bg-emerald-50/70' : 'bg-white'}`}>
+      <span className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+      <span className="flex-1 min-w-0"><span className="block text-sm font-black text-slate-900">{title}</span><span className="block text-[10px] font-medium text-slate-500 mt-0.5">{subtitle}</span></span>
+      <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }} className="text-emerald-700"><ChevronDown className="w-5 h-5" /></motion.span>
+    </button>
+    <AnimatePresence initial={false}>
+      {open && <motion.div key="accordion-content" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+        transition={{ height: { duration: 0.38, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.22 } }} className="overflow-hidden">
+        <div className="px-4 pb-5 pt-1">{children}</div>
+      </motion.div>}
+    </AnimatePresence>
+  </section>
+);
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -67,6 +91,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetPredefinedCategories,
 }) => {
   const [localLang, setLocalLang] = useState<LanguageCode>(language || settings.language || 'pt');
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const { user } = useAuth();
 
   React.useEffect(() => {
     if (language) setLocalLang(language);
@@ -189,7 +215,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Content */}
-            <div className="p-5 sm:p-6 space-y-8 overflow-y-auto overscroll-y-contain flex-1 min-h-0 custom-scrollbar touch-pan-y" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto overscroll-y-contain flex-1 min-h-0 custom-scrollbar touch-pan-y" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+              <div className="flex items-center gap-3 rounded-3xl border border-emerald-100 bg-[#F0FDF7] p-4">
+                <div className="w-12 h-12 rounded-2xl overflow-hidden bg-emerald-600 text-white flex items-center justify-center text-lg font-black shrink-0 border border-white shadow-sm">
+                  {user?.photoURL ? <img src={user.photoURL} alt="Foto de perfil" className="w-full h-full object-cover" /> : (user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-black text-slate-900 truncate">{user?.displayName || (localLang === 'es' ? 'Mi perfil' : 'Meu perfil')}</div>
+                  <div className="text-xs text-slate-600 truncate">{user?.email || ''}</div>
+                </div>
+              </div>
+
               {importStatus && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -204,7 +240,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </motion.div>
               )}
 
-              {/* Regional Preferences */}
+              <SettingsAccordion id="regional" title="Idiomas e Moeda" subtitle="Idioma e moeda principal do aplicativo" icon={Globe} open={openSection === 'regional'} onToggle={() => setOpenSection(current => current === 'regional' ? null : 'regional')}>
+
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">
                   <Globe className="w-3.5 h-3.5 text-blue-500" />
@@ -222,8 +259,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onClick={() => { setLocalLang(lang); onUpdateSettings({ language: lang }); }}
                           className={`h-14 rounded-2xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
                             localLang === lang 
-                              ? 'bg-blue-500/20 border-blue-500/40 text-white' 
-                              : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                              ? 'bg-blue-50 border-blue-400 text-blue-800' 
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-emerald-50'
                           }`}
                         >
                           <span className="text-lg">{LANGUAGES[lang].flag}</span>
@@ -243,7 +280,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onClick={() => onUpdateSettings({ currency: code })}
                           className={`h-14 rounded-2xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
                             settings.currency === code 
-                              ? 'bg-emerald-500/20 border-emerald-500/40 text-white' 
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-800' 
                               : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                           }`}
                         >
@@ -256,7 +293,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Appearance & Sound */}
+              </SettingsAccordion>
+
+              <SettingsAccordion id="appearance" title="Aparência e Sons" subtitle="Tema visual e efeitos sonoros" icon={Palette} open={openSection === 'appearance'} onToggle={() => setOpenSection(current => current === 'appearance' ? null : 'appearance')}>
+
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">
                   <Palette className="w-3.5 h-3.5 text-amber-500" />
@@ -268,7 +308,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => onUpdateSettings({ darkMode: false })}
                     className={`p-4 rounded-3xl border flex flex-col items-center gap-3 transition-all cursor-pointer ${
                       !settings.darkMode 
-                        ? 'bg-white text-slate-900 border-white shadow-xl shadow-white/5' 
+                        ? 'bg-white text-slate-900 border-emerald-300 shadow-sm' 
                         : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                     }`}
                   >
@@ -279,7 +319,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => onUpdateSettings({ darkMode: true })}
                     className={`p-4 rounded-3xl border flex flex-col items-center gap-3 transition-all cursor-pointer ${
                       settings.darkMode 
-                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-xl shadow-emerald-600/20' 
+                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm' 
                         : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                     }`}
                   >
@@ -307,7 +347,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Categories */}
+              </SettingsAccordion>
+
+              <SettingsAccordion id="categories" title="Categorias" subtitle="Gerencie categorias de receitas e despesas" icon={Tag} open={openSection === 'categories'} onToggle={() => setOpenSection(current => current === 'categories' ? null : 'categories')}>
+
               {onAddCategory && onUpdateCategory && onDeleteCategory && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-800 px-1">
@@ -325,7 +368,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </section>
               )}
 
-              {/* Data & Analytics */}
+              </SettingsAccordion>
+
+              <SettingsAccordion id="data" title="Dados e Relatórios" subtitle="Exportar e restaurar seus dados" icon={Layout} open={openSection === 'data'} onToggle={() => setOpenSection(current => current === 'data' ? null : 'data')}>
+
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">
                   <Layout className="w-3.5 h-3.5 text-teal-500" />
@@ -353,7 +399,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Danger Zone */}
+              </SettingsAccordion>
+
+              <SettingsAccordion id="danger" title="Zona Crítica" subtitle="Ações permanentes sobre seus dados" icon={ShieldAlert} open={openSection === 'danger'} onToggle={() => setOpenSection(current => current === 'danger' ? null : 'danger')}>
+
               <div className="pt-4 border-t border-white/5 space-y-4 pb-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-rose-500 px-1">
                   <ShieldAlert className="w-3.5 h-3.5" />
@@ -371,6 +420,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Trash2 className="w-5 h-5 text-rose-500/40 group-hover:text-rose-500 transition-colors" />
                 </button>
               </div>
+              </SettingsAccordion>
+
             </div>
           </motion.div>
         </div>
