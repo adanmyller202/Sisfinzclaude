@@ -3,7 +3,6 @@ import { ChallengeGoal, LanguageCode } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getTranslations } from '../utils/i18n';
 import { SyncStatusBadge } from './SyncStatusBadge';
-import { PWAInstallButton } from './PWAInstallButton';
 import { SisFinzPet } from './shared/SisFinzPet';
 import {
   Menu,
@@ -88,12 +87,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <SyncStatusBadge language={language} />
         </div>
 
-        {/* Right Side: Quick Tools (PWA Install, New Goal Shortcut, Finzy Mascot / Profile Button) */}
+        {/* Right Side: Quick Tools (Alerts, New Goal Shortcut, Finzy Mascot) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {alertCenter}
-          {/* PWA Install Button (auto-hides when already running standalone) */}
-          <PWAInstallButton language={language} variant="compact" />
-
           {/* Quick Add Goal button (visible on goals view or desktop) */}
           {currentView === 'goals' && (
             <button
