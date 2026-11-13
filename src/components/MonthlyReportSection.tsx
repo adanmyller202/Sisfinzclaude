@@ -249,27 +249,13 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
           <span className="text-xs font-bold text-slate-800 shrink-0">
             {t.selectMonthLabel}:
           </span>
-          <select
-            value={selectedMonth}
-            onChange={(e) => onSelectedMonthChange(e.target.value)}
-            className="text-xs font-extrabold text-slate-900 bg-white/80 border border-slate-200/80 rounded-lg px-2 py-1 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 cursor-pointer capitalize shadow-2xs"
+          <button
+            type="button"
+            onClick={() => { setPickerYear(Number(selectedMonth.slice(0, 4)) || new Date().getFullYear()); setIsMonthPickerOpen(true); }}
+            className="text-xs font-extrabold text-slate-900 bg-white/90 border border-emerald-200 rounded-lg px-3 py-2 shadow-2xs hover:bg-emerald-50 active:scale-[0.98] transition-all capitalize"
           >
-            {(() => {
-              const [currY] = (selectedMonth || '').split('-').map(Number);
-              const monthsList: string[] = [];
-              // Generate months for previous year, current year, and next year
-              for (let y = currY - 1; y <= currY + 1; y++) {
-                for (let m = 1; m <= 12; m++) {
-                  monthsList.push(`${y}-${String(m).padStart(2, '0')}`);
-                }
-              }
-              return monthsList.map((mStr) => (
-                <option key={mStr} value={mStr} className="capitalize">
-                  {formatMonthName(mStr, locale)}
-                </option>
-              ));
-            })()}
-          </select>
+            {formatMonthName(selectedMonth, locale)}
+          </button> </select>
         </div>
 
         <div className="flex items-center justify-end gap-1">
