@@ -6,6 +6,7 @@ import { SisFinzPet } from './shared/SisFinzPet';
 import {
   Menu,
   Plus,
+  Settings,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -17,6 +18,7 @@ interface NavbarProps {
   onOpenNewGoalModal: () => void;
   hasPendingNotifications?: boolean;
   onOpenProfile: () => void;
+  onOpenSettings: () => void;
   onOpenCopilot?: () => void;
   alertCenter?: React.ReactNode;
 }
@@ -29,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewGoalModal,
   hasPendingNotifications = false,
   onOpenProfile,
+  onOpenSettings,
   onOpenCopilot,
   alertCenter,
 }) => {
@@ -87,6 +90,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right Side: Quick Tools (Alerts, New Goal Shortcut, Finzy Mascot) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {alertCenter}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label={t.settings}
+            title={t.settings}
+            className="p-2 rounded-xl text-slate-600 bg-white/80 hover:bg-white border border-slate-200/80 shadow-xs transition-colors cursor-pointer flex items-center justify-center"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
           {/* Quick Add Goal button (visible on goals view or desktop) */}
           {currentView === 'goals' && (
             <button
