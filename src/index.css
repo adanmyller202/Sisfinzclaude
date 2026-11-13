@@ -375,3 +375,22 @@ html.dark .mesh-gradient {
     100% { transform: scale(1); }
   }
 }
+
+
+/* Installed iPhone PWA refinements only.
+   Keep the browser/Safari layout completely unchanged. */
+@media (display-mode: standalone) {
+  /* The compact dock preserves the existing icons and active orb,
+     while removing excess white panel height in the installed app. */
+  .sisfinz-bottom-nav-height {
+    height: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .sisfinz-bottom-nav-shell > div > .sisfinz-bottom-nav-height > div:first-child {
+    top: 18px !important;
+  }
+
+  .sisfinz-bottom-nav-shell > div > .sisfinz-bottom-nav-height > div:nth-child(2) {
+    top: 18px !important;
+  }
+}
