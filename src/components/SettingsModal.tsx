@@ -60,7 +60,7 @@ const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtit
   React.useEffect(() => {
     if (open) sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [open]);
-  return createPortal((
+  return (
   <section ref={sectionRef} className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden" data-section={id}>
     <button type="button" aria-expanded={open} onClick={onToggle}
       className={`w-full flex items-center gap-3 p-4 text-left transition-colors active:bg-emerald-50 hover:bg-emerald-50/70 ${open ? 'bg-emerald-50/70' : 'bg-white'}`}>
@@ -185,7 +185,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     exit: { opacity: 0, scale: 0.95, y: 20, transition: { duration: 0.2 } }
   };
 
-  return (
+  return createPortal((
     <>
       <AnimatePresence>
         {isOpen && (
