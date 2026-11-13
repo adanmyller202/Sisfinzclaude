@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ExpenseItem, CurrencyCode, LanguageCode } from '../types';
 import { getTodayStr } from '../utils/finance';
 import { formatCurrency, CURRENCIES } from '../utils/currency';
@@ -130,11 +131,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 glass-overlay animate-in fade-in duration-150 overflow-hidden overscroll-contain"
+      className="fixed inset-0 z-[10010] flex items-center justify-center p-2.5 sm:p-4 glass-overlay animate-in fade-in duration-150 overflow-hidden overscroll-contain"
     >
       <div className="glass-modal rounded-3xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden">
         {/* Header (pinned) */}
@@ -329,6 +330,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             </div>
           </form>
         </div>
-    </div>
+    </div>,
+    document.body
   );
 };
