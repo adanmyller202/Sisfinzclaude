@@ -132,7 +132,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     : parsedAmount;
   const accountBalance = selectedAccount?.currentBalance ?? currentBalance;
   const handleGoalAmountChange = (value: string) => { setAmount(value); setAccountAmount(String(Math.round((parseFloat(value) || 0) * parsedRate * 100) / 100)); };
-  const handleAccountAmountChange = (value: string) => { setAccountAmount(value); setAmount(String(parsedRate > 0 ? Math.round(((parseFloat(value) || 0) / parsedRate) * 100) / 100 : 0)); };
+  const handleAccountAmountChange = (value: string) => { setAccountAmount(value); setAmount(String(parsedRate > 0 ? Math.round(((parseFloat(value) || 0) / parsedRate) * 100000000) / 100000000 : 0)); };
   const handleRateChange = (value: string) => { setExchangeRate(value); setAccountAmount(String(Math.round((parseFloat(amount) || 0) * (parseFloat(value) || 0) * 100) / 100)); };
 
   // Impact on base financial balance (in ARS)
