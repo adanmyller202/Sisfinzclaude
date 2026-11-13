@@ -145,6 +145,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onUndoWeek={fiftyTwoChallenge.undoWeek}
               onUpdateStorageLocation={onUpdateStorageLocation}
               onRedeemChallenge={onRedeemChallenge}
+              onAdjustAccountBalance={onAdjustAccountBalance}
               accounts={accounts}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
               onAddExpense={onAddExpense}
