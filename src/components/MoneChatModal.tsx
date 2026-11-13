@@ -293,7 +293,9 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   }, [isOpen, initialGreeting]);
 
   useEffect(() => {
-    if (!isOpen || !memoryReady || !memoryOwnerUid || auth.currentUser?.uid !== memoryOwnerUid) return;
+    // Persist independently of the modal's visibility so closing it immediately
+    // after a reply does not cancel the latest conversation save.
+    if (!memoryReady || !memoryOwnerUid || auth.currentUser?.uid !== memoryOwnerUid) return;
     const timeout = window.setTimeout(async () => {
       try {
         const compactMessages = messages.slice(-100).map((item) => ({
@@ -312,7 +314,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       }
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [isOpen, memoryReady, memoryOwnerUid, messages, lastActionItem]);
+  }, [memoryReady, memoryOwnerUid, messages, lastActionItem]);
 
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
