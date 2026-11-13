@@ -662,10 +662,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
 
       {/* 2. SALDO ACTUAL CARD - Premium Glass & Depth */}
       <motion.div variants={itemVariants} className="px-1">
-        <div className="relative overflow-hidden group">
-          <div className="absolute -inset-1 bg-gradient-to-tr from-emerald-500 to-teal-500 opacity-20 blur-2xl group-hover:opacity-30 transition-opacity duration-500" />
-          
-          <div className="glass rounded-[2rem] p-6 shadow-xl relative ring-1 ring-white/20 dark:ring-emerald-500/20 premium-shadow">
+        <div className="glass rounded-[2rem] p-6 shadow-xl relative ring-1 ring-white/20 dark:ring-emerald-500/20 premium-shadow">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -716,7 +713,6 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
               </motion.button>
             </div>
           </div>
-        </div>
       </motion.div>
 
       {/* 3. QUICK ACTION PILLS - Micro-interactions */}
