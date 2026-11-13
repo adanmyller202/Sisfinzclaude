@@ -21,20 +21,6 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
   const [alertTimes, setAlertTimes] = useState<Record<string, number>>(() => {
     try { return JSON.parse(localStorage.getItem('sisfinz_alert_times') || '{}'); } catch { return {}; }
   });
-  useEffect(() => {
-    if (!alerts.length) return;
-    setAlertTimes((previous) => {
-      const next = { ...previous };
-      let changed = false;
-      alerts.forEach((alert) => {
-        if (!next[alert.id]) { next[alert.id] = Date.now(); changed = true; }
-      });
-      if (changed) {
-        try { localStorage.setItem('sisfinz_alert_times', JSON.stringify(next)); } catch {}
-      }
-      return changed ? next : previous;
-    });
-  }, [alerts]);
   const formatAlertTime = (id: string) => {
     const timestamp = alertTimes[id];
     if (!timestamp) return 'Agora';
@@ -81,6 +67,20 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
     return result;
   }, [bills, monthBills, incomes, expenses, statusRecords, currentBalance, forecastBalance, safetyReserveAmount, currency, today, month, tomorrow, onOpenBill, onOpenDailyPace, onOpenGoals]);
 
+  useEffect(() => {
+    if (!alerts.length) return;
+    setAlertTimes((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      alerts.forEach((alert) => {
+        if (!next[alert.id]) { next[alert.id] = Date.now(); changed = true; }
+      });
+      if (changed) {
+        try { localStorage.setItem('sisfinz_alert_times', JSON.stringify(next)); } catch {}
+      }
+      return changed ? next : previous;
+    });
+  }, [alerts]);
   const unreadCount = alerts.filter((a) => !readAlertIds.includes(a.id)).length;
   const urgent = alerts.filter(a => a.severity === 'danger' || a.severity === 'warning').length;
   const styles = { danger: 'bg-rose-50 border-rose-200 text-rose-800', warning: 'bg-amber-50 border-amber-200 text-amber-800', info: 'bg-sky-50 border-sky-200 text-sky-800', success: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
