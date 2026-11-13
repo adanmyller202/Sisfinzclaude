@@ -31,7 +31,6 @@ interface TransferModalProps {
   onClose: () => void;
   savings: SavingGoal[];
   accounts: AccountItem[];
-  onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
   currentBalance: number;
   currency: CurrencyCode;
   language?: LanguageCode;
@@ -63,7 +62,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   onClose,
   savings = [],
   accounts = [],
-  onAdjustAccountBalance,
   currentBalance = 0,
   currency = 'ARS',
   language = 'pt',
@@ -237,7 +235,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       }
     } else {
       if (selectedGoal && (selectedGoal.currentAmount || 0) > 0) {
-        setAmount(String(selectedGoal.currentAmount));
+        handleGoalAmountChange(String(selectedGoal.currentAmount));
       }
     }
   };
