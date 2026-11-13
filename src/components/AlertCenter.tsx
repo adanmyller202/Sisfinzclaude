@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { createPortal } from 'react-dom';
 import { Bell, X, AlertTriangle, CalendarClock, TrendingDown, Wallet, Target, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 import { BillItem, IncomeItem, ExpenseItem, MonthlyStatusRecord, MonthBillOccurrence, CurrencyCode } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -63,7 +64,7 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
   const styles = { danger: 'bg-rose-50 border-rose-200 text-rose-800', warning: 'bg-amber-50 border-amber-200 text-amber-800', info: 'bg-sky-50 border-sky-200 text-sky-800', success: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
   return <>
     <button type="button" onClick={() => setOpen(true)} aria-label="Abrir central de alertas" className="relative inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/80 hover:bg-white border border-slate-200 text-slate-700 shadow-xs"><Bell className="w-5 h-5" />{unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>
-    <AnimatePresence>{open && <motion.div className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center bg-slate-950/45 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
+    {createPortal(<AnimatePresence>{open && <motion.div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/35 p-3 pt-safe pb-safe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
       <motion.section role="dialog" aria-modal="true" aria-label="Central de alertas inteligentes" className="w-full max-w-lg max-h-[88dvh] overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-white/70 dark:border-slate-700 flex flex-col" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }} onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">SisFinz • Mone</p><h2 className="text-xl font-black text-slate-900 dark:text-white">Central de alertas</h2><p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{unreadCount ? unreadCount + ' alerta(s) não lido(s)' : 'Todas as notificações foram lidas'}</p></div><button type="button" onClick={() => setOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" aria-label="Fechar"><X className="w-5 h-5" /></button></div>
         <div className="overflow-y-auto p-4 space-y-3">{alerts.length === 0 ? <div className="py-12 text-center"><div className="mx-auto mb-3 w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><CheckCircle2 className="w-7 h-7" /></div><p className="font-bold text-slate-800 dark:text-white">Nenhum alerta importante</p><p className="text-sm text-slate-500 mt-1">Vamos avisar quando algo precisar da sua atenção.</p></div> : alerts.map(a => {
@@ -83,6 +84,6 @@ export const AlertCenter: React.FC<Props> = ({ bills, monthBills, incomes, expen
         })}</div>
         <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400"><span>Alertas calculados com seus dados financeiros</span><span>{urgent} urgentes</span></div>
       </motion.section>
-    </motion.div>}</AnimatePresence>
+    </motion.div>}</AnimatePresence>, document.body)}
   </>;
 };
