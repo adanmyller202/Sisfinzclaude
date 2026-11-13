@@ -389,6 +389,13 @@ export default function App() {
     'finance' | 'planejar' | 'goals' | 'savings' | 'categories' | 'report' | 'shared_accounts' | 'challenge_52' | 'full_report' | 'accounts' | 'financial_calendar' | 'freedom' | 'daily_pace'
   >('finance');
 
+  // Reset the document scroll whenever a main section changes. This prevents
+  // Accounts (and other long screens) from inheriting the previous section's
+  // scroll offset, especially when navigating from a modal on iOS.
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, [currentView]);
+
   const currentNavArea: MainNavArea = useMemo(() => {
     if (currentView === 'planejar' || currentView === 'financial_calendar' || currentView === 'freedom') {
       return 'planejar';
