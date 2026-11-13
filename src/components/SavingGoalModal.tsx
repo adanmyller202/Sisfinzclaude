@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { SavingGoal, CurrencyCode, LanguageCode } from '../types';
 import { getTranslations } from '../utils/i18n';
@@ -121,13 +122,13 @@ export const SavingGoalModal: React.FC<SavingGoalModalProps> = ({
     }
   };
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain glass-overlay pt-safe pb-safe"
+          className="fixed inset-0 z-[10002] flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain bg-slate-950/25 pt-safe pb-safe"
           onClick={onClose}
         >
           <motion.div
@@ -411,5 +412,5 @@ export const SavingGoalModal: React.FC<SavingGoalModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
