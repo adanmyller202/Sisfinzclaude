@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CurrencyCode,
   LanguageCode,
@@ -541,7 +542,7 @@ export const SharedAccountsView: React.FC<SharedAccountsViewProps> = ({
 
 
       {/* Recurrence Delete Prompt Modal */}
-      {billToDelete && (
+      {billToDelete && createPortal((
         <div
           role="dialog"
           aria-modal="true"
@@ -617,7 +618,7 @@ export const SharedAccountsView: React.FC<SharedAccountsViewProps> = ({
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
       <StopSharingModal
         isOpen={isStopSharingModalOpen}
         onClose={() => setIsStopSharingModalOpen(false)}
