@@ -139,6 +139,8 @@ export function useSavings() {
             createdAt: data.createdAt || new Date().toISOString(),
             expenseId: data.expenseId,
             incomeId: data.incomeId,
+            accountId: data.accountId,
+            accountName: data.accountName,
           });
         });
         loaded.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
