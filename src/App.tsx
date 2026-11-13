@@ -749,10 +749,10 @@ export default function App() {
             <AnimatePresence mode="sync" initial={false}>
               <motion.div
                 key={currentView}
-                initial={{ opacity: 0, x: 18, y: 4 }}
-                animate={{ opacity: 1, x: 0, y: 0 }}
-                exit={{ opacity: 0, x: -12, y: -2 }}
-                transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, x: 54, y: 12, scale: 0.975, filter: 'blur(5px)' }}
+                animate={{ opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, x: -28, y: -5, scale: 0.988, filter: 'blur(2px)' }}
+                transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
                 className="w-full min-w-0 min-h-0"
               >
                 {currentView === 'planejar' ? (
