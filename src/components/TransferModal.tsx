@@ -4,8 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { SavingGoal, CurrencyCode, LanguageCode } from '../types';
+import { SavingGoal, CurrencyCode, LanguageCode, AccountItem } from '../types';
 import { getTranslations } from '../utils/i18n';
 import { formatCurrency, CURRENCIES } from '../utils/currency';
 import { getTodayStr } from '../utils/finance';
@@ -29,6 +30,8 @@ interface TransferModalProps {
   isOpen: boolean;
   onClose: () => void;
   savings: SavingGoal[];
+  accounts: AccountItem[];
+  onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
   currentBalance: number;
   currency: CurrencyCode;
   language?: LanguageCode;
@@ -39,14 +42,18 @@ interface TransferModalProps {
     amount: number,
     exchangeRate: number,
     date?: string,
-    note?: string
+    note?: string,
+    accountId?: string,
+    accountName?: string
   ) => Promise<void>;
   onWithdrawFromSaving: (
     savingId: string,
     amount: number,
     exchangeRate: number,
     date?: string,
-    note?: string
+    note?: string,
+    accountId?: string,
+    accountName?: string
   ) => Promise<void>;
   onOpenCreateSaving?: () => void;
 }
@@ -55,6 +62,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   isOpen,
   onClose,
   savings = [],
+  accounts = [],
+  onAdjustAccountBalance,
   currentBalance = 0,
   currency = 'ARS',
   language = 'pt',
@@ -69,7 +78,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const safeSavings = Array.isArray(savings) ? savings : [];
   const [mode, setMode] = useState<'deposit' | 'withdrawal'>(defaultType);
   const [selectedSavingId, setSelectedSavingId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
+  const [accountAmount, setAccountAmount] = useState<string>('');
   const [exchangeRate, setExchangeRate] = useState<string>('1');
   const [date, setDate] = useState<string>(getTodayStr());
   const [note, setNote] = useState<string>('');
@@ -87,13 +98,17 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         setSelectedSavingId('');
       }
       setAmount('');
+      setAccountAmount('');
+      setSelectedAccountId(accounts.find((a) => a.isActive !== false && (a.currency || 'ARS') === 'ARS')?.id || '');
       setDate(getTodayStr());
       setNote('');
       setError(null);
     }
-  }, [isOpen, defaultSavingId, defaultType, safeSavings]);
+  }, [isOpen, defaultSavingId, defaultType, safeSavings, accounts]);
 
   const selectedGoal = safeSavings.find((s) => s.id === selectedSavingId);
+  const availableAccounts = accounts.filter((a) => a.isActive !== false && (a.currency || 'ARS') === 'ARS');
+  const selectedAccount = availableAccounts.find((a) => a.id === selectedAccountId);
   const goalCurrency: CurrencyCode = (selectedGoal?.currency as CurrencyCode) || 'ARS';
   const isForeignCurrency = goalCurrency !== 'ARS';
   const goalConfig = CURRENCIES[goalCurrency] || CURRENCIES.ARS;
@@ -120,6 +135,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const baseAmountARS = isForeignCurrency
     ? Math.round(parsedAmount * parsedRate * 100) / 100
     : parsedAmount;
+  const accountBalance = selectedAccount?.currentBalance ?? currentBalance;
+  const handleGoalAmountChange = (value: string) => { setAmount(value); setAccountAmount(String(Math.round((parseFloat(value) || 0) * parsedRate * 100) / 100)); };
+  const handleAccountAmountChange = (value: string) => { setAccountAmount(value); setAmount(String(parsedRate > 0 ? Math.round(((parseFloat(value) || 0) / parsedRate) * 100) / 100 : 0)); };
+  const handleRateChange = (value: string) => { setExchangeRate(value); setAccountAmount(String(Math.round((parseFloat(amount) || 0) * (parseFloat(value) || 0) * 100) / 100)); };
 
   // Impact on base financial balance (in ARS)
   const afterBalanceARS =
@@ -142,6 +161,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       return;
     }
 
+    if (!selectedAccount) { setError('Selecione uma conta ativa em pesos argentinos para esta movimentação.'); return; }
+
     if (parsedAmount <= 0) {
       setError(language === 'es' ? 'Ingresa un monto válido mayor que cero.' : 'Informe um valor maior que zero.');
       return;
@@ -156,13 +177,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       return;
     }
 
-    if (mode === 'deposit' && baseAmountARS > currentBalance && currentBalance > 0) {
-      const proceed = confirm(
-        language === 'es'
-          ? `El impacto en pesos (${formatCurrency(baseAmountARS, 'ARS')}) supera tu saldo disponible (${formatCurrency(currentBalance, 'ARS')}). ¿Deseas continuar?`
-          : `O impacto em pesos (${formatCurrency(baseAmountARS, 'ARS')}) é maior que seu saldo disponível (${formatCurrency(currentBalance, 'ARS')}). Deseja continuar?`
-      );
-      if (!proceed) return;
+    if (mode === 'deposit' && baseAmountARS > accountBalance) {
+      setError(`O valor debitado (${formatCurrency(baseAmountARS, 'ARS')}) supera o saldo da conta ${selectedAccount.name} (${formatCurrency(accountBalance, 'ARS')}).`);
+      return;
     }
 
     if (mode === 'withdrawal') {
@@ -187,7 +204,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           parsedAmount,
           parsedRate,
           date,
-          note.trim() || undefined
+          note.trim() || undefined,
+          selectedAccount.id,
+          selectedAccount.name
         );
       } else {
         await onWithdrawFromSaving(
@@ -195,7 +214,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           parsedAmount,
           parsedRate,
           date,
-          note.trim() || undefined
+          note.trim() || undefined,
+          selectedAccount.id,
+          selectedAccount.name
         );
       }
 
@@ -214,13 +235,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
   const handleMaxAmount = () => {
     if (mode === 'deposit') {
-      if (currentBalance > 0) {
-        if (!isForeignCurrency) {
-          setAmount(String(currentBalance));
-        } else if (parsedRate > 0) {
-          const maxForeign = Math.floor((currentBalance / parsedRate) * 100) / 100;
-          if (maxForeign > 0) setAmount(String(maxForeign));
-        }
+      if (accountBalance > 0) {
+        if (!isForeignCurrency) handleGoalAmountChange(String(accountBalance));
+        else if (parsedRate > 0) { const maxForeign = Math.floor((accountBalance / parsedRate) * 100) / 100; if (maxForeign > 0) handleGoalAmountChange(String(maxForeign)); }
       }
     } else {
       if (selectedGoal && (selectedGoal.currentAmount || 0) > 0) {
@@ -237,13 +254,13 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       ? [50, 100, 200, 500]
       : [10000, 50000, 100000, 200000];
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain glass-overlay pt-safe pb-safe"
+          className="fixed inset-0 z-[10001] flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain bg-slate-950/25 pt-safe pb-safe"
           onClick={onClose}
         >
           <motion.div
@@ -343,6 +360,14 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">{mode === 'deposit' ? 'CONTA DE ONDE SAIRÁ O DINHEIRO' : 'CONTA QUE RECEBERÁ O RESGATE'}</label>
+                  <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full px-5 py-4 text-sm font-black bg-white border border-slate-200 rounded-2xl text-slate-900" required>
+                    <option value="">Selecione uma conta em pesos</option>
+                    {availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.name} — Saldo: {formatCurrency(account.currentBalance || 0, 'ARS')}</option>)}
+                  </select>
+                </div>
+
                 {/* Meta Selection */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between ml-1">
@@ -415,11 +440,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       onClick={handleMaxAmount}
                       className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] hover:scale-105 transition-transform bg-blue-500/5 px-2.5 py-1 rounded-lg border border-blue-500/20"
                     >
-                      MÁXIMO ({mode === 'deposit' 
-                        ? (isForeignCurrency && parsedRate > 0 
-                            ? `${goalConfig.symbol} ${(Math.floor((currentBalance / parsedRate) * 100) / 100).toLocaleString()}` 
-                            : formatCurrency(currentBalance, 'ARS'))
-                        : formatCurrency(selectedGoal?.currentAmount || 0, goalCurrency)})
+                      MÁXIMO ({mode === 'deposit' ? (isForeignCurrency && parsedRate > 0 ? `${goalConfig.symbol} ${(Math.floor((accountBalance / parsedRate) * 100) / 100).toLocaleString()}` : formatCurrency(accountBalance, 'ARS')) : formatCurrency(selectedGoal?.currentAmount || 0, goalCurrency)})
                     </button>
                   </div>
 
@@ -433,14 +454,21 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       step="any"
                       min="0"
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      onChange={(e) => handleGoalAmountChange(e.target.value)}
                       placeholder="0.00"
                       className={`w-full pl-20 pr-5 py-4 text-base font-mono-numbers font-black bg-white/80 border border-slate-200/80 rounded-[1.25rem] focus:outline-hidden focus:ring-2 transition-all text-slate-900 ${
                         mode === 'deposit' ? 'focus:ring-emerald-500/30' : 'focus:ring-blue-500/30'
                       }`}
                       required
-                      autoFocus
                     />
+                  </div>
+                  {isForeignCurrency && <div className="space-y-2">
+                    <div className="flex justify-center text-emerald-600"><ArrowRightLeft className="w-5 h-5" /></div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">VALOR EM PESOS {mode === 'deposit' ? 'A DESCONTAR' : 'A CREDITAR'} NA CONTA</label>
+                    <div className="relative"><span className="absolute left-5 top-1/2 -translate-y-1/2 text-sm font-black text-emerald-700">$</span>
+                      <input type="number" step="any" min="0" value={accountAmount} onChange={(e) => handleAccountAmountChange(e.target.value)} placeholder="0.00" className="w-full pl-12 pr-5 py-4 text-base font-mono-numbers font-black bg-white border border-emerald-200 rounded-[1.25rem] text-slate-900" required />
+                    </div>
+                    <p className="text-[10px] text-slate-500">Edite qualquer um dos valores; o outro será convertido automaticamente.</p>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap pt-1 px-1">
@@ -478,14 +506,14 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
                     <div className="relative group">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">
-                        ARS $
+                        $
                       </span>
                       <input
                         type="number"
                         step="any"
                         min="0"
                         value={exchangeRate}
-                        onChange={(e) => setExchangeRate(e.target.value)}
+                        onChange={(e) => handleRateChange(e.target.value)}
                         placeholder="Ex: 1575.00"
                         className="w-full pl-16 pr-4 py-3.5 text-sm font-mono-numbers font-black bg-white border border-amber-300/80 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 text-slate-900 transition-all"
                         required={isForeignCurrency}
@@ -615,5 +643,5 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
