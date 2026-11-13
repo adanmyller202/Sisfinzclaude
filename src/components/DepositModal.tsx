@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { CurrencyCode, ChallengeSquare, LanguageCode } from '../types';
 import { formatCurrencyExact, formatShortDate } from '../utils/currency';
 import { getTranslations } from '../utils/i18n';
@@ -33,11 +34,11 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 
   const formattedAmount = formatCurrencyExact(square.value, currency);
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden overscroll-none glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -173,5 +174,5 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 };
