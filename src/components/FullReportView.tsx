@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CurrencyCode,
@@ -1804,7 +1805,7 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
 
       {/* TIMELINE DETAIL MODAL */}
       <AnimatePresence>
-        {selectedDetailItem && (
+        {selectedDetailItem && createPortal((
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1895,12 +1896,12 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
               </motion.button>
             </motion.div>
           </motion.div>
-        )}
+        ), document.body)}
       </AnimatePresence>
 
       {/* DEBT BREAKDOWN MODAL */}
       <AnimatePresence>
-        {selectedDebtDetail && (
+        {selectedDebtDetail && createPortal((
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1976,7 +1977,7 @@ export const FullReportView: React.FC<FullReportViewProps> = ({
               </div>
             </motion.div>
           </motion.div>
-        )}
+        ), document.body)}
       </AnimatePresence>
     </motion.div>
   );
