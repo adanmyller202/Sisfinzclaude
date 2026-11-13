@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AppSettings, CurrencyCode, LanguageCode, BillItem, IncomeItem, ExpenseItem } from '../types';
 import { CURRENCIES } from '../utils/currency';
 import { LANGUAGES, getTranslations } from '../utils/i18n';
@@ -59,7 +60,7 @@ const SettingsAccordion: React.FC<SettingsAccordionProps> = ({ id, title, subtit
   React.useEffect(() => {
     if (open) sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [open]);
-  return (
+  return createPortal((
   <section ref={sectionRef} className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden" data-section={id}>
     <button type="button" aria-expanded={open} onClick={onToggle}
       className={`w-full flex items-center gap-3 p-4 text-left transition-colors active:bg-emerald-50 hover:bg-emerald-50/70 ${open ? 'bg-emerald-50/70' : 'bg-white'}`}>
@@ -500,5 +501,5 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         )}
       </AnimatePresence>
     </>
-  );
+  ), document.body);
 };
