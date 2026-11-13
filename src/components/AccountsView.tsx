@@ -221,7 +221,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
                     <div className="flex items-center justify-end gap-2 mt-8 pt-4 border-t border-slate-200/60">
                       <button onClick={() => { setAccountToEdit(acc); setIsAccountModalOpen(true); }} className="p-3 rounded-xl bg-white/80 hover:bg-white text-slate-500 hover:text-slate-900 border border-slate-200/60 transition-all cursor-pointer"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => handleZeroAccountConfirm(acc)} title={language === "es" ? "Poner saldo en cero" : "Zerar conta"} className="p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 transition-all cursor-pointer"><RotateCcw className="w-4 h-4" /></button>
+                      <button onClick={() => handleZeroAccountConfirm(acc)} title={language === "es" ? "Poner saldo en cero" : "Zerar conta"} aria-label={language === "es" ? "Poner saldo en cero" : "Zerar conta"} className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 transition-all cursor-pointer flex items-center gap-1.5"><RotateCcw className="w-4 h-4" /><span className="text-[9px] font-black uppercase tracking-wide">Zerar</span></button>
                       <button onClick={() => handleDeleteAccountConfirm(acc)} title={language === "es" ? "Eliminar cuenta" : "Excluir conta"} className="p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-rose-200/60 transition-all cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </motion.div>
