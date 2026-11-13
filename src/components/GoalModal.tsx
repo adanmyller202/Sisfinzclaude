@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { CurrencyCode, LanguageCode, ChallengeSquare } from '../types';
 import {
@@ -185,7 +186,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
   const currencyConfig = CURRENCIES[currency] || CURRENCIES.BRL;
   const suggestions = INITIAL_VALUE_SUGGESTIONS[currency] || INITIAL_VALUE_SUGGESTIONS.BRL;
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
@@ -497,5 +498,5 @@ export const GoalModal: React.FC<GoalModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
