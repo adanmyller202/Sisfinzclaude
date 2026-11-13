@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CurrencyCode,
   LanguageCode,
@@ -416,9 +417,9 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
       </div>
 
       {/* Day Detail Modal */}
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {isDayDetailModalOpen && selectedDayData && (
-          <div key="day-detail-modal-root" className="fixed inset-0 z-[10000] isolate flex items-center justify-center overflow-y-auto p-3 sm:p-4 pt-safe pb-safe">
+          <div key="day-detail-modal-root" role="dialog" aria-modal="true" className="fixed inset-0 z-[10000] isolate flex items-center justify-center overflow-y-auto p-3 sm:p-4 pt-safe pb-safe bg-slate-950/25">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -491,7 +492,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
       <TransactionModal
         isOpen={isTxModalOpen}
