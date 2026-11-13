@@ -1068,7 +1068,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => setIsMoneChatOpen(true)}
-        className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer group print:hidden mb-[env(safe-area-inset-bottom,0px)]"
+        className="fixed md:hidden bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer group print:hidden mb-[env(safe-area-inset-bottom,0px)]"
         title={`${t.askMone} • ${moneMoodLabel}`}
       >
         <div className="relative shrink-0 flex items-center justify-center">
