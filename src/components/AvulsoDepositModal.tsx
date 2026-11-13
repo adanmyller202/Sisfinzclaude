@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { CurrencyCode, ChallengeGoal, LanguageCode } from '../types';
 import {
   formatCurrency,
@@ -83,11 +84,11 @@ export const AvulsoDepositModal: React.FC<AvulsoDepositModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-hidden overscroll-none glass-overlay pt-safe pb-safe animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -285,5 +286,5 @@ export const AvulsoDepositModal: React.FC<AvulsoDepositModalProps> = ({
         </form>
       </div>
     </div>
-  );
+  ), document.body);
 };
