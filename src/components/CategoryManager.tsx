@@ -135,21 +135,21 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass-panel rounded-[2.5rem] p-8 sm:p-10 space-y-10 relative overflow-hidden shadow-md"
+      className="glass-panel rounded-2xl p-3 sm:p-4 space-y-4 relative overflow-hidden shadow-sm"
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-[1.5rem] bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0 shadow-inner border border-indigo-500/20">
-            <Tag className="w-8 h-8" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-500/20">
+            <Tag className="w-5 h-5" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
+            <h3 className="text-base font-black text-slate-900 tracking-tight uppercase">
               {t.categoriesManagerTitle}
             </h3>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
               SISTEMA DE CLASSIFICAÇÃO INTELIGENTE
             </p>
           </div>
@@ -165,7 +165,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 onResetPredefined();
               }
             }}
-            className="px-5 py-3 rounded-2xl bg-white/70 border border-slate-200 text-[10px] font-black text-slate-600 hover:text-indigo-600 uppercase tracking-widest transition-all cursor-pointer flex items-center gap-2.5 shadow-xs"
+            className="px-3 py-2 rounded-xl bg-white/80 border border-slate-200 text-[9px] font-bold text-slate-600 hover:text-emerald-700 uppercase tracking-wide transition-all cursor-pointer flex items-center gap-2 shadow-xs"
           >
             <RotateCcw className="w-4 h-4" />
             <span>RESTAURAR PADRÃO</span>
@@ -176,9 +176,9 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       {/* Add New Category Form */}
       <form
         onSubmit={handleAdd}
-        className="p-8 rounded-[2.5rem] bg-[#D1FAEB]/40 border border-emerald-500/20 space-y-8 relative z-10 shadow-xs"
+        className="p-3 sm:p-4 rounded-xl bg-[#D1FAEB]/35 border border-emerald-500/20 space-y-3 relative z-10 shadow-xs"
       >
-        <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-1">
+        <div className="flex items-center gap-2 text-[9px] font-black text-emerald-800 uppercase tracking-wider ml-1">
           <Plus className="w-4 h-4" />
           <span>NOVA CATEGORIA</span>
         </div>
@@ -194,8 +194,8 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
           </motion.div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          <div className="md:col-span-6 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="md:col-span-6 space-y-1.5">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">
               {t.categoryNameLabel}
             </label>
@@ -205,11 +205,11 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
               placeholder={t.categoryNamePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-6 py-5 text-sm font-black bg-white/80 border border-slate-200 rounded-[1.25rem] focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900 transition-all placeholder:text-slate-400"
+              className="w-full px-3 py-2.5 text-sm font-semibold bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 text-slate-900 transition-all placeholder:text-slate-400"
             />
           </div>
 
-          <div className="md:col-span-3 space-y-4">
+          <div className="md:col-span-3 space-y-1.5">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">
               {t.categoryScopeLabel}
             </label>
@@ -217,7 +217,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
               <select
                 value={scope}
                 onChange={(e) => setScope(e.target.value as CategoryScope)}
-                className="w-full px-5 py-5 text-xs font-black bg-white/80 border border-slate-200 rounded-[1.25rem] focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-slate-900 cursor-pointer transition-all appearance-none uppercase tracking-widest"
+                className="w-full px-3 py-2.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 text-slate-900 cursor-pointer transition-all appearance-none"
               >
                 <option value="all">{t.scopeAll}</option>
                 <option value="bill">{t.scopeBill}</option>
@@ -236,7 +236,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={isSubmitting || !name.trim()}
-              className="w-full py-5 text-[11px] font-black text-white bg-indigo-600 rounded-[1.25rem] shadow-xl shadow-indigo-600/30 uppercase tracking-[0.3em] cursor-pointer disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 text-[10px] font-black text-white bg-emerald-600 rounded-lg shadow-sm uppercase tracking-wider cursor-pointer disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
               <Check className="w-5 h-5" />
               <span>{isSubmitting ? '...' : t.saveBtn}</span>
@@ -244,12 +244,12 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
           </div>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-2">
           <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em] ml-1">
              <Palette className="w-4 h-4" />
              <span>MARCADOR VISUAL</span>
           </div>
-          <div className="flex items-center gap-4 flex-wrap px-1">
+          <div className="flex items-center gap-2 flex-wrap px-1">
             {PRESET_COLORS.map((col) => (
               <motion.button
                 key={col}
@@ -274,14 +274,14 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       </form>
 
       {/* Filter Tabs & Content */}
-      <div className="space-y-8">
-        <div className="flex items-center gap-4 border-b border-slate-200/50 dark:border-slate-800 pb-6 overflow-x-auto no-scrollbar">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 border-b border-slate-200/50 dark:border-slate-800 pb-3 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] shrink-0 mr-4">
             <Filter className="w-4 h-4" />
             <span>{t.filterLabel}</span>
           </div>
           
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {[
               { id: 'all', label: t.filterAll, color: 'slate' },
               { id: 'bill', label: t.tabBills, color: 'rose' },
@@ -292,7 +292,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 key={filter.id}
                 type="button"
                 onClick={() => setActiveFilter(filter.id as any)}
-                className={`px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all cursor-pointer border ${
+                className={`px-3 py-2 text-[9px] font-bold uppercase tracking-wide rounded-lg transition-all cursor-pointer border ${
                   activeFilter === filter.id
                     ? filter.id === 'all' 
                       ? 'bg-slate-800 text-white border-slate-800 shadow-md'
@@ -307,7 +307,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
         </div>
 
         {/* Categories Grid */}
-        <div className="space-y-6">
+        <div className="space-y-3">
           <div className="flex items-center justify-between ml-1">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] flex items-center gap-3">
               <Layers className="w-5 h-5 text-indigo-600" />
@@ -318,7 +318,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-2">
             <AnimatePresence mode="popLayout">
               {filteredCategories.length === 0 ? (
                 <motion.div 
@@ -340,7 +340,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ type: "spring", damping: 25, stiffness: 350, delay: idx * 0.02 }}
                       key={cat.id}
-                      className={`p-6 rounded-[2rem] border transition-all relative overflow-hidden group ${
+                      className={`p-3 rounded-xl border transition-all relative overflow-hidden group ${
                         isEditing 
                           ? 'bg-white border-indigo-500 ring-8 ring-indigo-500/5 shadow-2xl z-20 scale-105' 
                           : 'glass-panel border-emerald-500/15 hover:bg-white hover:border-emerald-500/30 shadow-xs'
@@ -399,10 +399,10 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between gap-5 relative z-10">
-                          <div className="flex items-center gap-4 min-w-0">
+                        <div className="flex items-center justify-between gap-2 relative z-10">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div 
-                              className="w-12 h-12 rounded-2xl shrink-0 shadow-lg flex items-center justify-center border-4 border-white"
+                              className="w-8 h-8 rounded-lg shrink-0 shadow-sm flex items-center justify-center border-2 border-white"
                               style={{ 
                                 backgroundColor: cat.color || '#6366f1', 
                                 boxShadow: `0 10px 20px -5px ${cat.color}40` 
@@ -411,10 +411,10 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                                <Tag className="w-5 h-5 text-white/90" />
                             </div>
                             <div className="min-w-0 space-y-1">
-                              <div className="text-sm font-black text-slate-900 truncate uppercase tracking-tight">
+                              <div className="text-xs sm:text-sm font-bold text-slate-900 whitespace-normal break-words leading-snug">
                                 {cat.name}
                               </div>
-                              <div className="inline-block px-2 py-0.5 rounded-lg bg-emerald-50 text-[9px] font-black text-emerald-800 uppercase tracking-widest border border-emerald-200/60">
+                              <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-emerald-50 text-[8px] font-bold text-emerald-800 uppercase tracking-wide border border-emerald-200/60">
                                 {getScopeLabel(cat.scope)}
                               </div>
                             </div>
@@ -424,7 +424,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                             <button
                               type="button"
                               onClick={() => startEdit(cat)}
-                              className="p-2.5 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-500/10 transition-all cursor-pointer bg-white/80 border border-slate-200"
+                              className="p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-all cursor-pointer bg-white border border-slate-200"
                               title={t.editItem}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -436,7 +436,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                                   onDeleteCategory(cat.id);
                                 }
                               }}
-                              className="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-500/10 transition-all cursor-pointer bg-white/80 border border-slate-200"
+                              className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer bg-white border border-slate-200"
                               title={t.deleteItem}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
