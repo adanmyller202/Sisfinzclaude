@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CurrencyCode,
   LanguageCode,
@@ -309,11 +310,11 @@ export const SharedBillModal: React.FC<SharedBillModalProps> = ({
     }
   };
 
-  return (
+  return createPortal((
     <div
       role="dialog"
       aria-modal="true"
-      className="glass-overlay p-2.5 sm:p-4 overflow-hidden overscroll-contain"
+      className="fixed inset-0 z-[10010] flex items-center justify-center glass-overlay p-3 sm:p-4 overflow-hidden overscroll-none"
     >
       <div className="glass-modal rounded-3xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header (pinned) */}
@@ -759,5 +760,5 @@ export const SharedBillModal: React.FC<SharedBillModalProps> = ({
         </form>
       </div>
     </div>
-  );
+  ), document.body);
 };
