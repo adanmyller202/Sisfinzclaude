@@ -75,7 +75,6 @@ import {
   Bot,
   Target,
   PiggyBank,
-  ArrowRightLeft,
   Eye,
   Undo2,
 } from 'lucide-react';
@@ -699,20 +698,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
                 whileTap={{ scale: 0.96 }}
                 type="button"
                 onClick={() => setIsBalanceBreakdownOpen(true)}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-500/10 cursor-pointer"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-500/10 cursor-pointer"
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Cuentas</span>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
-                type="button"
-                onClick={() => handleOpenTransfer()}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-600 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-600/30 cursor-pointer ring-1 ring-white/10"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Transferir</span>
               </motion.button>
             </div>
           </div>
@@ -720,9 +709,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       </motion.div>
 
       {/* 3. QUICK ACTION PILLS - Micro-interactions */}
-      <motion.div variants={itemVariants} className="grid grid-cols-4 gap-2 px-1">
+      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-2 px-1">
         {[
-          { icon: ArrowRightLeft, label: 'Transf.', color: 'emerald', onClick: () => handleOpenTransfer() },
           { icon: Receipt, label: 'Factura', color: 'rose', onClick: () => handleOpenNew('bill') },
           { icon: ArrowUpRight, label: 'Ingreso', color: 'emerald', onClick: () => handleOpenNew('income') },
           { icon: ArrowDownLeft, label: 'Gasto', color: 'amber', onClick: () => handleOpenNew('expense') }
