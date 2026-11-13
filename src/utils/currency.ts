@@ -5,7 +5,7 @@ const DOLLAR_SIGN = String.fromCharCode(36);
 export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   ARS: {
     code: 'ARS',
-    symbol: 'ARS ' + DOLLAR_SIGN,
+    symbol: DOLLAR_SIGN,
     name: 'Pesos Argentinos',
     locale: 'es-AR',
     flag: '🇦🇷',
@@ -82,7 +82,7 @@ export function formatCurrency(amount: number, currencyCode: CurrencyCode = 'BRL
   const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
   const number = formatCurrencyNumber(amount, code, 0);
   switch (code) {
-    case 'ARS': return 'ARS ' + DOLLAR_SIGN + ' ' + number;
+    case 'ARS': return DOLLAR_SIGN + ' ' + number;
     case 'USD': return 'US' + DOLLAR_SIGN + ' ' + number;
     case 'BRL': return 'R' + DOLLAR_SIGN + ' ' + number;
     case 'EUR': return number + ' €';
@@ -105,7 +105,7 @@ export function formatCurrencyExact(amount: number, currencyCode: CurrencyCode =
   const code = CURRENCIES[currencyCode] ? currencyCode : 'BRL';
   const number = formatCurrencyNumber(amount, code, 2);
   switch (code) {
-    case 'ARS': return 'ARS ' + DOLLAR_SIGN + ' ' + number;
+    case 'ARS': return DOLLAR_SIGN + ' ' + number;
     case 'USD': return 'US' + DOLLAR_SIGN + ' ' + number;
     case 'BRL': return 'R' + DOLLAR_SIGN + ' ' + number;
     case 'EUR': return number + ' €';
