@@ -255,7 +255,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
             className="text-xs font-extrabold text-slate-900 bg-white/90 border border-emerald-200 rounded-lg px-3 py-2 shadow-2xs hover:bg-emerald-50 active:scale-[0.98] transition-all capitalize"
           >
             {formatMonthName(selectedMonth, locale)}
-          </button> </select>
+          </button>
         </div>
 
         <div className="flex items-center justify-end gap-1">
