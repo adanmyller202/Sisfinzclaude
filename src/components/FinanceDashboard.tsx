@@ -1798,6 +1798,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
         savings={savings}
+        accounts={accounts}
         currentBalance={currentBalance}
         currency={currency}
         language={language}
