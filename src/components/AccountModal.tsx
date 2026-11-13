@@ -88,7 +88,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const bankSuggestions = BANKS.filter((bank) => {
     const searchable = `${bank.name} ${bank.aliases.join(' ')}`.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return !normalizedQuery || searchable.includes(normalizedQuery);
-  }).slice(0, 10);
+  });
 
   useEffect(() => {
     if (!isOpen) return;
