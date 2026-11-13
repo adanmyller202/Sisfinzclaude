@@ -48,12 +48,13 @@ export const BalanceBreakdownModal: React.FC<BalanceBreakdownModalProps> = ({
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-[150] flex items-center justify-center p-4 glass-overlay overflow-hidden pt-safe pb-safe"
+          onClick={onClose}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 30 }}
-            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            transition={{ type: "spring", damping: 25, stiffness: 350, duration: 0.22 }}
             className="glass-modal rounded-[2.5rem] shadow-2xl max-w-md w-full max-h-[calc(100dvh-4rem)] flex flex-col overflow-hidden relative"
             onClick={(e) => e.stopPropagation()}
           >
@@ -217,8 +218,12 @@ export const BalanceBreakdownModal: React.FC<BalanceBreakdownModalProps> = ({
                   whileTap={{ scale: 0.98 }}
                   type="button"
                   onClick={() => {
+                    // Let the dark modal veil finish fading before mounting Accounts.
                     onClose();
-                    onNavigateToAccounts();
+                    window.setTimeout(() => {
+                      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+                      onNavigateToAccounts();
+                    }, 220);
                   }}
                   className="px-8 py-5 text-[11px] font-black text-white bg-emerald-600 rounded-2xl shadow-2xl shadow-emerald-600/30 uppercase tracking-[0.2em] cursor-pointer flex items-center gap-3 active:scale-95 transition-all"
                 >
