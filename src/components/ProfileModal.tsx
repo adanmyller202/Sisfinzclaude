@@ -210,7 +210,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      return createPortal(() => {
+      return () => {
         document.body.style.overflow = originalOverflow;
       };
     }
@@ -271,7 +271,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     exit: { opacity: 0, scale: 0.95, y: 20, transition: { duration: 0.2 } }
   };
 
-  return (
+  return createPortal((
     <>
       <AnimatePresence>
         {isOpen && (
