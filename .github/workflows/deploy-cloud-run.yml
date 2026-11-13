@@ -1,8 +1,8 @@
 name: SisFinz automatic deployment
 
 on:
-  push:
-    branches: [main]
+  # Manual trigger during secure Google Cloud authorization setup.
+  # The automatic push trigger will be enabled after credentials are configured.
   workflow_dispatch:
 
 permissions:
