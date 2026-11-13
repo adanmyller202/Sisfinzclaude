@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { CurrencyCode, LanguageCode, AppSettings } from '../types';
 import { CURRENCIES } from '../utils/currency';
@@ -209,7 +210,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      return () => {
+      return createPortal(() => {
         document.body.style.overflow = originalOverflow;
       };
     }
@@ -719,5 +720,5 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       )}
     </AnimatePresence>
   </>
-  );
+  ), document.body);
 };
