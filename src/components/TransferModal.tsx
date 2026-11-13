@@ -166,8 +166,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     if (isForeignCurrency && parsedRate <= 0) {
       setError(
         language === 'es'
-          ? 'Por favor, ingresa una cotización válida en ARS.'
-          : 'Por favor, informe uma cotação válida em ARS.'
+          ? 'Por favor, ingresa una cotización válida en pesos.'
+          : 'Por favor, informe uma cotação válida em pesos.'
       );
       return;
     }
@@ -434,10 +434,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-black text-amber-900 uppercase tracking-[0.25em] flex items-center gap-1.5">
                         <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
-                        {mode === 'deposit' ? 'COTAÇÃO UTILIZADA (EM ARS)' : 'COTAÇÃO DO RESGATE (EM ARS)'}
+                        {mode === 'deposit' ? 'COTAÇÃO UTILIZADA (EM PESOS)' : 'COTAÇÃO DO RESGATE (EM PESOS)'}
                       </label>
                       <span className="text-[9px] font-black uppercase text-amber-700">
-                        1 {goalCurrency} = ? ARS
+                        1 {goalCurrency} = ? $
                       </span>
                     </div>
 
@@ -459,8 +459,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <p className="text-[10px] font-medium text-amber-800 flex items-center gap-1">
                       <Info className="w-3 h-3 text-amber-600 shrink-0" />
                       {mode === 'deposit'
-                        ? 'O valor em pesos correspondente será debitado do seu saldo disponível em ARS.'
-                        : 'O valor em pesos correspondente será creditado no seu saldo disponível em ARS.'}
+                        ? 'O valor em pesos correspondente será debitado da conta selecionada.'
+                        : 'O valor em pesos correspondente será creditado na conta selecionada.'}
                     </p>
                   </motion.div>
                 )}
@@ -569,14 +569,14 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       {isForeignCurrency && (
                         <div className="pt-3 border-t border-slate-200/80 text-[10px] font-black text-slate-700 flex items-center justify-between">
                           <span>COTAÇÃO APLICADA:</span>
-                          <span className="font-mono">1 {goalCurrency} = ARS ${parsedRate.toLocaleString()}</span>
+                          <span className="font-mono">1 {goalCurrency} = {formatCurrency(parsedRate, 'ARS')}</span>
                         </div>
                       )}
 
                       <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] italic">
                         {mode === 'deposit' 
-                          ? '• Registrado como despesa em Investimentos (ARS)' 
-                          : '• Creditado como receita confirmada em Investimentos (ARS)'}
+                          ? '• Registrado como despesa em Investimentos (pesos)' 
+                          : '• Creditado como receita confirmada em Investimentos (pesos)'}
                       </div>
                     </motion.div>
                   )}
