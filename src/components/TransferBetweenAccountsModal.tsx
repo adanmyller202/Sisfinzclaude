@@ -350,25 +350,29 @@ export const TransferBetweenAccountsModal: React.FC<TransferBetweenAccountsModal
                   CANCELAR
                 </button>
                 <motion.button
-                  whileHover={{ scale: 1.02, x: 5 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={!isSubmitting && !isSuccess ? { scale: 1.02, x: 5 } : undefined}
+                  whileTap={!isSubmitting && !isSuccess ? { scale: 0.95 } : undefined}
+                  animate={{
+                    width: isSubmitting || isSuccess ? 64 : 'auto',
+                    borderRadius: isSubmitting || isSuccess ? 999 : 16,
+                    justifyContent: 'center',
+                  }}
+                  transition={{ type: 'spring', stiffness: 360, damping: 24 }}
                   type="submit"
-                  disabled={isSubmitting || activeAccounts.length < 2}
-                  className="px-10 py-5 text-[11px] font-black text-white bg-emerald-600 rounded-2xl shadow-2xl shadow-emerald-600/30 disabled:opacity-50 uppercase tracking-[0.3em] cursor-pointer flex items-center gap-3 active:scale-95 transition-all"
+                  disabled={isSubmitting || isSuccess || activeAccounts.length < 2}
+                  className="min-w-[64px] px-10 py-5 text-[11px] font-black text-white bg-emerald-600 rounded-2xl shadow-2xl shadow-emerald-600/30 disabled:opacity-100 uppercase tracking-[0.3em] cursor-pointer flex items-center gap-3 transition-colors"
                 >
                   <AnimatePresence mode="wait" initial={false}>
                     {isSuccess ? (
-                      <motion.span key="success" initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }} className="flex items-center gap-2">
-                        <Check className="w-5 h-5" />
-                        <span>CONCLUÍDO!</span>
+                      <motion.span key="success" initial={{ scale: 0, rotate: -60 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 460, damping: 15 }} className="flex items-center justify-center">
+                        <Check className="w-6 h-6" />
                       </motion.span>
                     ) : isSubmitting ? (
-                      <motion.span key="loading" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} className="flex items-center gap-2">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>PROCESSANDO...</span>
+                      <motion.span key="loading" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 animate-spin" />
                       </motion.span>
                     ) : (
-                      <motion.span key="idle" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2">
+                      <motion.span key="idle" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-3">
                         <Check className="w-5 h-5" />
                         <span>CONFIRMAR TRANSFERÊNCIA</span>
                       </motion.span>
