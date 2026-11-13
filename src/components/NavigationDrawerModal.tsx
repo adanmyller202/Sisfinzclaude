@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LanguageCode } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { getTranslations } from '../utils/i18n';
@@ -58,6 +59,40 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   const { user, signOutUser } = useAuth();
   const [pendingView, setPendingView] = useState<string | null>(null);
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+
+  // Lock the page behind the drawer on iOS/PWA as well as desktop.
+  useEffect(() => {
+    if (!isOpen) return;
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollY = window.scrollY;
+    const previous = {
+      bodyPosition: body.style.position, bodyTop: body.style.top,
+      bodyLeft: body.style.left, bodyRight: body.style.right,
+      bodyWidth: body.style.width, bodyOverflow: body.style.overflow,
+      htmlOverflow: html.style.overflow, htmlOverscroll: html.style.overscrollBehavior,
+    };
+    body.style.position = 'fixed';
+    body.style.top = '-' + scrollY + 'px';
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    html.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    return () => {
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.left = previous.bodyLeft;
+      body.style.right = previous.bodyRight;
+      body.style.width = previous.bodyWidth;
+      body.style.overflow = previous.bodyOverflow;
+      html.style.overflow = previous.htmlOverflow;
+      html.style.overscrollBehavior = previous.htmlOverscroll;
+      window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' as ScrollBehavior });
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -125,10 +160,10 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     ? user.displayName.charAt(0).toUpperCase()
     : user?.email?.charAt(0).toUpperCase() || 'U';
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div key="nav-drawer-root" className="fixed inset-0 z-[60] flex items-stretch justify-start overflow-hidden overscroll-contain pointer-events-none">
+        <div key="nav-drawer-root" className="fixed inset-0 z-[60] flex items-stretch justify-start overflow-hidden overscroll-none pointer-events-none">
           <motion.div
             initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
             animate={{ opacity: 1, backdropFilter: 'blur(5px)' }}
@@ -139,18 +174,14 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           />
 
           <motion.div
-            initial={{ x: '-105%', opacity: 0.82, scale: 0.965 }}
-            animate={{ x: 0, opacity: 1, scale: 1 }}
-            exit={{ x: '-105%', opacity: 0.88, scale: 0.97 }}
-            transition={{ type: 'spring', damping: 27, stiffness: 270, mass: 0.82 }}
-            drag="x"
-            dragConstraints={{ left: -120, right: 0 }}
-            dragElastic={{ left: 0.12, right: 0 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.x < -85 || info.velocity.x < -520) onClose();
-            }}
-            className="solid-container bg-white w-[calc(100%-1.25rem)] max-w-[340px] sm:max-w-sm flex flex-col h-[calc(100%-1.25rem)] my-2.5 ml-2.5 rounded-[28px] border border-emerald-100 shadow-[0_24px_70px_rgba(6,78,59,0.22)] overflow-hidden relative z-10 pt-safe pb-safe pointer-events-auto"
+            initial={{ x: '-112%', opacity: 0.55, scale: 0.84, rotate: -5 }}
+            animate={{ x: 0, opacity: 1, scale: 1, rotate: 0 }}
+            exit={{ x: '-108%', opacity: 0.65, scale: 0.9, rotate: -3 }}
+            transition={{ type: 'spring', damping: 19, stiffness: 230, mass: 0.9 }}
+            className="solid-container bg-white w-[calc(100%-1.25rem)] max-w-[340px] sm:max-w-sm flex flex-col h-[calc(100%-1.25rem)] my-2.5 ml-2.5 rounded-[28px] border border-emerald-100 shadow-[0_24px_70px_rgba(6,78,59,0.22)] overflow-hidden relative z-10 pt-safe pb-safe pointer-events-auto overscroll-contain"
             onClick={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            style={{ touchAction: 'pan-y' }}
           >
             {/* Header */}
             <div className="p-6 border-b border-slate-200 flex items-center justify-between shrink-0 relative overflow-hidden bg-white">
@@ -198,7 +229,8 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             </div>
 
             {/* Navigation Groups */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-8">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-4 space-y-8"
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehaviorY: 'contain' }}>
               {navGroups.map((group, gIdx) => (
                 <div key={gIdx} className="space-y-2">
                   <div className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-600 flex items-center gap-2">
@@ -333,6 +365,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
