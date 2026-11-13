@@ -5,7 +5,6 @@ import { getTranslations } from '../utils/i18n';
 import {
   Wallet,
   PiggyBank,
-  Bot,
   Settings,
   User as UserIcon,
   X,
@@ -319,27 +318,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                 </div>
               ))}
 
-              {/* Mone Smart Assistant Highlight */}
-              <div className="px-1">
-                <button
-                  onClick={() => { onClose(); onOpenMoneChat(); }}
-                  className="w-full p-4 rounded-3xl bg-gradient-to-br from-amber-500/15 to-orange-500/15 border border-amber-500/30 hover:from-amber-500/25 hover:to-orange-500/25 transition-all flex items-center justify-between group cursor-pointer shadow-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/20 text-white">
-                      <Bot className="w-6 h-6" />
-                    </div>
-                    <div className="text-left">
-                      <div className="flex items-center gap-1.5 text-sm font-black text-slate-900">
-                        Mone AI
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                      </div>
-                      <div className="text-[10px] font-bold text-amber-700 uppercase tracking-tight">Assistente Inteligente</div>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-amber-600 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
             </div>
 
             {/* Footer */}
