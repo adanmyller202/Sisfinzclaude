@@ -75,6 +75,13 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   const [subTab, setSubTab] = useState<'projections' | 'calendar' | 'freedom'>('projections');
   const currentMonth = getCurrentMonthStr();
 
+  const handleSubTabChange = (nextTab: typeof subTab) => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    setSubTab(nextTab);
+  };
+
   const monthlyProjections = useMemo(() => {
     const list = [];
     for (let i = 0; i < 4; i++) {
@@ -172,7 +179,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => setSubTab(tab.id)}
+                onClick={() => handleSubTabChange(tab.id)}
                 className={`flex-none w-[120px] py-4 rounded-[1.5rem] transition-all cursor-pointer relative z-10 group overflow-hidden ${
                   isActive ? 'bg-white text-slate-900 font-bold shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
