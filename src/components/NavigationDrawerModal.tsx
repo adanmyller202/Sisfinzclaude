@@ -214,7 +214,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                     {group.items.map((item) => {
                       const isActive = currentView === item.id;
                       const isSelected = pendingView === item.id;
-                      const isHighlighted = isActive || isSelected;
+                      // During selection, the single shared green surface travels
+                      // from the previous item to the newly tapped item.
+                      const isHighlighted = pendingView ? isSelected : isActive;
                       const Icon = item.icon;
                       return (
                         <motion.button
@@ -237,11 +239,13 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         >
                           {isHighlighted && (
                             <motion.span
-                              layoutId={isSelected ? "sisfinz-nav-active-fill" : undefined}
-                              className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500"
+                              layoutId="sisfinz-nav-active-fill"
+                              className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-500 to-teal-400 shadow-[0_10px_30px_rgba(5,150,105,0.34)]"
                               initial={false}
-                              animate={{ opacity: 1, scale: isSelected ? 1 : 0.99 }}
-                              transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                              transition={{
+                                layout: { type: 'spring', stiffness: 260, damping: 25, mass: 1.05 },
+                                opacity: { duration: 0.28 },
+                              }}
                             />
                           )}
                           {isSelected && (
@@ -253,10 +257,16 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                 transition={{ duration: 0.72, ease: 'easeInOut' }}
                               />
                               <motion.span
-                                className="absolute -inset-2 -z-10 rounded-3xl border border-emerald-300/70"
-                                initial={{ opacity: 0, scale: 0.92 }}
-                                animate={{ opacity: [0, 0.9, 0], scale: [0.92, 1.04, 1.12] }}
-                                transition={{ duration: 0.78, ease: 'easeOut' }}
+                                className="absolute -inset-2 -z-10 rounded-3xl border-2 border-emerald-300/80"
+                                initial={{ opacity: 0, scale: 0.88 }}
+                                animate={{ opacity: [0, 1, 0], scale: [0.88, 1.08, 1.2] }}
+                                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                              />
+                              <motion.span
+                                className="absolute inset-0 -z-0 rounded-2xl pointer-events-none"
+                                initial={{ boxShadow: 'inset 0 0 0 rgba(255,255,255,0)' }}
+                                animate={{ boxShadow: ['inset 0 0 0 rgba(255,255,255,0)', 'inset 0 0 28px rgba(255,255,255,0.22)', 'inset 0 0 8px rgba(255,255,255,0.08)'] }}
+                                transition={{ duration: 0.85, ease: 'easeOut' }}
                               />
                             </>
                           )}
