@@ -76,10 +76,15 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   const currentMonth = getCurrentMonthStr();
 
   const handleSubTabChange = (nextTab: typeof subTab) => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    setSubTab(nextTab);
+    const reset = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+    };
+    reset();
+    setSubTab(nextTab)
+    requestAnimationFrame(reset);;
   };
 
   const monthlyProjections = useMemo(() => {
