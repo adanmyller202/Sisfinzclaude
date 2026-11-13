@@ -57,10 +57,15 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
   const handleGoalsTabChange = (tab: typeof activeTab) => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    setActiveTab(tab);
+    const reset = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+    };
+    reset();
+    setActiveTab(tab)
+    requestAnimationFrame(reset);;
   };
 
   const {
