@@ -84,9 +84,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBankSuggestions, setShowBankSuggestions] = useState(false);
-  const normalizedQuery = name.trim().toLocaleLowerCase('pt-BR');
+  const normalizedQuery = name.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const bankSuggestions = BANKS.filter((bank) => {
-    const searchable = `${bank.name} ${bank.aliases.join(' ')}`.toLocaleLowerCase('pt-BR');
+    const searchable = `${bank.name} ${bank.aliases.join(' ')}`.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return !normalizedQuery || searchable.includes(normalizedQuery);
   }).slice(0, 10);
 
@@ -260,7 +260,6 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     <input
                       type="text"
                       value={name}
-                      onFocus={() => setShowBankSuggestions(true)}
                       onBlur={() => window.setTimeout(() => setShowBankSuggestions(false), 140)}
                       onChange={(e) => { setName(e.target.value); setShowBankSuggestions(true); }}
                       placeholder="Ex: Santander Select, Mercado Pago..."
