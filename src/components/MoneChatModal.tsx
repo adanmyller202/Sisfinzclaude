@@ -1227,9 +1227,20 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-x-0 top-0 z-[100] flex flex-col overflow-hidden bg-[#F2FBF6] text-slate-800"
-          style={{ top: viewportFrame ? `${viewportFrame.top}px` : 0, height: viewportFrame ? `${viewportFrame.height}px` : '100dvh', minHeight: 0, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-slate-950/35 p-3 sm:p-6"
+          style={{ top: viewportFrame ? `${viewportFrame.top}px` : 0, height: viewportFrame ? `${viewportFrame.height}px` : '100dvh', minHeight: 0 }}
         >
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Assistente Mone"
+            className="relative flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[2rem] border border-white/80 bg-[#F2FBF6] text-slate-800 shadow-2xl"
+            style={{ height: viewportFrame ? `${Math.min(780, Math.max(320, viewportFrame.height - 24))}px` : 'min(780px, calc(100dvh - 2rem))', maxHeight: '100%' }}
+          >
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute -top-28 -right-20 h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl" />
             <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-teal-100/70 blur-3xl" />
@@ -1250,13 +1261,13 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               <span className={`hidden rounded-full border px-3 py-1.5 text-[10px] font-bold sm:inline-flex ${isOnline ? 'border-emerald-200 bg-white/80 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
                 {isOnline ? '● Conectada' : '● Sem conexão'}
               </span>
-              <button type="button" onClick={onClose} aria-label="Fechar assistente" className="flex h-10 w-10 items-center justify-center rounded-full border border-white bg-white/90 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900">
+              <button type="button" onClick={() => showTextMode ? setShowTextMode(false) : onClose()} aria-label={showTextMode ? 'Voltar para Mone' : 'Fechar assistente'} title={showTextMode ? 'Voltar para Mone' : 'Fechar assistente'} className="flex h-10 w-10 items-center justify-center rounded-full border border-white bg-white/90 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900">
                 <X className="h-5 w-5" />
               </button>
             </div>
           </header>
 
-          <main className={`relative z-10 flex min-h-0 flex-1 flex-col items-center px-3 pb-2 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start overflow-hidden' : 'justify-center overflow-y-auto'}`}>
+          <main className={`relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-y-auto overscroll-contain px-3 pb-3 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start' : 'justify-center'}`}>
             {!showTextMode && (
                           <div className="flex w-full max-w-xl flex-col items-center text-center">
                             <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
@@ -1375,6 +1386,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               </motion.section>
             )}
           </main>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
