@@ -56,6 +56,12 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   onDeleteExpense,
 }) => {
   const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
+  const handleGoalsTabChange = (tab: typeof activeTab) => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    setActiveTab(tab);
+  };
 
   const {
     savings,
@@ -93,7 +99,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
           {activeTab === 'savings' && <button type="button" onClick={() => (setSavingToEdit(null), setIsSavingModalOpen(true))} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"><Plus className="h-4 w-4"/> <span className="hidden sm:inline">Cofrinho</span></button>}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-          {tabs.map((tab) => { const isActive = activeTab === tab.id; const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-3 text-xs font-extrabold transition-colors sm:text-sm ${isActive ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}><Icon className="h-4 w-4 shrink-0"/><span className="truncate">{tab.label}</span></button>; })}
+          {tabs.map((tab) => { const isActive = activeTab === tab.id; const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => handleGoalsTabChange(tab.id)} className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-3 text-xs font-extrabold transition-colors sm:text-sm ${isActive ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}><Icon className="h-4 w-4 shrink-0"/><span className="truncate">{tab.label}</span></button>; })}
         </div>
       </section>
 
