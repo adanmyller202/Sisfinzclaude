@@ -116,11 +116,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   // Set default exchange rate suggestion when switching goal
   useEffect(() => {
     if (isForeignCurrency) {
-      if (goalCurrency === 'USD') {
-        setExchangeRate((prev) => (prev === '1' || !prev ? '1500' : prev));
-      } else if (goalCurrency === 'BRL') {
-        setExchangeRate((prev) => (prev === '1' || !prev ? '270' : prev));
-      }
+      setExchangeRate('');
     } else {
       setExchangeRate('1');
     }
