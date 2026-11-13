@@ -320,15 +320,15 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
         <div className="relative z-10 grid grid-cols-3 gap-2 sm:gap-3">
           <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-white/85 border border-slate-200/80">
             <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">Entradas</div>
-            <div className="text-sm sm:text-xl font-black text-emerald-600 font-mono truncate">{formatCurrency(totalInflows, currency)}</div>
+            <div className="min-w-0 text-xs sm:text-lg font-black text-emerald-600 font-mono leading-tight break-all" style={{ overflowWrap: 'anywhere' }}>{formatCurrency(totalInflows, currency)}</div>
           </div>
           <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-white/85 border border-slate-200/80">
             <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">Saídas</div>
-            <div className="text-sm sm:text-xl font-black text-rose-600 font-mono truncate">{formatCurrency(totalOutflows, currency)}</div>
+            <div className="min-w-0 text-xs sm:text-lg font-black text-rose-600 font-mono leading-tight break-all" style={{ overflowWrap: 'anywhere' }}>{formatCurrency(totalOutflows, currency)}</div>
           </div>
           <div className="min-w-0 p-3 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-emerald-700 mb-1">Projeção final</div>
-            <div className="text-sm sm:text-xl font-black text-slate-900 font-mono truncate">{formatCurrency(endMonthProjected, currency)}</div>
+            <div className="min-w-0 text-xs sm:text-lg font-black text-slate-900 font-mono leading-tight break-all" style={{ overflowWrap: 'anywhere' }}>{formatCurrency(endMonthProjected, currency)}</div>
           </div>
         </div>
 
