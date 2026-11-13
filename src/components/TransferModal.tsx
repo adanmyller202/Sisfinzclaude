@@ -255,7 +255,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[10001] flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain bg-slate-950/25 pt-safe pb-safe"
+          className="fixed inset-0 z-[10001] flex items-center justify-center p-3 sm:p-4 overflow-hidden overscroll-none bg-slate-950/25 pt-safe pb-safe"
           onClick={onClose}
         >
           <motion.div
