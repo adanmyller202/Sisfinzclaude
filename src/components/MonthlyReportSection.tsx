@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { BillItem, IncomeItem, ExpenseItem, CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency } from '../utils/currency';
 import { doesItemOccurInMonth, getCurrentMonthStr, formatMonthName } from '../utils/finance';
@@ -449,8 +450,8 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
       )}
     </div>
 
-    {isMonthPickerOpen && (
-      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm" onClick={() => setIsMonthPickerOpen(false)}>
+    {isMonthPickerOpen && createPortal((
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm" onClick={() => setIsMonthPickerOpen(false)}>
         <div role="dialog" aria-modal="true" aria-label={t.selectMonthLabel || 'Selecionar mês'} className="w-full max-w-sm rounded-[2rem] bg-white border border-emerald-100 shadow-2xl p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-5">
             <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">{t.selectMonthLabel || 'Selecionar mês'}</p><h3 className="text-xl font-black text-slate-900 mt-1">{pickerYear}</h3></div>
@@ -471,7 +472,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
           <button type="button" onClick={() => { const now = getCurrentMonthStr(); onSelectedMonthChange(now); setPickerYear(Number(now.slice(0, 4))); setIsMonthPickerOpen(false); }} className="w-full mt-4 py-3 rounded-xl border border-emerald-200 text-emerald-700 text-xs font-black uppercase tracking-wider hover:bg-emerald-50">{language === 'es' ? 'Mes actual' : 'Mês atual'}</button>
         </div>
       </div>
-    )}
+    ), document.body)}
     </>
   );
 };
