@@ -11,8 +11,6 @@ import {
   Sparkles,
   LogOut,
   ChevronRight,
-  Sun,
-  Moon,
   ShieldCheck,
   PieChart as PieChartIcon,
   Users,
@@ -322,22 +320,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
 
             {/* Footer */}
             <div className="p-4 border-t border-slate-200 bg-white space-y-3 shrink-0">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { onClose(); onOpenSettingsModal(); }}
-                  className="p-3 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 text-slate-700 hover:text-slate-900 shadow-xs transition-all flex flex-col items-center gap-1.5 cursor-pointer"
-                >
-                  <Settings className="w-4 h-4 text-emerald-600" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.settings}</span>
-                </button>
-                <button
-                  onClick={onToggleDarkMode}
-                  className="p-3 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 text-slate-700 hover:text-slate-900 shadow-xs transition-all flex flex-col items-center gap-1.5 cursor-pointer"
-                >
-                  {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-700" />}
-                  <span className="text-[10px] font-black uppercase tracking-widest">{darkMode ? 'Claro' : 'Escuro'}</span>
-                </button>
-              </div>
+
 
               <button
                 onClick={() => { onClose(); signOutUser(); }}
