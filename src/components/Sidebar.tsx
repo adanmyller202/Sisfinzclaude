@@ -8,8 +8,6 @@ import {
   LogOut,
   User as UserIcon,
   Wallet,
-  Bot,
-  Sparkles,
   PiggyBank,
   Gauge,
 } from 'lucide-react';
@@ -108,18 +106,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Gauge className="w-3.5 h-3.5" />
           <span>{language === 'es' ? 'Ritmo Diario' : 'Ritmo Diário'}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenMoneChat}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/80 transition-all cursor-pointer"
-        >
-          <span className="flex items-center gap-2">
-            <Bot className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{t.moneAssistant}</span>
-          </span>
-          <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
         </button>
 
         <button
