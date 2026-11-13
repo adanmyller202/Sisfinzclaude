@@ -225,7 +225,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   };
 
   const handleQuickAmount = (val: number) => {
-    setAmount(String(val));
+    handleGoalAmountChange(String(val));
   };
 
   const handleMaxAmount = () => {
@@ -402,7 +402,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <div className="relative group">
                       <select
                         value={selectedSavingId}
-                        onChange={(e) => setSelectedSavingId(e.target.value)}
+                        onChange={(e) => { setSelectedSavingId(e.target.value); setAmount(''); setAccountAmount(''); setExchangeRate(''); }}
                         className="w-full px-5 py-4 text-sm font-black bg-white/80 border border-slate-200/80 rounded-[1.25rem] focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 text-slate-900 cursor-pointer transition-all appearance-none"
                         required
                       >
