@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CurrencyCode,
   LanguageCode,
@@ -286,7 +287,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         if (!cancelled && sequence === loadSequence) setMemoryReady(true);
       }
     });
-    return () => {
+    return createPortal(() => {
       cancelled = true;
       unsubscribe();
     };
@@ -1425,5 +1426,5 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         </motion.div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
