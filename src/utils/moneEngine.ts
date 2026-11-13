@@ -849,10 +849,14 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const localDate = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
       return localDate === todayStr;
     };
-    const todayExpenses = expenses.filter((expense) =>
-      (!context.myUserId || !expense.userId || expense.userId === context.myUserId) &&
-      (expense.date === todayStr || isLocalToday(expense.createdAt))
-    );
+    // Never include records without an exact owner match. If the authenticated UID
+    // is unavailable, return no records rather than risk exposing another account's data.
+    const todayExpenses = context.myUserId
+      ? expenses.filter((expense) =>
+          expense.userId === context.myUserId &&
+          (expense.date === todayStr || isLocalToday(expense.createdAt))
+        )
+      : [];
     const dateLabel = new Date(`${todayStr}T12:00:00`).toLocaleDateString('pt-BR');
     if (!todayExpenses.length) {
       return {
