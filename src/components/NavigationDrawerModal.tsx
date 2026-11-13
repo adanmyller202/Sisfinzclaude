@@ -237,7 +237,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         >
                           {isHighlighted && (
                             <motion.span
-                              layoutId="sisfinz-nav-active-fill"
+                              layoutId={isSelected ? "sisfinz-nav-active-fill" : undefined}
                               className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500"
                               initial={false}
                               animate={{ opacity: 1, scale: isSelected ? 1 : 0.99 }}
