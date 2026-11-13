@@ -76,6 +76,7 @@ import {
   Target,
   PiggyBank,
   Eye,
+  EyeOff,
   Undo2,
 } from 'lucide-react';
 
@@ -198,6 +199,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const { user } = useAuth();
   const userId = user?.uid;
   const [isBalanceBreakdownOpen, setIsBalanceBreakdownOpen] = useState(false);
+  const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
   const effectiveCurrentBalance = accounts.length > 0 ? accountsTotalBalance : currentBalance;
 
@@ -677,19 +679,28 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
                 whileHover={{ rotate: 180 }}
                 transition={{ duration: 0.4 }}
                 type="button"
-                onClick={() => setIsBalanceBreakdownOpen(true)}
+                onClick={() => setIsBalanceVisible((visible) => !visible)}
+                aria-label={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
+                aria-pressed={!isBalanceVisible}
+                title={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
                 className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
               >
-                <Eye className="w-4 h-4" />
+                {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </motion.button>
             </div>
 
-            <div className="mb-6">
-              <NumberTicker 
-                value={effectiveCurrentBalance} 
-                currency={currency} 
-                className="text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
-              />
+            <div className="mb-6 min-h-[3.25rem] flex items-center">
+              {isBalanceVisible ? (
+                <NumberTicker 
+                  value={effectiveCurrentBalance} 
+                  currency={currency} 
+                  className="text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
+                />
+              ) : (
+                <span className="text-4xl sm:text-5xl font-black tracking-[0.18em] text-slate-500 dark:text-slate-400 select-none" aria-label="Saldo oculto">
+                  ••••••
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
