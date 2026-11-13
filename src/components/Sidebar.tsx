@@ -3,6 +3,7 @@ import { ChallengeGoal, CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency, getGoalSquares, getGoalSavedAmount } from '../utils/currency';
 import { getTranslations } from '../utils/i18n';
 import { useAuth } from '../context/AuthContext';
+import { SyncStatusBadge } from './SyncStatusBadge';
 import {
   Plus,
   Target,
@@ -246,6 +247,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* Sync status moved from the top bar into the side menu */}
+      <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-800">
+        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          {language === 'es' ? 'Estado de sincronización' : language === 'pt' ? 'Status da sincronização' : 'Sync status'}
+        </p>
+        <SyncStatusBadge language={language} showTextOnMobile className="w-full justify-center py-2" />
       </div>
 
       {/* Profile footer item */}
