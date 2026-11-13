@@ -506,7 +506,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       <input type="number" step="any" min="0" value={accountAmount} onChange={(e) => handleAccountAmountChange(e.target.value)} placeholder="0.00" className="w-full pl-12 pr-5 py-4 text-base font-mono-numbers font-black bg-white border border-emerald-200 rounded-[1.25rem] text-slate-900" required />
                     </div>
                     <p className="text-[10px] text-slate-500">Edite qualquer um dos valores; o outro será convertido automaticamente.</p>
-                  </div>
+                  </div>}
 
                   <div className="flex items-center gap-2 flex-wrap pt-1 px-1">
                     {quickSuggestions.map((val) => (
