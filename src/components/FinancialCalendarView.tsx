@@ -418,7 +418,7 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
       {/* Day Detail Modal */}
       <AnimatePresence>
         {isDayDetailModalOpen && selectedDayData && (
-          <div key="day-detail-modal-root" className="fixed inset-0 z-[100] isolate flex items-end sm:items-center justify-center p-4">
+          <div key="day-detail-modal-root" className="fixed inset-0 z-[10000] isolate flex items-center justify-center overflow-y-auto p-3 sm:p-4 pt-safe pb-safe">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -427,10 +427,10 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
               onClick={() => setIsDayDetailModalOpen(false)}
             />
             <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="glass-modal w-full max-w-lg rounded-[3rem] p-8 shadow-2xl relative z-10 max-h-[85dvh] flex flex-col"
+              initial={{ opacity: 0, y: 18, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              className="glass-modal w-full max-w-lg rounded-[2rem] p-5 sm:p-8 shadow-2xl relative z-10 max-h-[calc(100dvh-2rem)] flex flex-col my-auto"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-8 shrink-0">
@@ -448,11 +448,11 @@ export const FinancialCalendarView: React.FC<FinancialCalendarViewProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/20">
                     <div className="text-[9px] font-black text-emerald-700 uppercase tracking-widest mb-1">Entradas</div>
-                    <div className="text-xl font-black text-emerald-700 font-mono">+{formatCurrency(selectedDayData.inflows, currency)}</div>
+                    <div className="min-w-0 text-base sm:text-lg font-black text-emerald-700 font-mono leading-tight break-all" style={{ overflowWrap: 'anywhere' }}>+{formatCurrency(selectedDayData.inflows, currency)}</div>
                   </div>
                   <div className="p-5 rounded-3xl bg-rose-500/10 border border-rose-500/20">
                     <div className="text-[9px] font-black text-rose-700 uppercase tracking-widest mb-1">Saídas</div>
-                    <div className="text-xl font-black text-rose-700 font-mono">-{formatCurrency(selectedDayData.outflows, currency)}</div>
+                    <div className="min-w-0 text-base sm:text-lg font-black text-rose-700 font-mono leading-tight break-all" style={{ overflowWrap: 'anywhere' }}>-{formatCurrency(selectedDayData.outflows, currency)}</div>
                   </div>
                 </div>
 
