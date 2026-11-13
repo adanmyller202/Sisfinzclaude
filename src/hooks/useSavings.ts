@@ -326,7 +326,7 @@ export function useSavings() {
           category: 'Inversiones',
           date: txDate,
           accountId: financeOps.accountId,
-          notes: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps.accountName || 'Conta não informada'} | Reservado: ${formattedGoalAmt} | Debitado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | Observações: ${note}` : ''}`,
+          notes: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps.accountName || 'Conta não informada'} | Reservado: ${formattedGoalAmt} | Debitado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${formatCurrency(effectiveRate, 'ARS')}${note ? ` | Observações: ${note}` : ''}`,
         });
         createdExpenseId = createdExp?.id;
         if (financeOps.accountId && financeOps.adjustAccountBalance) await financeOps.adjustAccountBalance(financeOps.accountId, -baseAmountARS);
@@ -349,7 +349,7 @@ export function useSavings() {
         exchangeRate: effectiveRate,
         baseAmountARS,
         date: txDate,
-        note: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | ${note}` : ''}`,
+        note: `Meta: ${targetGoal.name} | Conta de origem: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${formatCurrency(effectiveRate, 'ARS')}${note ? ` | ${note}` : ''}`,
         accountId: financeOps?.accountId,
         accountName: financeOps?.accountName,
         createdAt: now,
@@ -425,7 +425,7 @@ export function useSavings() {
           recurrence: 'none' as const,
           startMonth: currentMonth,
           accountId: financeOps.accountId,
-          notes: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps.accountName || 'Conta não informada'} | Resgatado: ${formattedGoalAmt} | Creditado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | Observações: ${note}` : ''}`,
+          notes: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps.accountName || 'Conta não informada'} | Resgatado: ${formattedGoalAmt} | Creditado: ${formattedARSAmt} | Cotação: 1 ${goalCurrency} = ${formatCurrency(effectiveRate, 'ARS')}${note ? ` | Observações: ${note}` : ''}`,
         };
         const newIncome = financeOps.addIncomeAsReceived
           ? await financeOps.addIncomeAsReceived(incomePayload, currentMonth)
@@ -457,7 +457,7 @@ export function useSavings() {
         exchangeRate: effectiveRate,
         baseAmountARS,
         date: txDate,
-        note: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${effectiveRate} ARS${note ? ` | ${note}` : ''}`,
+        note: `Meta: ${targetGoal.name} | Conta de destino: ${financeOps?.accountName || 'Conta não informada'} | Cotação: 1 ${goalCurrency} = ${formatCurrency(effectiveRate, 'ARS')}${note ? ` | ${note}` : ''}`,
         accountId: financeOps?.accountId,
         accountName: financeOps?.accountName,
         createdAt: now,
