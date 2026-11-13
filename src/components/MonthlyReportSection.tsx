@@ -224,6 +224,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
   const activeSlice = hoveredIndex !== null ? slices[hoveredIndex] : null;
 
   return (
+    <>
     <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
       {/* Section Title */}
       <div className="flex items-center justify-between gap-2">
@@ -456,5 +457,30 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
         </div>
       )}
     </div>
+
+    {isMonthPickerOpen && (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm" onClick={() => setIsMonthPickerOpen(false)}>
+        <div role="dialog" aria-modal="true" aria-label={t.selectMonthLabel || 'Selecionar mês'} className="w-full max-w-sm rounded-[2rem] bg-white border border-emerald-100 shadow-2xl p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-5">
+            <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">{t.selectMonthLabel || 'Selecionar mês'}</p><h3 className="text-xl font-black text-slate-900 mt-1">{pickerYear}</h3></div>
+            <button type="button" onClick={() => setIsMonthPickerOpen(false)} aria-label="Fechar" className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 text-xl">×</button>
+          </div>
+          <div className="flex items-center justify-between mb-4">
+            <button type="button" onClick={() => setPickerYear(y => y - 1)} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 font-bold">‹</button>
+            <span className="text-sm font-extrabold text-slate-700">{pickerYear}</span>
+            <button type="button" onClick={() => setPickerYear(y => y + 1)} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 font-bold">›</button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {Array.from({ length: 12 }, (_, index) => {
+              const monthValue = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
+              const isSelected = monthValue === selectedMonth;
+              return <button key={monthValue} type="button" onClick={() => { onSelectedMonthChange(monthValue); setIsMonthPickerOpen(false); }} className={`rounded-xl py-3 px-2 text-xs font-extrabold capitalize transition-all ${isSelected ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50/70 text-slate-700 hover:bg-emerald-100'}`}>{formatMonthName(monthValue, locale)}</button>;
+            })}
+          </div>
+          <button type="button" onClick={() => { const now = getCurrentMonthStr(); onSelectedMonthChange(now); setPickerYear(Number(now.slice(0, 4))); setIsMonthPickerOpen(false); }} className="w-full mt-4 py-3 rounded-xl border border-emerald-200 text-emerald-700 text-xs font-black uppercase tracking-wider hover:bg-emerald-50">{language === 'es' ? 'Mes actual' : 'Mês atual'}</button>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
