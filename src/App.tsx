@@ -1338,7 +1338,6 @@ export default function App() {
         onOpenSharedBill={() => {
           setCurrentView('shared_accounts');
         }}
-        onOpenVoice={() => setIsVoiceTriggered(true)}
       />
 
       {/* Voice Confirmation Sheet */}
