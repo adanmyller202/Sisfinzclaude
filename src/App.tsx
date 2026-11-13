@@ -704,6 +704,18 @@ export default function App() {
   // 4. Authenticated & verified user
   return (
     <div className={`w-full min-w-0 max-w-full min-h-dvh flex flex-col overflow-x-clip bg-[#F4F8F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient`}>
+      {/* Connected push-and-scale shell for the drawer transition. */}
+      <motion.div
+        className="w-full min-w-0 flex flex-col flex-1 origin-left"
+        animate={{
+          x: isNavDrawerOpen ? 46 : 0,
+          scale: isNavDrawerOpen ? 0.965 : 1,
+          borderRadius: isNavDrawerOpen ? 24 : 0,
+          boxShadow: isNavDrawerOpen ? '0 18px 50px rgba(6, 78, 59, 0.12)' : '0 0 0 rgba(6, 78, 59, 0)',
+        }}
+        transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.85 }}
+        style={{ transformOrigin: 'left center', willChange: 'transform, border-radius' }}
+      >
       {/* Top Navbar */}
       <Navbar
         onOpenMenu={() => setIsNavDrawerOpen(true)}
@@ -734,13 +746,13 @@ export default function App() {
         <div className="w-full min-w-0 max-w-7xl mx-auto flex-none overflow-x-clip">
           {/* Content Viewport: Clean, wide, space-saving layout */}
           <main className="w-full min-w-0 flex-none p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-clip overflow-y-visible pb-28 relative">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="sync" initial={false}>
               <motion.div
                 key={currentView}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, x: 18, y: 4 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
+                exit={{ opacity: 0, x: -12, y: -2 }}
+                transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
                 className="w-full min-w-0 min-h-0"
               >
                 {currentView === 'planejar' ? (
@@ -1029,6 +1041,7 @@ export default function App() {
           </main>
         </div>
       )}
+      </motion.div>
 
       {/* Floating Mone Assistant Action Button */}
       <button
