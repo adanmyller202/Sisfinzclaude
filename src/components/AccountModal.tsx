@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AccountItem, AccountType, CurrencyCode, LanguageCode } from '../types';
 import { CURRENCIES } from '../utils/currency';
@@ -16,6 +17,7 @@ import {
   Minus,
 } from 'lucide-react';
 import { BankLogo } from './BankLogo';
+import { BANKS } from '../utils/bankLogos';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -64,35 +66,6 @@ export const ACCOUNT_TYPE_CONFIG: Record<
   },
 };
 
-const SUGGESTED_NAMES = [
-  'Efectivo',
-  'Banco Nación',
-  'Galicia',
-  'Santander',
-  'BBVA',
-  'Macro',
-  'Provincia',
-  'Ciudad',
-  'ICBC',
-  'HSBC',
-  'Credicoop',
-  'Patagonia',
-  'Supervielle',
-  'Hipotecario',
-  'Itaú',
-  'Brubank',
-  'Naranja X',
-  'Mercado Pago',
-  'Ualá',
-  'Personal Pay',
-  'Lemon',
-  'Belo',
-  'Prex',
-  'Nubank',
-  'Bradesco',
-  'Caixa',
-];
-
 export const AccountModal: React.FC<AccountModalProps> = ({
   isOpen,
   onClose,
@@ -110,6 +83,25 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showBankSuggestions, setShowBankSuggestions] = useState(false);
+  const normalizedQuery = name.trim().toLocaleLowerCase('pt-BR');
+  const bankSuggestions = BANKS.filter((bank) => {
+    const searchable = `${bank.name} ${bank.aliases.join(' ')}`.toLocaleLowerCase('pt-BR');
+    return !normalizedQuery || searchable.includes(normalizedQuery);
+  }).slice(0, 10);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const previousBody = { position: body.style.position, top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width, overflow: body.style.overflow };
+    const previousHtmlOverflow = html.style.overflow;
+    body.style.position = 'fixed'; body.style.top = `-${scrollY}px`; body.style.left = '0'; body.style.right = '0'; body.style.width = '100%'; body.style.overflow = 'hidden'; html.style.overflow = 'hidden';
+    return () => {
+      body.style.position = previousBody.position; body.style.top = previousBody.top; body.style.left = previousBody.left; body.style.right = previousBody.right; body.style.width = previousBody.width; body.style.overflow = previousBody.overflow; html.style.overflow = previousHtmlOverflow; window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -176,23 +168,23 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     }
   };
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 glass-overlay overflow-hidden pt-safe pb-safe"
+          className="fixed inset-0 z-[10002] flex items-center justify-center p-3 sm:p-4 glass-overlay overflow-hidden overscroll-none"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 30 }}
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="glass-modal rounded-[2.5rem] shadow-2xl max-w-md w-full max-h-[calc(100dvh-4rem)] flex flex-col overflow-hidden relative"
+            className="glass-modal rounded-[2rem] shadow-2xl max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden relative"
           >
             {/* Header with Mesh Gradient */}
-            <div className="relative p-8 shrink-0 overflow-hidden">
+            <div className="relative p-5 sm:p-6 shrink-0 overflow-hidden">
               <div className="absolute inset-0 mesh-gradient opacity-20" />
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -226,7 +218,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
             {/* Form Body */}
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="p-8 space-y-8 overflow-y-auto overscroll-contain flex-1 min-h-0 no-scrollbar">
+              <div className="p-5 sm:p-6 space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0 no-scrollbar">
                 {/* Account Type Selector */}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">
@@ -268,27 +260,33 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onFocus={() => setShowBankSuggestions(true)}
+                      onBlur={() => window.setTimeout(() => setShowBankSuggestions(false), 140)}
+                      onChange={(e) => { setName(e.target.value); setShowBankSuggestions(true); }}
                       placeholder="Ex: Santander Select, Mercado Pago..."
                       required
                       className="w-full px-6 py-5 rounded-2xl border border-slate-200/80 bg-white/80 text-slate-900 text-sm font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-slate-400"
                     />
                   </div>
 
-                  {/* Suggestions */}
-                  <div className="flex items-center gap-2 flex-wrap px-1">
-                    {SUGGESTED_NAMES.slice(0, 10).map((sName) => (
-                      <button
-                        key={sName}
-                        type="button"
-                        onClick={() => setName(sName)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[9px] font-black rounded-lg bg-emerald-50 text-slate-600 hover:text-emerald-700 hover:bg-emerald-100/70 transition-all cursor-pointer uppercase tracking-widest border border-emerald-100"
-                      >
-                        <BankLogo name={sName} type={type} size="sm" fallbackEmoji="" />
-                        {sName}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Sugestões aparecem somente durante a digitação */}
+                  {type === 'bank' && showBankSuggestions && bankSuggestions.length > 0 && (
+                    <div className="absolute z-30 left-0 right-0 top-full mt-2 max-h-56 overflow-y-auto overscroll-contain rounded-2xl border border-emerald-100 bg-white shadow-2xl p-2">
+                      {bankSuggestions.map((bank) => (
+                        <button
+                          key={bank.name}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => { setName(bank.name); setShowBankSuggestions(false); }}
+                          className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-emerald-50 transition-colors"
+                        >
+                          <BankLogo name={bank.name} type="bank" size="md" fallbackEmoji="🏦" />
+                          <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{bank.name}</span>
+                          <span className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">{bank.country === 'BR' ? '🇧🇷 BR' : '🇦🇷 AR'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Balance & Currency */}
@@ -348,7 +346,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               </div>
 
               {/* Footer Actions */}
-              <div className="p-8 border-t border-slate-200/60 bg-white/80 backdrop-blur-xl flex items-center justify-between gap-4">
+              <div className="p-5 sm:p-6 border-t border-slate-200/60 bg-white/90 flex items-center justify-between gap-4 shrink-0">
                 <button
                   type="button"
                   onClick={onClose}
@@ -372,5 +370,5 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         </div>
       )}
     </AnimatePresence>
-  );
+  ), document.body);
 };
