@@ -1,17 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { BillItem, IncomeItem, ExpenseItem, CurrencyCode, LanguageCode } from '../types';
 import { formatCurrency } from '../utils/currency';
-import { doesItemOccurInMonth, getCurrentMonthStr, formatMonthName } from '../utils/finance';
+import { doesItemOccurInMonth, getCurrentMonthStr } from '../utils/finance';
 import { getTranslations, getLocaleForLanguage } from '../utils/i18n';
 import {
   PieChart as PieChartIcon,
-  ChevronLeft,
-  ChevronRight,
   TrendingUp,
   TrendingDown,
   Info,
-  Calendar,
 } from 'lucide-react';
 
 interface MonthlyReportSectionProps {
@@ -72,32 +68,7 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
 }) => {
   const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
-  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
-  const [pickerYear, setPickerYear] = useState<number>(() => Number(selectedMonth.slice(0, 4)) || new Date().getFullYear());
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-
-  // Month navigation helpers
-  const handlePrevMonth = () => {
-    const cur = selectedMonth || getCurrentMonthStr();
-    const parts = (cur || '').split('-');
-    if (parts.length < 2) return;
-    const [y, m] = parts.map(Number);
-    const d = new Date(y, (m || 1) - 2, 1);
-    const yStr = d.getFullYear();
-    const mStr = String(d.getMonth() + 1).padStart(2, '0');
-    onSelectedMonthChange(`${yStr}-${mStr}`);
-  };
-
-  const handleNextMonth = () => {
-    const cur = selectedMonth || getCurrentMonthStr();
-    const parts = (cur || '').split('-');
-    if (parts.length < 2) return;
-    const [y, m] = parts.map(Number);
-    const d = new Date(y, (m || 1), 1);
-    const yStr = d.getFullYear();
-    const mStr = String(d.getMonth() + 1).padStart(2, '0');
-    onSelectedMonthChange(`${yStr}-${mStr}`);
-  };
 
   // 1. Total monthly income
   const totalIncome = useMemo(() => {
@@ -242,47 +213,6 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
         {t.monthlyReportSubtitle}
       </p>
-
-      {/* Month Selector Bar with Direct Selection Dropdown & Arrows */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded-xl bg-[#D1FAEB]/60 border border-emerald-500/20 gap-2">
-        <div className="flex items-center gap-1.5">
-          <Calendar className="w-4 h-4 text-emerald-600 ml-1 shrink-0" />
-          <span className="text-xs font-bold text-slate-800 shrink-0">
-            {t.selectMonthLabel}:
-          </span>
-          <button
-            type="button"
-            onClick={() => { setPickerYear(Number(selectedMonth.slice(0, 4)) || new Date().getFullYear()); setIsMonthPickerOpen(true); }}
-            className="text-xs font-extrabold text-slate-900 bg-white/90 border border-emerald-200 rounded-lg px-3 py-2 shadow-2xs hover:bg-emerald-50 active:scale-[0.98] transition-all capitalize"
-          >
-            {formatMonthName(selectedMonth, locale)}
-          </button>
-        </div>
-
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={handlePrevMonth}
-            className="p-1 rounded-lg text-slate-600 hover:bg-white transition-colors cursor-pointer"
-            title={t.previousMonth}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          <span className="px-2 text-xs font-extrabold text-slate-900 capitalize min-w-[90px] text-center">
-            {formatMonthName(selectedMonth, locale)}
-          </span>
-
-          <button
-            type="button"
-            onClick={handleNextMonth}
-            className="p-1 rounded-lg text-slate-600 hover:bg-white transition-colors cursor-pointer"
-            title={t.nextMonth}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
 
       {/* KPI Cards: Total Monthly Income & Total Categorized Spent */}
       <div className="grid grid-cols-2 gap-2.5">
@@ -450,29 +380,6 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
       )}
     </div>
 
-    {isMonthPickerOpen && createPortal((
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm" onClick={() => setIsMonthPickerOpen(false)}>
-        <div role="dialog" aria-modal="true" aria-label={t.selectMonthLabel || 'Selecionar mês'} className="w-full max-w-sm rounded-[2rem] bg-white border border-emerald-100 shadow-2xl p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-5">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">{t.selectMonthLabel || 'Selecionar mês'}</p><h3 className="text-xl font-black text-slate-900 mt-1">{pickerYear}</h3></div>
-            <button type="button" onClick={() => setIsMonthPickerOpen(false)} aria-label="Fechar" className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 text-xl">×</button>
-          </div>
-          <div className="flex items-center justify-between mb-4">
-            <button type="button" onClick={() => setPickerYear(y => y - 1)} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 font-bold">‹</button>
-            <span className="text-sm font-extrabold text-slate-700">{pickerYear}</span>
-            <button type="button" onClick={() => setPickerYear(y => y + 1)} className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 font-bold">›</button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {Array.from({ length: 12 }, (_, index) => {
-              const monthValue = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
-              const isSelected = monthValue === selectedMonth;
-              return <button key={monthValue} type="button" onClick={() => { onSelectedMonthChange(monthValue); setIsMonthPickerOpen(false); }} className={`rounded-xl py-3 px-2 text-xs font-extrabold capitalize transition-all ${isSelected ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50/70 text-slate-700 hover:bg-emerald-100'}`}>{formatMonthName(monthValue, locale)}</button>;
-            })}
-          </div>
-          <button type="button" onClick={() => { const now = getCurrentMonthStr(); onSelectedMonthChange(now); setPickerYear(Number(now.slice(0, 4))); setIsMonthPickerOpen(false); }} className="w-full mt-4 py-3 rounded-xl border border-emerald-200 text-emerald-700 text-xs font-black uppercase tracking-wider hover:bg-emerald-50">{language === 'es' ? 'Mes actual' : 'Mês atual'}</button>
-        </div>
-      </div>
-    ), document.body)}
     </>
   );
 };
