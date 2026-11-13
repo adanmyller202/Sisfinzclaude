@@ -97,6 +97,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       }
       setAmount('');
       setAccountAmount('');
+      setExchangeRate('');
       setSelectedAccountId(accounts.find((a) => a.isActive !== false && (a.currency || 'ARS') === 'ARS')?.id || '');
       setDate(getTodayStr());
       setNote('');
