@@ -287,7 +287,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         if (!cancelled && sequence === loadSequence) setMemoryReady(true);
       }
     });
-    return createPortal(() => {
+    return () => {
       cancelled = true;
       unsubscribe();
     };
@@ -1256,7 +1256,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  return (
+  return createPortal((
     <AnimatePresence>
       {isOpen && (
         <motion.div
