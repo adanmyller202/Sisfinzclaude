@@ -1691,8 +1691,47 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         getCategoriesFor={getCategoriesFor}
         onAddCategory={addCategory}
         onSaveBill={addBill}
-        onUpdateBill={updateBill}
-        onUpdateBillOccurrence={updateBillOccurrence}
+        onUpdateBill={async (id, partial) => {
+          const oldBill = bills.find((bill) => bill.id === id);
+          const recordKey = `bill_${id}_${selectedMonth}`;
+          const isPaid = Boolean(statusRecords.find((record) => record.id === recordKey)?.isCompleted);
+
+          // A paid bill has already affected the account. Editing it applies only
+          // the difference between the old and new paid amounts.
+          if (oldBill && isPaid) {
+            const oldAmount = Number(oldBill.exceptions?.[selectedMonth]?.amount ?? oldBill.amount) || 0;
+            const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
+            const oldAccountId = oldBill.accountId;
+            const newAccountId = partial.accountId !== undefined ? partial.accountId : oldAccountId;
+            const deltas = new Map<string, number>();
+            if (oldAccountId) deltas.set(oldAccountId, (deltas.get(oldAccountId) || 0) + oldAmount);
+            if (newAccountId) deltas.set(newAccountId, (deltas.get(newAccountId) || 0) - newAmount);
+            for (const [accountId, delta] of deltas) {
+              if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
+            }
+          }
+          await updateBill(id, partial);
+        }}
+        onUpdateBillOccurrence={async (id, month, partial, scope) => {
+          const oldBill = bills.find((bill) => bill.id === id);
+          const affectsSelectedMonth = month === selectedMonth || (scope === 'this_and_future' && month < selectedMonth);
+          const recordKey = `bill_${id}_${selectedMonth}`;
+          const isPaid = Boolean(statusRecords.find((record) => record.id === recordKey)?.isCompleted);
+
+          if (oldBill && isPaid && affectsSelectedMonth) {
+            const oldAmount = Number(oldBill.exceptions?.[selectedMonth]?.amount ?? oldBill.amount) || 0;
+            const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
+            const oldAccountId = oldBill.accountId;
+            const newAccountId = partial.accountId !== undefined ? partial.accountId : oldAccountId;
+            const deltas = new Map<string, number>();
+            if (oldAccountId) deltas.set(oldAccountId, (deltas.get(oldAccountId) || 0) + oldAmount);
+            if (newAccountId) deltas.set(newAccountId, (deltas.get(newAccountId) || 0) - newAmount);
+            for (const [accountId, delta] of deltas) {
+              if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
+            }
+          }
+          await updateBillOccurrence(id, month, partial, scope);
+        }}
         onDeleteBill={deleteBill}
         onSaveIncome={async (data) => {
           return await addIncome(data);
