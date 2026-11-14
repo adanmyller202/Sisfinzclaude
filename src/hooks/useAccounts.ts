@@ -17,6 +17,7 @@ import {
   orderBy,
   getDocs,
   writeBatch,
+  runTransaction,
 } from 'firebase/firestore';
 
 function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
@@ -482,17 +483,30 @@ export function useAccounts() {
     [user, accounts, transfers, getLocalKey]
   );
 
-  // Adjust account balance when linked to an income/expense/bill
+  // Apply a financial delta against the latest Firestore balance.
+  // A transaction prevents stale React closures from overwriting a newer balance
+  // when an expense/income/bill is edited immediately after another movement.
   const adjustAccountBalanceForFinancialItem = useCallback(
     async (accountId: string, amountDelta: number) => {
-      if (!user || !accountId || amountDelta === 0) return;
-      const acc = accounts.find((a) => a.id === accountId);
-      if (!acc) return;
+      if (!user || !accountId || !Number.isFinite(amountDelta) || amountDelta === 0) return;
 
+      const accountRef = doc(db, 'users', user.uid, 'accounts', accountId);
       const now = new Date().toISOString();
+      const nextBalance = await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(accountRef);
+        if (!snapshot.exists()) throw new Error('Conta não encontrada para ajustar o lançamento.');
+        const data = snapshot.data();
+        const current = Number(data.currentBalance ?? data.balance ?? data.initialBalance ?? 0) || 0;
+        const next = current + amountDelta;
+        transaction.set(accountRef, { currentBalance: next, updatedAt: now }, { merge: true });
+        return next;
+      });
+
       setAccounts((prev) => {
-        const list = prev.map((a) =>
-          a.id === accountId ? { ...a, currentBalance: (a.currentBalance || 0) + amountDelta, updatedAt: now } : a
+        const list = prev.map((account) =>
+          account.id === accountId
+            ? { ...account, currentBalance: nextBalance, updatedAt: now }
+            : account
         );
         try {
           localStorage.setItem(getLocalKey('accounts'), JSON.stringify(list));
@@ -500,17 +514,8 @@ export function useAccounts() {
         } catch {}
         return list;
       });
-
-      await setDoc(
-        doc(db, 'users', user.uid, 'accounts', accountId),
-        sanitizeFirestorePayload({
-          currentBalance: (acc.currentBalance || 0) + amountDelta,
-          updatedAt: now,
-        }),
-        { merge: true }
-      );
     },
-    [user, accounts, getLocalKey]
+    [user, getLocalKey]
   );
 
   // Clear all transfers without altering current balances
