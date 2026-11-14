@@ -152,17 +152,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <Sparkles className="w-5 h-5 text-emerald-500" />
             </h1>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 mt-2 leading-none">
-              {mode === 'login' ? 'Bem-vindo de volta' : mode === 'signup' ? 'Crie sua conta' : 'Recupere sua senha'}
+              {mode === 'login' ? 'Bem-vindo teste' : mode === 'signup' ? 'Crie sua conta' : 'Recupere sua senha'}
             </p>
           </div>
         </div>
-
-        {/* Temporary GitHub-to-AI-Studio sync test */}
-        {mode === 'login' && (
-          <div className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-black tracking-widest text-emerald-800">
-            teste
-          </div>
-        )}
 
         {/* Tab Switcher */}
         {mode !== 'forgot_password' && (
