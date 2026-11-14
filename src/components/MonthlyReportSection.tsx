@@ -246,13 +246,6 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
           <span className="text-xs font-bold text-slate-800 shrink-0">
             {t.selectMonthLabel}:
           </span>
-          <button
-            type="button"
-            onClick={() => { setPickerYear(Number(selectedMonth.slice(0, 4)) || new Date().getFullYear()); setIsMonthPickerOpen(true); }}
-            className="text-xs font-extrabold text-slate-900 bg-white/90 border border-emerald-200 rounded-lg px-3 py-2 shadow-2xs hover:bg-emerald-50 active:scale-[0.98] transition-all capitalize"
-          >
-            {formatMonthName(selectedMonth, locale)}
-          </button>
         </div>
 
         <div className="flex items-center justify-end gap-1">
@@ -265,9 +258,13 @@ export const MonthlyReportSection: React.FC<MonthlyReportSectionProps> = ({
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          <span className="px-2 text-xs font-extrabold text-slate-900 capitalize min-w-[90px] text-center">
+          <button
+            type="button"
+            onClick={() => { setPickerYear(Number(selectedMonth.slice(0, 4)) || new Date().getFullYear()); setIsMonthPickerOpen(true); }}
+            className="text-xs font-extrabold text-slate-900 bg-white/90 border border-emerald-200 rounded-lg px-3 py-2 shadow-2xs hover:bg-emerald-50 active:scale-[0.98] transition-all capitalize"
+          >
             {formatMonthName(selectedMonth, locale)}
-          </span>
+          </button>
 
           <button
             type="button"
