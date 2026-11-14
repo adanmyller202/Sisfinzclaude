@@ -22,7 +22,7 @@ import {
   Gauge,
   LayoutGrid,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 
 interface NavigationDrawerModalProps {
   isOpen: boolean;
@@ -56,6 +56,10 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   onToggleDarkMode,
 }) => {
   const t = getTranslations(language);
+  const reduceMotion = useReducedMotion();
+  const drawerSpring = reduceMotion
+    ? { duration: 0.01 }
+    : { type: 'spring' as const, stiffness: 285, damping: 22, mass: 0.78 };
   const { user, signOutUser } = useAuth();
   const [pendingView, setPendingView] = useState<string | null>(null);
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,7 +129,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       onChangeView(view);
       onClose();
       selectionTimer.current = null;
-    }, 820);
+    }, reduceMotion ? 0 : 320);
   };
 
   const navGroups = [
@@ -174,10 +178,10 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           />
 
           <motion.div
-            initial={{ x: '-112%', opacity: 0.55, scale: 0.84, rotate: -5 }}
+            initial={reduceMotion ? { x: '-100%', opacity: 0 } : { x: '-112%', opacity: 0.7, scale: 0.94, rotate: -1.5 }}
             animate={{ x: 0, opacity: 1, scale: 1, rotate: 0 }}
-            exit={{ x: '-108%', opacity: 0.65, scale: 0.9, rotate: -3 }}
-            transition={{ type: 'spring', damping: 19, stiffness: 230, mass: 0.9 }}
+            exit={reduceMotion ? { opacity: 0 } : { x: '-108%', opacity: 0.7, scale: 0.97, rotate: -1 }}
+            transition={drawerSpring}
             className="solid-container bg-white w-[calc(100%-1.25rem)] max-w-[340px] sm:max-w-sm flex flex-col h-[calc(100%-1.25rem)] my-2.5 ml-2.5 rounded-[28px] border border-emerald-100 shadow-[0_24px_70px_rgba(6,78,59,0.22)] overflow-hidden relative z-10 pt-safe pb-safe pointer-events-auto overscroll-contain"
             onClick={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
@@ -281,13 +285,13 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                 className="absolute inset-y-0 left-0 w-1/2 -z-0 pointer-events-none bg-gradient-to-r from-transparent via-white/25 to-transparent"
                                 initial={{ x: '-130%' }}
                                 animate={{ x: '260%' }}
-                                transition={{ duration: 0.72, ease: 'easeInOut' }}
+                                transition={{ duration: reduceMotion ? 0.01 : 0.28, ease: [0.22, 1, 0.36, 1] }}
                               />
                               <motion.span
                                 className="absolute -inset-2 -z-10 rounded-3xl border-2 border-emerald-300/80"
                                 initial={{ opacity: 0, scale: 0.88 }}
                                 animate={{ opacity: [0, 1, 0], scale: [0.88, 1.08, 1.2] }}
-                                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                                transition={{ duration: reduceMotion ? 0.01 : 0.3, ease: [0.16, 1, 0.3, 1] }}
                               />
                               <motion.span
                                 className="absolute inset-0 -z-0 rounded-2xl pointer-events-none"
@@ -304,7 +308,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                 rotate: isSelected ? [0, -8, 7, 0] : 0,
                                 backgroundColor: isHighlighted ? 'rgba(255,255,255,0.22)' : '#059669',
                               }}
-                              transition={{ duration: isSelected ? 0.62 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                              transition={{ duration: reduceMotion ? 0.01 : isSelected ? 0.28 : 0.22, ease: [0.22, 1, 0.36, 1] }}
                               className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 text-white shadow-sm"
                             >
                               <Icon className="w-5 h-5" />
@@ -312,7 +316,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                             <div className="text-left min-w-0">
                               <motion.div
                                 animate={{ x: isSelected ? 3 : 0, letterSpacing: isSelected ? '0.01em' : '0em' }}
-                                transition={{ duration: 0.32 }}
+                                transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
                                 className={`text-sm font-black truncate ${isHighlighted ? 'text-white' : 'text-slate-900'}`}
                               >
                                 {item.label}
