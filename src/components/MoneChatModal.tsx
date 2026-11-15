@@ -870,19 +870,6 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
         throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
       }
       const tokenData = await tokenResponse.json();
-      const DOLLAR_SIGN = String.fromCharCode(36);
-      const currencyNames: Record<string, string> = {
-        ARS: 'pesos argentinos',
-        USD: 'dólares estadounidenses',
-        BRL: 'reais',
-        EUR: 'euros',
-      };
-      const currencySymbols: Record<string, string> = {
-        ARS: 'ARS ' + DOLLAR_SIGN,
-        USD: 'US' + DOLLAR_SIGN,
-        BRL: 'R' + DOLLAR_SIGN,
-        EUR: '€',
-      };
       // A voz não precisa receber cópias de todas as finanças: qualquer pergunta financeira
       // consulta os dados atuais pelo sisfinz_action. Envie apenas contexto conversacional curto.
       const recentVoiceMemory = messages.slice(-6)
