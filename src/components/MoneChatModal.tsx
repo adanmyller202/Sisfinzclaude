@@ -849,95 +849,38 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
       outputGain.connect(outputContext.destination);
       liveCompressorRef.current = outputCompressor;
       liveOutputGainRef.current = outputGain;
+      // Inicie autenticação, permissão do microfone e token Live em paralelo.
+      // Isso evita esperar a permissão do microfone para só então pedir o token ao servidor.
       const idTokenPromise = user.getIdToken();
       const audioResumePromise = Promise.all([inputContext.resume(), outputContext.resume()]);
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const streamPromise = navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
+      const tokenResponsePromise = idTokenPromise.then((idToken) =>
+        fetch('/api/mone/live-token', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
+        })
+      );
+      const [stream, tokenResponse] = await Promise.all([streamPromise, tokenResponsePromise, audioResumePromise])
+        .then(([mediaStream, response]) => [mediaStream, response] as const);
       liveStreamRef.current = stream;
-      const [idToken] = await Promise.all([idTokenPromise, audioResumePromise]);
-      const tokenResponse = await fetch('/api/mone/live-token', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
-      });
       if (!tokenResponse.ok) {
         const body = await tokenResponse.json().catch(() => ({}));
         throw new Error(body.error || 'Não foi possível iniciar a voz em tempo real.');
       }
       const tokenData = await tokenResponse.json();
-      const DOLLAR_SIGN = String.fromCharCode(36);
-      const currencyNames: Record<string, string> = {
-        ARS: 'pesos argentinos',
-        USD: 'dólares estadounidenses',
-        BRL: 'reais',
-        EUR: 'euros',
-      };
-      const currencySymbols: Record<string, string> = {
-        ARS: 'ARS ' + DOLLAR_SIGN,
-        USD: 'US' + DOLLAR_SIGN,
-        BRL: 'R' + DOLLAR_SIGN,
-        EUR: '€',
-      };
+      // A voz não precisa receber cópias de todas as finanças: qualquer pergunta financeira
+      // consulta os dados atuais pelo sisfinz_action. Envie apenas contexto conversacional curto.
+      const recentVoiceMemory = messages.slice(-6)
+        .map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 300))
+        .join(' | ')
+        .slice(0, 2200);
       const financialContext = [
-        'Idioma obrigatório da Mone: português brasileiro (pt-BR). Moeda ativa do SisFinz: ' + currency + '. Códigos de moeda são obrigatórios: ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Nunca deduza a moeda pelo cifrão genérico.',
-        'Não use totais numéricos consolidados entre moedas; para saldo e previsão, consulte sisfinz_action e separe cada moeda.',
-        'Contas: ' + JSON.stringify(accounts.map((a) => ({ id: a.id, name: a.name, balance: a.currentBalance, currency: a.currency, currencyName: currencyNames[a.currency] || 'moeda não identificada', currencySymbol: currencySymbols[a.currency] || '' }))).slice(0, 4500) + '.',
-        'Categorias disponíveis: ' + JSON.stringify(categories.map((category) => ({ id: category.id, name: category.name, scope: category.scope }))).slice(0, 1600) + '.',
-        'Faturas: ' + JSON.stringify(bills.map((b) => {
-          const linkedAccount = accounts.find((account) => account.id === b.accountId)
-            || accounts.find((account) => account.id === b.accountDistributions?.[0]?.accountId);
-          const currencyBreakdown = (b.accountDistributions || []).map((distribution) => {
-            const distributionAccount = accounts.find((account) => account.id === distribution.accountId);
-            const distributionCurrency = distributionAccount?.currency || currency;
-            return {
-              accountName: distributionAccount?.name || null,
-              amount: distribution.amount,
-              currency: distributionCurrency,
-              currencyName: currencyNames[distributionCurrency] || 'moeda não identificada',
-              currencySymbol: currencySymbols[distributionCurrency] || '',
-            };
-          });
-          const distinctCurrencies = [...new Set(currencyBreakdown.map((item) => item.currency))];
-          const billCurrency = distinctCurrencies.length === 1
-            ? distinctCurrencies[0]
-            : distinctCurrencies.length > 1
-              ? 'MULTI'
-              : linkedAccount?.currency || currency;
-          return {
-            id: b.id,
-            name: b.name,
-            amount: b.amount,
-            currency: billCurrency,
-            currencyName: billCurrency === 'MULTI' ? 'moedas diferentes' : currencyNames[billCurrency] || 'moeda não identificada',
-            currencySymbol: billCurrency === 'MULTI' ? '' : currencySymbols[billCurrency] || '',
-            currencyBreakdown,
-            accountName: linkedAccount?.name || null,
-            dueDay: b.dueDay,
-          };
-        })).slice(0, 4500) + '.',
-        'Receitas: ' + JSON.stringify(incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }))).slice(0, 2500) + '.',
-        'Despesas recentes: ' + JSON.stringify(expenses.slice(-15).map((e) => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category }))).slice(0, 3500) + '.',
-        'Metas: ' + JSON.stringify(goals.map((g) => {
-          const savedAmount = (g.history || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-          return {
-            id: g.id,
-            title: g.title,
-            targetAmount: g.targetAmount || g.totalTarget,
-            savedAmount,
-            remainingAmount: Math.max(0, (Number(g.totalTarget || g.targetAmount) || 0) - savedAmount),
-            completedSquares: (g.completedSquares || []).length,
-            totalSquares: g.totalSquares || 0,
-            currency: g.currency || currency,
-          };
-        })).slice(0, 2500) + '.',
-        'Pessoas conectadas para contas compartilhadas: ' + JSON.stringify(sharedPartners).slice(0, 1200) + '.',
-        'Convites pendentes recebidos: ' + JSON.stringify(sharedInvitations.filter((invitation) => invitation.status === 'pending')).slice(0, 1200) + '.',
-        'Contas compartilhadas: ' + JSON.stringify(sharedBills.map((b) => ({ id: b.id, title: b.title, amount: b.amount, month: b.month, dueDate: b.dueDate, myShare: myUserId ? b.shares?.[myUserId]?.amount : undefined, myShareStatus: myUserId ? b.shares?.[myUserId]?.status : undefined }))).slice(0, 2500) + '.',
-        'Cofrinhos e reservas: ' + JSON.stringify(savingsControl.savings.map((saving) => ({ id: saving.id, name: saving.name, currentAmount: saving.currentAmount, targetAmount: saving.targetAmount, hasTarget: saving.hasTarget, currency: saving.currency, deadline: saving.deadline }))).slice(0, 3500) + '.',
-        'Histórico recente de aportes e resgates: ' + JSON.stringify(savingsControl.transactions.slice(0, 20).map((tx) => ({ savingName: tx.savingName, type: tx.type, amount: tx.amount, currency: tx.currency, date: tx.date }))).slice(0, 2500) + '.',
-        'Desafios semanais: ' + JSON.stringify(weeklyChallenges.map((challenge) => ({ id: challenge.id, title: challenge.title, initialAmount: challenge.initialAmount, totalWeeks: challenge.totalWeeks || 52, totalTarget: challenge.totalTarget, completedWeeks: challenge.completedWeeks, status: challenge.status, savingMode: challenge.savingMode }))).slice(0, 2500) + '.',
-        'Memória recente da conversa: ' + messages.slice(-24).map((m) => (m.sender === 'user' ? 'Usuário: ' : 'Mone: ') + m.text.slice(0, 500)).join(' | ').slice(0, 12000) + '.',
-        'Preferência de estilo da Mone: ' + moneStyle + '.',
+        'Idioma: português brasileiro (pt-BR). Moeda padrão: ' + currency + '. Nunca misture moedas.',
+        'Estilo de conversa: ' + moneStyle + '.',
+        'Memória recente resumida: ' + (recentVoiceMemory || 'Sem histórico recente.'),
+        'REGRA: toda pergunta financeira deve chamar sisfinz_action antes de responder. A ferramenta consulta os dados atuais e autorizados do SisFinz. Nunca responda com base em memória ou contexto antigo.',
       ].join(' ');
       const liveSystemInstruction = "Você é Mone, assistente oficial do SisFinz e integrante digital deste aplicativo. Você não é uma assistente externa: faz parte do SisFinz. Seu nome próprio e único é Mone. Se perguntarem seu nome, responda naturalmente: Sou a Mone, assistente oficial do SisFinz. Se perguntarem quem você é, explique que ajuda o usuário a consultar, organizar e atualizar suas finanças com os dados reais autorizados do aplicativo e também conversa sobre assuntos gerais. Nunca diga que não tem nome próprio, nunca se apresente como Gemini, Google, Flash ou outro modelo de IA. O nome do modelo é apenas tecnologia interna, não sua identidade. Use o histórico e a memória da conta autenticada quando forem fornecidos; nunca invente lembranças. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. Converse naturalmente sobre qualquer assunto: estudos, trabalho, tecnologia, cultura, ideias, dúvidas cotidianas e finanças. Não transforme papo casual em comandos.\n\nREGRA FINANCEIRA INVIOLÁVEL: qualquer pergunta sobre saldo, dívidas, contas, faturas, vencimentos, receitas, despesas, pagamentos, cofrinhos, reservas, metas de economia, aportes, resgates, convites ou conexões compartilhadas DEVE chamar sisfinz_action antes de responder. Nunca responda perguntas financeiras de memória, nunca estime e nunca invente nome de conta, valor, moeda, vencimento ou dívida. Só apresente dados devolvidos pela ferramenta e pertencentes ao contexto real do SisFinz. Se não houver registros, diga claramente. A moeda ativa é apenas o padrão geral. Para cada fatura, use o código currency do registro e a moeda da conta vinculada. Se houver currencyBreakdown, use cada parcela com a moeda da respectiva conta e não misture moedas. ARS significa pesos argentinos; USD significa dólares estadounidenses; BRL significa reais; EUR significa euros. Os prefixos visuais também são distintos: ARS seguido do cifrão, US seguido do cifrão, R seguido do cifrão e o símbolo do euro. Nunca deduza moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. Sempre diga o nome completo da moeda junto ao valor, por exemplo 45.000 pesos argentinos; nunca diga apenas o número nem confunda ARS com USD. Nunca some moedas diferentes nem converta sem pedido e cotação explícitos. Se não houver código identificável, diga que não conseguiu confirmar a moeda em vez de adivinhar.\n\nQuando o usuário pedir explicitamente para abrir ou mostrar uma tela/seção do SisFinz, use sisfinz_action com navigate_to_section. Quando pedir para registrar, marcar como paga/recebida, concluir/desfazer desafio, transferir, alterar ou excluir registros financeiros, use sisfinz_action. Execute alterações de valores/dados quando o usuário pedir claramente, sem pedir confirmação repetida. Peça uma única confirmação explícita somente antes de excluir registros. Se a ferramenta retornar status diferente de ok, informe o usuário e não repita a chamada quando retryable for false. Nunca diga que uma ação foi concluída sem confirmação de sucesso da ferramenta. Contexto financeiro real do usuário: " + financialContext;
       const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } });
