@@ -1292,7 +1292,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
               <span className={`hidden rounded-full border px-3 py-1.5 text-[10px] font-bold sm:inline-flex ${isOnline ? 'border-emerald-200 bg-white/80 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
                 {isOnline ? '● Conectada' : '● Sem conexão'}
               </span>
-              <button type="button" onClick={() => showTextMode ? setShowTextMode(false) : onClose()} aria-label={showTextMode ? 'Voltar para Mone' : 'Fechar assistente'} title={showTextMode ? 'Voltar para Mone' : 'Fechar assistente'} className="flex h-10 w-10 items-center justify-center rounded-full border border-white bg-white/90 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900">
+              <button type="button" onClick={onClose} aria-label="Fechar assistente e voltar ao SisFinz" title="Fechar assistente" className="flex h-10 w-10 items-center justify-center rounded-full border border-white bg-white/90 text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-900">
                 <X className="h-5 w-5" />
               </button>
             </div>
