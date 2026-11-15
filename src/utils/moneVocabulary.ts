@@ -15,14 +15,14 @@ const ACTION_ALIASES: Array<[RegExp, string]> = [
 ];
 
 const COMMON_MISSPELLINGS: Record<string, string> = {
-  fz: 'faz', fassa: 'faca', faser: 'fazer', faseria: 'faria',
+  fz: 'faz', fassa: 'faca', faser: 'fazer', faseria: 'faria', hacr: 'hacer', agerga: 'agrega', agrga: 'agrega',
   criea: 'cria', criaa: 'cria', crira: 'cria', crir: 'criar',
   adisiona: 'adiciona', adciona: 'adiciona', adisionar: 'adicionar',
   regitra: 'registra', registrra: 'registra', cadatra: 'cadastra',
   lancar: 'lancar', lanca: 'lanca', lanse: 'lance',
-  fatura: 'fatura', fautra: 'fatura', fatrua: 'fatura', faturaa: 'fatura',
+  fatura: 'fatura', fautra: 'fatura', fatrua: 'fatura', faturaa: 'fatura', factura: 'fatura', facturra: 'fatura', cuoota: 'cuota', cupta: 'cuota',
   conta: 'conta', contaa: 'conta', conat: 'conta',
-  parcela: 'parcela', par cela: 'parcela', parselas: 'parcelas',
+  parcela: 'parcela', par cela: 'parcela', parselas: 'parcelas', cuota: 'parcela', cuotas: 'parcelas',
   parcellas: 'parcelas', parcelaas: 'parcelas', veses: 'vezes',
   ves: 'vezes', vezez: 'vezes', mes: 'mes', meiz: 'mes',
   vençimento: 'vencimento', vencimeto: 'vencimento', vencimient: 'vencimento',
@@ -42,7 +42,7 @@ const FINANCE_TERMS = new Set([
   'mostrar','lista','listar','ver','olha','pagar','pague','paga','quitar','quite','receber',
   'recebi','excluir','apagar','deletar','remover','editar','alterar','atualizar','corrigir',
   'transferir','guardar','poupar','economizar','depositar','resgatar','retirar','sacar',
-  'fatura','faturas','conta','contas','boleto','boletos','parcela','parcelas','vezes','compra',
+  'fatura','faturas','factura','facturas','conta','contas','boleto','boletos','parcela','parcelas','cuota','cuotas','vezes','compra',
   'compras','gasto','gastos','despesa','despesas','receita','receitas','ingresso','ingressos',
   'renda','salario','saldo','dinheiro','pagamento','pagamentos','vencimento','vencimentos',
   'vencida','vencidas','paga','pagas','pendente','pendentes','atrasada','atrasadas',
