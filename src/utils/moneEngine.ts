@@ -841,12 +841,12 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const allInstallmentMessages = [...previousUserMessages, question];
   const installmentNorm = normalize(allInstallmentMessages.join(' '));
   const originalInstallmentRequest = allInstallmentMessages.find((message) =>
-    /\b(?:cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(normalize(message)) &&
+    /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(normalize(message)) &&
     /\b(?:fatura|conta|compra|boleto)\b/i.test(normalize(message)) &&
     /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(normalize(message))
   ) || allInstallmentMessages[0] || question;
   const originalNorm = normalize(originalInstallmentRequest);
-  const hasInstallmentCreateVerb = /\b(?:cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(installmentNorm);
+  const hasInstallmentCreateVerb = /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(installmentNorm);
   const hasInstallmentTarget = /\b(?:fatura|conta|compra|boleto)\b/i.test(installmentNorm);
   const hasInstallmentCount = /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(installmentNorm);
   const isInstallmentAccountClarification =
@@ -856,7 +856,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     /\b(?:parcelad\w*|parcelas?)\b/i.test(normalize(latestAssistantMessage)) &&
     /\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\b/i.test(normalize(latestAssistantMessage));
   const isInstallmentCreation =
-    /\b(?:cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(norm) &&
+    /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(norm) &&
     /\b(?:fatura|conta|compra|boleto)\b/i.test(norm) &&
     /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(norm);
   const isPendingInstallmentReply =
