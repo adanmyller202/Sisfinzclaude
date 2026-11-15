@@ -721,27 +721,16 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
     const pcm = new Int16Array(bytes.buffer);
     const buffer = context.createBuffer(1, pcm.length, 24000);
     const channel = buffer.getChannelData(0);
-    // Automatic loudness leveling: normalize each received speech chunk with a smoothed gain,
-    // then apply a hard peak ceiling so Mone does not jump between quiet and loud phrases.
-    let sumSquares = 0;
-    let peak = 0;
+    // Preserve the original PCM waveform across chunks. Per-chunk normalization
+    // changes gain abruptly and can make continuous speech sound distorted or choppy.
     for (let i = 0; i < pcm.length; i++) {
-      const sample = pcm[i] / 32768;
-      sumSquares += sample * sample;
-      peak = Math.max(peak, Math.abs(sample));
-    }
-    const rms = Math.sqrt(sumSquares / Math.max(1, pcm.length));
-    const desiredGain = rms > 0.0005 ? Math.min(2.8, Math.max(0.7, 0.16 / rms)) : 1;
-    const smoothedGain = liveOutputLevelRef.current * 0.72 + desiredGain * 0.28;
-    liveOutputLevelRef.current = smoothedGain;
-    const peakLimitedGain = peak > 0 ? Math.min(smoothedGain, 0.88 / peak) : smoothedGain;
-    for (let i = 0; i < pcm.length; i++) {
-      channel[i] = Math.max(-0.88, Math.min(0.88, (pcm[i] / 32768) * peakLimitedGain));
+      channel[i] = pcm[i] / 32768;
     }
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(liveCompressorRef.current || context.destination);
-    const startAt = Math.max(context.currentTime + 0.025, livePlaybackTimeRef.current);
+    // Keep a small jitter cushion so network scheduling variation does not create gaps.
+    const startAt = Math.max(context.currentTime + 0.06, livePlaybackTimeRef.current);
     source.onended = () => {
       liveAudioSourcesRef.current = liveAudioSourcesRef.current.filter((item) => item !== source);
     };
