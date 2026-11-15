@@ -22,7 +22,7 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   lancar: 'lancar', lanca: 'lanca', lanse: 'lance',
   fatura: 'fatura', fautra: 'fatura', fatrua: 'fatura', faturaa: 'fatura', factura: 'fatura', facturra: 'fatura', cuoota: 'cuota', cupta: 'cuota',
   conta: 'conta', contaa: 'conta', conat: 'conta',
-  parcela: 'parcela', par cela: 'parcela', parselas: 'parcelas', cuota: 'parcela', cuotas: 'parcelas',
+  parcela: 'parcela', parselas: 'parcelas', cuota: 'parcela', cuotas: 'parcelas',
   parcellas: 'parcelas', parcelaas: 'parcelas', veses: 'vezes',
   ves: 'vezes', vezez: 'vezes', mes: 'mes', meiz: 'mes',
   vençimento: 'vencimento', vencimeto: 'vencimento', vencimient: 'vencimento',
