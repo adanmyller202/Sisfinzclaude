@@ -960,7 +960,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
           tools: [{
             functionDeclarations: [{
               name: 'sisfinz_action',
-              behavior: Behavior.BLOCKING,
+              behavior: Behavior.NON_BLOCKING,
               description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
               parameters: {
                 type: Type.OBJECT,
