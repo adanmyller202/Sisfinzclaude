@@ -41,6 +41,7 @@ import {
   Trash2,
   WifiOff,
   ChevronDown,
+  ArrowLeft,
   Check,
   Sparkles,
 } from 'lucide-react';
@@ -348,6 +349,11 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
   const [liveTranscript, setLiveTranscript] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!showTextMode) return;
+    messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
+  }, [messages, isLoading, showTextMode]);
 
   // Freeze the page behind the modal (especially Safari/PWA on iOS).
   // The chat's own message list remains the only scrollable area.
@@ -1272,7 +1278,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             <div className="absolute inset-0 opacity-[0.22]" style={{ backgroundImage: 'radial-gradient(#7CC9A5 0.7px, transparent 0.7px)', backgroundSize: '19px 19px' }} />
           </div>
 
-          <header className="relative z-10 flex shrink-0 items-center justify-between px-5 py-4 sm:px-8">
+          <header className="relative z-30 flex shrink-0 items-center justify-between px-5 py-4 sm:px-8">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-100 bg-white shadow-sm">
                 <Sparkles className="h-5 w-5 text-emerald-600" />
@@ -1292,7 +1298,7 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
             </div>
           </header>
 
-          <main className={`relative z-10 flex min-h-0 w-full flex-1 flex-col items-center overflow-hidden px-3 pb-3 sm:px-5 sm:pb-5 ${showTextMode ? 'justify-start' : 'justify-center'}`}>
+          <main className={`relative z-10 flex min-h-0 w-full flex-1 flex-col ${showTextMode ? 'items-stretch justify-start overflow-hidden p-3 sm:p-5' : 'items-center justify-center overflow-hidden px-3 pb-3 sm:px-5 sm:pb-5'}`} style={{ minHeight: 0 }}>
             {!showTextMode && (
                           <div className="flex w-full max-w-xl flex-col items-center text-center">
                             <div className="relative mb-7 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
@@ -1391,20 +1397,30 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 12 }}
-                className="flex h-full min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden rounded-3xl border border-white bg-white/90 p-3 shadow-lg sm:p-4" style={{ minHeight: 0, height: "100%" }}
+                className="flex min-h-0 w-full max-w-xl flex-1 flex-col self-center overflow-hidden rounded-3xl border border-white bg-white/90 p-3 shadow-lg sm:p-4"
+                style={{ minHeight: 0, maxHeight: '100%' }}
               >
-                <div className="mb-2 flex shrink-0 items-center justify-between">
+                <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTextMode(false)}
+                    aria-label="Voltar para a tela principal da Mone"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl px-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Voltar
+                  </button>
                   <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
-                  <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
+                  <button type="button" onClick={handleClearChat} className="rounded-lg px-2 py-2 text-[10px] font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-500">Limpar</button>
                 </div>
-                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 text-left [webkit-overflow-scrolling:touch]" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }} aria-live="polite">
+                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto overscroll-contain px-1 py-1 text-left [webkit-overflow-scrolling:touch]" style={{ minHeight: 0, WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }} aria-live="polite">
                   {messages.map((message) => (
                     <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
                   ))}
                   {isLoading && <p className="text-xs text-emerald-600">Mone está pensando…</p>}
                   <div ref={messagesEndRef} />
                 </div>
-                <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="relative z-20 mt-auto flex w-full shrink-0 gap-2 border-t border-emerald-100 bg-white pt-3" style={{ minHeight: 60, paddingBottom: "max(12px, env(safe-area-inset-bottom))", flex: "0 0 auto" }}>
+                <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="relative z-30 flex w-full shrink-0 items-center gap-2 border-t border-emerald-100 bg-white pt-3" style={{ minHeight: 72, paddingBottom: "max(12px, env(safe-area-inset-bottom))", flex: "0 0 auto" }}>
                   <input ref={inputRef} value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Escreva para a Mone…" enterKeyHint="send" className="h-12 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" disabled={isLoading} />
                   <button type="submit" disabled={!inputValue.trim() || isLoading} aria-label="Enviar mensagem" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"><Send className="h-4 w-4" /></button>
                 </form>
