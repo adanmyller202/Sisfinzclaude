@@ -3,7 +3,7 @@
  * Normaliza formas naturais de pedir ações financeiras sem alterar os dados originais.
  */
 const ACTION_ALIASES: Array<[RegExp, string]> = [
-  [/\b(?:faz|faca|fazer|monta|montar|bota|botar|coloca|colocar|poe|mete|meter|comprei|comprar|comprado|cria|crie|criar|gera|gerar|registre|registrar|registra|adiciona|adicionar|adicione|cadastra|cadastrar|cadastre|inclui|incluir|anota|anotar|lanca|lancar|lance|crea|crear|haceme|hace|hacer|agrega|agregar|carga|cargar|pone|poner)\b/g, 'cria'],
+  [/\b(?:faz|faca|fazer|monta|montar|bota|botar|coloca|colocar|poe|mete|meter|cria|crie|criar|gera|gerar|registre|registrar|registra|adiciona|adicionar|adicione|cadastra|cadastrar|cadastre|inclui|incluir|anota|anotar|lanca|lancar|lance|crea|crear|haceme|hace|hacer|agrega|agregar|carga|cargar|pone|poner)\b/g, 'cria'],
   [/\b(?:consulta|consultar|consulte|ver|ve|olha|olhar|mostra|mostrar|liste|listar|lista|me diz|diga|informa|informar|quanto tenho|quanto devo|mostrame|muestrame|decime|dime|revisa|revisar)\b/g, 'consultar'],
   [/\b(?:paguei|pagar|paga|pague|quite|quitar|quitada|quitado|marcar como paga|marcar paga|abona|abonar|pagame)\b/g, 'pagar'],
   [/\b(?:recebi|receber|recebido|caiu|entrou|depositaram)\b/g, 'receber'],
