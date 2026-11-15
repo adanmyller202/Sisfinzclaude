@@ -916,7 +916,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       });
       if (matched) requestedAccount = matched.name;
     }
-    const currencyReply = allInstallmentMessages.find((message) =>
+    const currencyReply = [...allInstallmentMessages].reverse().find((message) =>
       /\b(?:pesos?\s+argentinos?|ars|reais|brl|dolares?|usd)\b/i.test(normalize(message))
     );
     const requestedCurrency = currencyReply
