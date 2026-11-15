@@ -846,7 +846,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const hasInstallmentCount = /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(installmentNorm);
   const isInstallmentMonthClarification =
     /\b(?:novembro|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|dezembro|proximo mes|mes que vem|este mes|mes atual)\b/i.test(norm) &&
-    /\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\b/i.test(norm) &&
+    (/\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\b/i.test(norm) || /^(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|proximo mes|mes que vem|este mes|mes atual)(?: de 20\d{2})?$/i.test(norm)) &&
     /\b(?:mes|quando|inici\w*|come[cç]a|come[cç]ando)\b/i.test(normalize(latestAssistantMessage)) &&
     /\b(?:parcelad\w*|parcelas?)\b/i.test(normalize(latestAssistantMessage)) &&
     hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
@@ -892,7 +892,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     }, context)) || { text: 'Não consegui criar essa compra parcelada. Nenhuma fatura foi confirmada como criada.', isInternalCalculation: true };
   }
 
-  const asksBills = /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) && /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm);
+  const asksBills =
+    /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) &&
+    /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm) &&
+    !/\b(?:cria\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(norm);
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
 
   // Questions about expenses registered today must be answered from the signed-in user's
