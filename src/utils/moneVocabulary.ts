@@ -36,6 +36,12 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
 };
 
 const FINANCE_TERMS = new Set([
+  // Common language words are protected from typo correction.
+  'para','com','sem','por','de','do','da','dos','das','em','no','na','nos','nas','que','foi','uma','uns','umas',
+  'meu','minha','meus','minhas','seu','sua','seus','suas','voce','quero','queria','preciso','pode','poder',
+  'primeira','primeiro','segunda','segundo','terceira','terceiro','dia','ano','todo','toda','todos','todas',
+  'antes','depois','tambem','agora','hoje','amanha','ontem','qual','quando','quanto','qualquer','tanto','faz',
+  'mil','milhao','milhoes','reais','real','pesos','peso','argentinos','argentino','dolares','dolar','usd','ars','brl',
   'cria','criar','crie','faz','faca','fazer','adiciona','adicionar','registra','registrar',
   'cadastra','cadastrar','inclui','incluir','anota','anotar','lanca','lancar','gera','gerar',
   'monta','montar','coloca','colocar','bota','botar','consulta','consultar','consulte','mostra',
