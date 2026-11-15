@@ -986,7 +986,7 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: 'gemini-3.1-flash-lite',
       contents: [
         {
           role: 'user',
