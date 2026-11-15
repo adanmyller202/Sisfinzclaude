@@ -856,7 +856,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     /\b(?:parcelad\w*|parcelas?)\b/i.test(normalize(latestAssistantMessage)) &&
     /\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\b/i.test(normalize(latestAssistantMessage));
   const isInstallmentCreation =
-    hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
+    /\b(?:cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(norm) &&
+    /\b(?:fatura|conta|compra|boleto)\b/i.test(norm) &&
+    /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(norm);
   const isPendingInstallmentReply =
     hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount &&
     (isInstallmentAccountClarification || isInstallmentMonthClarification);
