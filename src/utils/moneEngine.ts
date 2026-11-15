@@ -1121,7 +1121,10 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   if (isPendingBillsQuestion) {
     const targetMonth = extractTargetMonth(question, currentMonthStr);
     const data = calculateMonthFinancials(context, targetMonth);
-    const pending = data.monthBills.filter((bill) => !bill.isCompleted);
+    // Only unpaid, non-refund obligations belong in the pending-bills answer.
+    const pending = data.monthBills.filter(
+      (bill) => !bill.isCompleted && !bill.isRefund && !bill.isRefunded
+    );
     const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
 
     if (pending.length === 0) {
@@ -1131,12 +1134,19 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       };
     }
 
-    const totalPending = pending.reduce((sum, bill) => sum + bill.amount, 0);
+    // Keep separate subtotals: ARS, USD, BRL and EUR must never be added together.
+    const totalsByCurrency = new Map<CurrencyCode, number>();
+    for (const bill of pending) {
+      totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
+    }
+    const totalSummary = [...totalsByCurrency.entries()]
+      .map(([code, amount]) => formatCurrencySpoken(amount, code))
+      .join(' + ');
     const lines = pending.map((bill) =>
-      `• ${bill.name}: ${formatCurrencySpoken(bill.amount, currency)} (vencimento: ${bill.date})`
+      `• ${bill.name}: ${formatCurrencySpoken(bill.amount, bill.currency)} (vencimento: ${bill.date})`
     );
     return {
-      text: `Encontrei ${pending.length} conta(s) pendente(s) em ${monthName}, totalizando ${formatCurrencySpoken(totalPending, currency)}:\n${lines.join('\n')}`,
+      text: `Encontrei ${pending.length} conta(s) pendente(s) em ${monthName}, totalizando ${totalSummary}:\n${lines.join('\n')}`,
       isInternalCalculation: true,
     };
   }
@@ -3018,23 +3028,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const targetMonth = extractTargetMonth(question, currentMonthStr);
     const data = calculateMonthFinancials(context, targetMonth);
     const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+    const pendingBills = data.monthBills.filter(
+      (bill) => !bill.isCompleted && !bill.isRefund && !bill.isRefunded
+    );
 
-    if (data.monthBills.length === 0) {
+    if (pendingBills.length === 0) {
       return {
-        text: `Não. Você não tem contas para pagar em ${monthName}.`,
+        text: `Não. Você não tem contas pendentes para pagar em ${monthName}.`,
         isInternalCalculation: true,
       };
     }
 
+    // Group by each bill's own currency; never combine unlike currencies.
     const totalsByCurrency = new Map<CurrencyCode, number>();
-    for (const bill of data.monthBills) {
+    for (const bill of pendingBills) {
       totalsByCurrency.set(bill.currency, (totalsByCurrency.get(bill.currency) || 0) + bill.amount);
     }
     const totalSummary = [...totalsByCurrency.entries()]
       .map(([code, amount]) => formatCurrencySpoken(amount, code))
       .join(' + ');
-    let text = `Sim. Você tem ${totalSummary} para pagar em ${monthName}:\n`;
-    data.monthBills.forEach((bill) => {
+    let text = `Sim. Você tem ${totalSummary} em contas pendentes para pagar em ${monthName}:\n`;
+    pendingBills.forEach((bill) => {
       text += `• ${bill.name}: ${formatCurrencySpoken(bill.amount, bill.currency)}\n`;
     });
 
