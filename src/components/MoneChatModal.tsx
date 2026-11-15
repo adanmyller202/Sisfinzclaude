@@ -1391,20 +1391,20 @@ export const MoneChatModal: React.FC<MoneChatModalProps> = ({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 12 }}
-                className="flex h-full min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden rounded-3xl border border-white bg-white/90 p-3 shadow-lg sm:p-4"
+                className="relative flex min-h-0 w-full max-w-xl flex-1 flex-col overflow-hidden rounded-3xl border border-white bg-white/90 p-3 shadow-lg sm:p-4"
               >
                 <div className="mb-2 flex shrink-0 items-center justify-between">
                   <span className="text-xs font-black text-slate-700">Conversa com a Mone</span>
                   <button type="button" onClick={handleClearChat} className="text-[10px] font-bold text-slate-400 hover:text-rose-500">Limpar</button>
                 </div>
-                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 text-left [webkit-overflow-scrolling:touch]" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }} aria-live="polite">
+                <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-1 py-1 pb-3 text-left [webkit-overflow-scrolling:touch]" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }} aria-live="polite">
                   {messages.map((message) => (
                     <div key={message.id} className={`max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed ${message.sender === 'mone' ? 'bg-emerald-50 text-slate-700' : 'ml-auto bg-emerald-600 text-white'}`}>{message.text}</div>
                   ))}
                   {isLoading && <p className="text-xs text-emerald-600">Mone está pensando…</p>}
                   <div ref={messagesEndRef} />
                 </div>
-                <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="sticky bottom-0 z-20 mt-auto flex shrink-0 gap-2 border-t border-emerald-100 bg-white/95 pt-3 pb-[env(safe-area-inset-bottom)]">
+                <form onSubmit={(event) => { event.preventDefault(); handleSendMessage(); }} className="relative z-30 mt-auto flex w-full shrink-0 gap-2 border-t border-emerald-100 bg-white pt-3 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
                   <input ref={inputRef} value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Escreva para a Mone…" enterKeyHint="send" className="h-12 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" disabled={isLoading} />
                   <button type="submit" disabled={!inputValue.trim() || isLoading} aria-label="Enviar mensagem" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white disabled:opacity-40"><Send className="h-4 w-4" /></button>
                 </form>
