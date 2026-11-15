@@ -841,32 +841,32 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const previousUserMessages = recentHistory.filter((item) => item.sender === 'user').map((item) => item.text);
   const installmentConversationText = [...previousUserMessages, question].join(' ');
   const installmentNorm = normalize(installmentConversationText);
-  const hasInstallmentCreateVerb = /\\b(?:cria\\w*|registra\\w*|adiciona\\w*|cadastra\\w*|lanca\\w*)\\b/i.test(installmentNorm);
-  const hasInstallmentTarget = /\\b(?:fatura|conta|compra|boleto)\\b/i.test(installmentNorm);
-  const hasInstallmentCount = /\\b\\d{1,2}\\s*(?:parcelas?|vezes|x)\\b/i.test(installmentNorm);
+  const hasInstallmentCreateVerb = /\b(?:cria\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*)\b/i.test(installmentNorm);
+  const hasInstallmentTarget = /\b(?:fatura|conta|compra|boleto)\b/i.test(installmentNorm);
+  const hasInstallmentCount = /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(installmentNorm);
   const isInstallmentMonthClarification =
-    /\\b(?:novembro|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|dezembro|proximo mes|mes que vem|este mes|mes atual)\\b/i.test(norm) &&
-    /\\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\\b/i.test(norm) &&
-    /\\b(?:mes|quando|inici\w*|come[cç]a|come[cç]ando)\\b/i.test(normalize(latestAssistantMessage)) &&
-    /\\b(?:parcelad\w*|parcelas?)\\b/i.test(normalize(latestAssistantMessage)) &&
+    /\b(?:novembro|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|dezembro|proximo mes|mes que vem|este mes|mes atual)\b/i.test(norm) &&
+    /\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\b/i.test(norm) &&
+    /\b(?:mes|quando|inici\w*|come[cç]a|come[cç]ando)\b/i.test(normalize(latestAssistantMessage)) &&
+    /\b(?:parcelad\w*|parcelas?)\b/i.test(normalize(latestAssistantMessage)) &&
     hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
   const isInstallmentCreation = hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
   if ((isInstallmentCreation || isInstallmentMonthClarification) && handlers?.onAddBill) {
     const totalMatch =
-      installmentConversationText.match(/(?:valor\\s+total(?:\\s+da\\s+compra)?|total\\s+da\\s+compra)\\s*(?:(?:e|foi)\\s+)?(?:de\\s+)?(?:[$R€]\\s*)?([\\d][\\d.,]*)/i) ||
-      installmentConversationText.match(/\\btotal\\s*(?:de|foi|:)\\s*(?:[$R€]\\s*)?([\\d][\\d.,]*)/i);
+      installmentConversationText.match(/(?:valor\s+total(?:\s+da\s+compra)?|total\s+da\s+compra)\s*(?:(?:e|foi)\s+)?(?:de\s+)?(?:[$R€]\s*)?([\d][\d.,]*)/i) ||
+      installmentConversationText.match(/\btotal\s*(?:de|foi|:)\s*(?:[$R€]\s*)?([\d][\d.,]*)/i);
     const totalAmount = totalMatch ? parseAmountFromText(totalMatch[1]) : null;
-    const countMatch = installmentConversationText.match(/\\b(\\d{1,2})\\s*(?:parcelas?|vezes|x)\\b/i);
+    const countMatch = installmentConversationText.match(/\b(\d{1,2})\s*(?:parcelas?|vezes|x)\b/i);
     const installmentsCount = countMatch ? Number(countMatch[1]) : null;
-    const dueDayMatch = installmentConversationText.match(/\\b(?:vence\\s+todo\\s+dia|vencimento\\s+(?:todo\\s+)?dia|todo\\s+dia|dia)\\s*(\\d{1,2})\\b/i);
+    const dueDayMatch = installmentConversationText.match(/\b(?:vence\s+todo\s+dia|vencimento\s+(?:todo\s+)?dia|todo\s+dia|dia)\s*(\d{1,2})\b/i);
     const dueDay = dueDayMatch ? Number(dueDayMatch[1]) : null;
     const nameMatch =
-      installmentConversationText.match(/\\b(?:de|do|da)\\s+(?:um|uma|o|a)\\s+([\\p{L}][\\p{L} -]{1,28}?)(?=\\s+(?:que|comprei|comprado|no|na|por|valor|total|em|vence)\\b|[,.;]|$)/iu) ||
-      installmentConversationText.match(/\\b(?:comprei|compra de)\\s+(?:um|uma|o|a)?\\s*([\\p{L}][\\p{L} -]{1,28}?)(?=\\s+(?:que|por|valor|total|em|vence)\\b|[,.;]|$)/iu);
+      installmentConversationText.match(/\b(?:de|do|da)\s+(?:um|uma|o|a)\s+([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|comprei|comprado|no|na|por|valor|total|em|vence)\b|[,.;]|$)/iu) ||
+      installmentConversationText.match(/\b(?:comprei|compra de)\s+(?:um|uma|o|a)?\s*([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|por|valor|total|em|vence)\b|[,.;]|$)/iu);
     const billName = nameMatch?.[1]?.trim() || '';
     const hasExplicitMonth = Object.keys(MONTH_NAMES_MAP).some((monthName) =>
-      new RegExp('\\\\b' + monthName + '\\\\b', 'i').test(installmentNorm)
-    ) || /\\b(?:proximo mes|mes que vem|este mes|mes atual)\\b/i.test(installmentNorm);
+      new RegExp('\\b' + monthName + '\\b', 'i').test(installmentNorm)
+    ) || /\b(?:proximo mes|mes que vem|este mes|mes atual)\b/i.test(installmentNorm);
     const targetMonth = hasExplicitMonth
       ? extractTargetMonth(installmentConversationText, currentMonthStr)
       : null;
