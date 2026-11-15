@@ -878,8 +878,8 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
     const dateMonth = numericDateMatch ? Number(numericDateMatch[2]) : null;
     const dateYear = numericDateMatch ? Number(numericDateMatch[3]) : null;
     const nameMatch =
-      originalInstallmentRequest.match(/\b(?:de|do|da)\s+(?:um|uma|o|a)\s+([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|comprei|comprado|no|na|por|valor|total|em|vence)\b|[,.;]|$)/iu) ||
-      originalInstallmentRequest.match(/\b(?:compra\s+de|comprei)\s+(?:um|uma|o|a)?\s*([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|por|valor|total|em|vence)\b|[,.;]|$)/iu);
+      originalInstallmentRequest.match(/\b(?:de|do|da)\s+(?:um|uma|o|a)\s+([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|comprei|comprado|no|na|por|de|valor|total|em|vence)\b|[,.;]|$)/iu) ||
+      originalInstallmentRequest.match(/\b(?:compra\s+de|comprei)\s+(?:um|uma|o|a)?\s*([\p{L}][\p{L} -]{1,28}?)(?=\s+(?:que|por|de|valor|total|em|vence)\b|[,.;]|$)/iu);
     const billName = nameMatch?.[1]?.trim() || '';
     const monthFromName = Object.keys(MONTH_NAMES_MAP).some((monthName) =>
       new RegExp('\\b' + monthName + '\\b', 'i').test(originalNorm)
