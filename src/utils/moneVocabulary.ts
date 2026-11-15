@@ -3,15 +3,15 @@
  * Normaliza formas naturais de pedir ações financeiras sem alterar os dados originais.
  */
 const ACTION_ALIASES: Array<[RegExp, string]> = [
-  [/\b(?:faz|faca|fazer|fazê|monta|montar|bota|botar|coloca|colocar|poe|por|mete|meter|cria|crie|criar|criar|gera|gerar|registre|registrar|registra|adiciona|adicionar|adicione|cadastra|cadastrar|cadastre|inclui|incluir|anota|anotar|lanca|lancar|lance|abre|abrir)\b/g, 'cria'],
-  [/\b(?:consulta|consultar|consulte|ver|ve|olha|olhar|mostra|mostrar|liste|listar|lista|me diz|diga|informa|informar|quanto tenho|quanto devo)\b/g, 'consultar'],
-  [/\b(?:paguei|pagar|paga|pague|quite|quitar|quitada|quitado|marcar como paga|marcar paga)\b/g, 'pagar'],
+  [/\\b(?:faz|faca|fazer|monta|montar|bota|botar|coloca|colocar|poe|por|mete|meter|cria|crie|criar|gera|gerar|registre|registrar|registra|adiciona|adicionar|adicione|cadastra|cadastrar|cadastre|inclui|incluir|anota|anotar|lanca|lancar|lance|abre|abrir|crea|crear|haceme|hace|hacer|agrega|agregar|carga|cargar|pone|poner)\\b/g, 'cria'],
+  [/\\b(?:consulta|consultar|consulte|ver|ve|olha|olhar|mostra|mostrar|liste|listar|lista|me diz|diga|informa|informar|quanto tenho|quanto devo|mostrame|muestrame|decime|dime|revisa|revisar)\\b/g, 'consultar'],
+  [/\\b(?:paguei|pagar|paga|pague|quite|quitar|quitada|quitado|marcar como paga|marcar paga|abona|abonar|pagame)\\b/g, 'pagar'],
   [/\b(?:recebi|receber|recebido|caiu|entrou|depositaram)\b/g, 'receber'],
   [/\b(?:apaga|apagar|exclui|excluir|deleta|deletar|remove|remover|cancela|cancelar)\b/g, 'excluir'],
   [/\b(?:muda|mudar|altera|alterar|edita|editar|corrige|corrigir|atualiza|atualizar)\b/g, 'editar'],
-  [/\b(?:transfere|transferir|transferencia|manda|mandar|move|mover)\b/g, 'transferir'],
+  [/\\b(?:transfere|transferir|transferencia|manda|mandar|move|mover|transfiere|transferi|pasame|pasar|envia|enviar)\\b/g, 'transferir'],
   [/\b(?:guarda|guardar|poupa|poupar|economiza|economizar|separa|separar|deposita|depositar|aporta|aportar)\b/g, 'guardar'],
-  [/\b(?:resgata|resgatar|retira|retirar|saca|sacar|tirar)\b/g, 'resgatar'],
+  [/\\b(?:resgata|resgatar|retira|retirar|saca|sacar|tirar|extrae|extraer)\\b/g, 'resgatar'],
 ];
 
 const COMMON_MISSPELLINGS: Record<string, string> = {
