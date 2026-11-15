@@ -34,6 +34,7 @@ import {
 } from './finance';
 import { formatCurrencySpoken } from './currency';
 import { getLocaleForLanguage } from './i18n';
+import { normalizeMoneCommand } from './moneVocabulary';
 
 export type MoneNavigationSection =
   | 'finance' | 'planejar' | 'goals' | 'savings' | 'categories' | 'report'
@@ -814,7 +815,7 @@ export function findMatchingIncome(
  * direct database execution, and concise responses.
  */
 export async function askMone(question: string, context: MoneContext, audio?: { data: string; mimeType: string }): Promise<MoneResponse> {
-  const norm = normalize(question);
+  const norm = normalizeMoneCommand(question);
   const { currentBalance, currency, language, goals, bills, incomes, expenses, handlers, lastActionItem } = context;
   const currentMonthStr = getCurrentMonthStr();
   const todayStr = getTodayStr();
@@ -839,13 +840,13 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const latestAssistantMessage = [...recentHistory].reverse().find((item) => item.sender === 'mone')?.text || '';
   const previousUserMessages = recentHistory.filter((item) => item.sender === 'user').map((item) => item.text);
   const allInstallmentMessages = [...previousUserMessages, question];
-  const installmentNorm = normalize(allInstallmentMessages.join(' '));
+  const installmentNorm = normalizeMoneCommand(allInstallmentMessages.join(' '));
   const originalInstallmentRequest = allInstallmentMessages.find((message) =>
-    /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(normalize(message)) &&
+    /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(normalizeMoneCommand(message)) &&
     /\b(?:fatura|conta|compra|boleto)\b/i.test(normalize(message)) &&
     /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(normalize(message))
   ) || allInstallmentMessages[0] || question;
-  const originalNorm = normalize(originalInstallmentRequest);
+  const originalNorm = normalizeMoneCommand(originalInstallmentRequest);
   const hasInstallmentCreateVerb = /\b(?:faz(?:er)?|faca|cria\w*|crie\w*|registra\w*|adiciona\w*|cadastra\w*|lanca\w*|gera\w*)\b/i.test(installmentNorm);
   const hasInstallmentTarget = /\b(?:fatura|conta|compra|boleto)\b/i.test(installmentNorm);
   const hasInstallmentCount = /\b\d{1,2}\s*(?:parcelas?|vezes|x)\b/i.test(installmentNorm);
