@@ -833,6 +833,65 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   const asksForecast =
     /\b(?:quanto\s+(?:que\s+)?(?:vai\s+)?(?:me\s+)?sobr\w*|quanto\s+(?:que\s+)?(?:me\s+)?rest\w*|previs[aã]o|proje[cç][aã]o|saldo\s+(?:final|no\s+fim)|fim\s+do\s+m[eê]s|fechamento\s+do\s+m[eê]s)\b/i.test(norm) ||
     (/\bsaldo\b/i.test(norm) && /\b(?:em|de|no|na|para|do|da)\s+(?:pr[oó]xim[oa]\s+m[eê]s|m[eê]s\s+que\s+vem|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/i.test(norm));
+  // Installment creation must be routed BEFORE bill queries. Words such as
+  // "fatura" and "vence" used to trigger asksBills and swallow creation requests.
+  // Also carry a pending installment request across a direct month clarification.
+  const recentHistory = context.history || [];
+  const latestAssistantMessage = [...recentHistory].reverse().find((item) => item.sender === 'mone')?.text || '';
+  const previousUserMessages = recentHistory.filter((item) => item.sender === 'user').map((item) => item.text);
+  const installmentConversationText = [...previousUserMessages, question].join(' ');
+  const installmentNorm = normalize(installmentConversationText);
+  const hasInstallmentCreateVerb = /\\b(?:cria\\w*|registra\\w*|adiciona\\w*|cadastra\\w*|lanca\\w*)\\b/i.test(installmentNorm);
+  const hasInstallmentTarget = /\\b(?:fatura|conta|compra|boleto)\\b/i.test(installmentNorm);
+  const hasInstallmentCount = /\\b\\d{1,2}\\s*(?:parcelas?|vezes|x)\\b/i.test(installmentNorm);
+  const isInstallmentMonthClarification =
+    /\\b(?:novembro|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|dezembro|proximo mes|mes que vem|este mes|mes atual)\\b/i.test(norm) &&
+    /\\b(?:mes|inici\w*|come[cç]a|come[cç]ando|primeira parcela)\\b/i.test(norm) &&
+    /\\b(?:mes|quando|inici\w*|come[cç]a|come[cç]ando)\\b/i.test(normalize(latestAssistantMessage)) &&
+    /\\b(?:parcelad\w*|parcelas?)\\b/i.test(normalize(latestAssistantMessage)) &&
+    hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
+  const isInstallmentCreation = hasInstallmentCreateVerb && hasInstallmentTarget && hasInstallmentCount;
+  if ((isInstallmentCreation || isInstallmentMonthClarification) && handlers?.onAddBill) {
+    const totalMatch =
+      installmentConversationText.match(/(?:valor\\s+total(?:\\s+da\\s+compra)?|total\\s+da\\s+compra)\\s*(?:(?:e|foi)\\s+)?(?:de\\s+)?(?:[$R€]\\s*)?([\\d][\\d.,]*)/i) ||
+      installmentConversationText.match(/\\btotal\\s*(?:de|foi|:)\\s*(?:[$R€]\\s*)?([\\d][\\d.,]*)/i);
+    const totalAmount = totalMatch ? parseAmountFromText(totalMatch[1]) : null;
+    const countMatch = installmentConversationText.match(/\\b(\\d{1,2})\\s*(?:parcelas?|vezes|x)\\b/i);
+    const installmentsCount = countMatch ? Number(countMatch[1]) : null;
+    const dueDayMatch = installmentConversationText.match(/\\b(?:vence\\s+todo\\s+dia|vencimento\\s+(?:todo\\s+)?dia|todo\\s+dia|dia)\\s*(\\d{1,2})\\b/i);
+    const dueDay = dueDayMatch ? Number(dueDayMatch[1]) : null;
+    const nameMatch =
+      installmentConversationText.match(/\\b(?:de|do|da)\\s+(?:um|uma|o|a)\\s+([\\p{L}][\\p{L} -]{1,28}?)(?=\\s+(?:que|comprei|comprado|no|na|por|valor|total|em|vence)\\b|[,.;]|$)/iu) ||
+      installmentConversationText.match(/\\b(?:comprei|compra de)\\s+(?:um|uma|o|a)?\\s*([\\p{L}][\\p{L} -]{1,28}?)(?=\\s+(?:que|por|valor|total|em|vence)\\b|[,.;]|$)/iu);
+    const billName = nameMatch?.[1]?.trim() || '';
+    const hasExplicitMonth = Object.keys(MONTH_NAMES_MAP).some((monthName) =>
+      new RegExp('\\\\b' + monthName + '\\\\b', 'i').test(installmentNorm)
+    ) || /\\b(?:proximo mes|mes que vem|este mes|mes atual)\\b/i.test(installmentNorm);
+    const targetMonth = hasExplicitMonth
+      ? extractTargetMonth(installmentConversationText, currentMonthStr)
+      : null;
+
+    if (!totalAmount || totalAmount <= 0) {
+      return { text: 'Entendi que você quer criar uma compra parcelada. Qual é o valor total da compra?', isInternalCalculation: true };
+    }
+    if (!installmentsCount || installmentsCount < 2) {
+      return { text: 'Em quantas parcelas você quer dividir essa compra?', isInternalCalculation: true };
+    }
+    if (!billName) {
+      return { text: 'Qual é o nome da compra que devo colocar na fatura?', isInternalCalculation: true };
+    }
+    if (!dueDay || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+      return { text: 'Qual é o dia de vencimento de cada parcela?', isInternalCalculation: true };
+    }
+    if (!targetMonth) {
+      return { text: 'Em qual mês vence a primeira parcela? Assim cadastro as próximas nos meses seguintes.', isInternalCalculation: true };
+    }
+    return (await executeMoneIntent({
+      intent: 'add_installment_bill',
+      data: { name: billName, totalAmount, installmentsCount, dueDay, targetMonth },
+    }, context)) || { text: 'Não consegui criar essa compra parcelada. Nenhuma fatura foi confirmada como criada.', isInternalCalculation: true };
+  }
+
   const asksBills = /\b(?:contas?|faturas?|boletos?)\b/i.test(norm) && /\b(?:pagar|pagamento|total|quanto|tenho|devo|pr[oó]xim[oa]|m[eê]s|venc\w*)\b/i.test(norm);
   const asksIncomes = /\b(?:ingressos?|receitas?|entradas?|receber|vou\s+receber)\b/i.test(norm) && /\b(?:total|quanto|tenho|pr[oó]xim[oa]|m[eê]s|previst\w*|vou\s+receber)\b/i.test(norm);
 
