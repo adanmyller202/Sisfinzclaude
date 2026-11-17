@@ -9,26 +9,67 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const NumberTicker = ({ value, currency, className }: { value: number; currency: CurrencyCode; className?: string }) => {
   const [displayValue, setDisplayValue] = useState(value);
-  
+
   useEffect(() => {
+    const targetValue = Number.isFinite(value) ? value : 0;
+    const startValue = Number.isFinite(displayValue) ? displayValue : 0;
     const duration = 1000;
-    const steps = 60;
-    const increment = (value - displayValue) / steps;
-    let currentStep = 0;
-    
-    const interval = setInterval(() => {
-      currentStep++;
-      setDisplayValue(prev => prev + increment);
-      if (currentStep >= steps) {
-        setDisplayValue(value);
-        clearInterval(interval);
+    let frameId = 0;
+    let startTime: number | null = null;
+
+    if (Object.is(startValue, targetValue) || startValue === targetValue) {
+      setDisplayValue(targetValue);
+      return;
+    }
+
+    const animate = (timestamp: number) => {
+      if (startTime === null) startTime = timestamp;
+      const progress = Math.min(1, (timestamp - startTime) / duration);
+      // Ease-out cubic keeps the count smooth without interval-driven render jitter.
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      const nextValue = startValue + (targetValue - startValue) * easedProgress;
+
+      setDisplayValue(progress >= 1 ? targetValue : nextValue);
+
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(animate);
       }
-    }, duration / steps);
-    
-    return () => clearInterval(interval);
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frameId);
   }, [value]);
 
-  return <span className={className}>{formatCurrency(displayValue, currency)}</span>;
+  const safeDisplayValue = Object.is(displayValue, -0) || displayValue === 0 ? 0 : displayValue;
+  const safeTargetValue = Object.is(value, -0) || value === 0 || !Number.isFinite(value) ? 0 : value;
+  const formattedValue = formatCurrency(safeDisplayValue, currency);
+  const reservedValue = formatCurrency(safeTargetValue, currency);
+
+  return (
+    <span
+      className="inline-grid align-middle whitespace-nowrap"
+      style={{
+        fontVariantNumeric: 'tabular-nums',
+        fontFeatureSettings: '"tnum"',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className={className}
+        style={{ gridArea: '1 / 1', visibility: 'hidden', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+      >
+        {reservedValue}
+      </span>
+      <span
+        className={className}
+        style={{ gridArea: '1 / 1', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+        aria-live="off"
+      >
+        {formattedValue}
+      </span>
+    </span>
+  );
 };
 
 import { CurrencyCode, BillItem, IncomeItem, ExpenseItem, LanguageCode, ChallengeGoal, SavingGoal, SharedUserSummary, SharedBill } from '../types';
