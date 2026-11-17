@@ -661,59 +661,111 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         </div>
       </motion.div>
 
-      {/* 2. SALDO ACTUAL CARD - Premium Glass & Depth */}
+      {/* 2. SALDO ACTUAL CARD - Split layout with monthly realized totals */}
       <motion.div variants={itemVariants} className="px-1">
-        <div className="glass rounded-[2rem] p-6 shadow-xl relative ring-1 ring-white/20 dark:ring-emerald-500/20 premium-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="glass rounded-[2rem] p-5 sm:p-6 shadow-xl relative ring-1 ring-white/30 dark:ring-emerald-500/20 premium-shadow overflow-hidden">
+          <div className="grid grid-cols-1 sm:grid-cols-[1.08fr_0.92fr] gap-5 sm:gap-6 items-stretch">
+            <div className="flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                    Saldo Actual
+                  </span>
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
-                  Saldo Actual
-                </span>
+                <div className="mb-5 min-h-[3.25rem] flex items-center">
+                  {isBalanceVisible ? (
+                    <NumberTicker
+                      value={effectiveCurrentBalance}
+                      currency={currency}
+                      className="text-3xl sm:text-4xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
+                    />
+                  ) : (
+                    <span className="text-3xl sm:text-4xl font-black tracking-[0.18em] text-slate-500 dark:text-slate-400 select-none" aria-label="Saldo oculto">
+                      ••••••
+                    </span>
+                  )}
+                </div>
               </div>
               <motion.button
-                whileHover={{ rotate: 180 }}
-                transition={{ duration: 0.4 }}
-                type="button"
-                onClick={() => setIsBalanceVisible((visible) => !visible)}
-                aria-label={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
-                aria-pressed={!isBalanceVisible}
-                title={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
-                className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
-              >
-                {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </motion.button>
-            </div>
-
-            <div className="mb-6 min-h-[3.25rem] flex items-center">
-              {isBalanceVisible ? (
-                <NumberTicker 
-                  value={effectiveCurrentBalance} 
-                  currency={currency} 
-                  className="text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
-                />
-              ) : (
-                <span className="text-4xl sm:text-5xl font-black tracking-[0.18em] text-slate-500 dark:text-slate-400 select-none" aria-label="Saldo oculto">
-                  ••••••
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
+                whileHover={{ scale: 1.02, y: -1 }}
+                whileTap={{ scale: 0.97 }}
                 type="button"
                 onClick={() => setIsBalanceBreakdownOpen(true)}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-500/10 cursor-pointer"
+                className="w-full sm:max-w-[190px] flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-md hover:shadow-emerald-500/20 cursor-pointer"
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Cuentas</span>
               </motion.button>
             </div>
+
+            <div className="sm:border-l sm:border-emerald-900/10 dark:sm:border-white/10 sm:pl-5 flex flex-col justify-center">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                  Movimiento del mes
+                </span>
+                <motion.button
+                  whileHover={{ rotate: 180, scale: 1.08 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ duration: 0.35 }}
+                  type="button"
+                  onClick={() => setIsBalanceVisible((visible) => !visible)}
+                  aria-label={isBalanceVisible ? 'Ocultar importes' : 'Mostrar importes'}
+                  aria-pressed={!isBalanceVisible}
+                  title={isBalanceVisible ? 'Ocultar importes' : 'Mostrar importes'}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                >
+                  {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </motion.button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <motion.button
+                  whileHover={{ y: -3, scale: 1.015 }}
+                  whileTap={{ scale: 0.97 }}
+                  type="button"
+                  onClick={() => { setIncomeFilter('received'); setActiveTab('incomes'); }}
+                  className="group min-w-0 text-left rounded-2xl p-3 bg-emerald-500/[0.09] dark:bg-emerald-400/[0.10] border border-emerald-500/15 hover:border-emerald-500/35 hover:bg-emerald-500/[0.14] transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    Ingresos
+                  </span>
+                  <span className="block mt-2 text-base sm:text-lg font-black font-mono-numbers tracking-tight text-emerald-700 dark:text-emerald-300 truncate">
+                    {isBalanceVisible ? formatCurrency(totalReceivedMonth, currency) : '••••••'}
+                  </span>
+                  <span className="block mt-1 text-[9px] font-semibold text-emerald-700/65 dark:text-emerald-300/65">
+                    Recibidos
+                  </span>
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ y: -3, scale: 1.015 }}
+                  whileTap={{ scale: 0.97 }}
+                  type="button"
+                  onClick={() => setActiveTab('expenses')}
+                  className="group min-w-0 text-left rounded-2xl p-3 bg-rose-500/[0.08] dark:bg-rose-400/[0.10] border border-rose-500/15 hover:border-rose-500/35 hover:bg-rose-500/[0.13] transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                    Gastos
+                  </span>
+                  <span className="block mt-2 text-base sm:text-lg font-black font-mono-numbers tracking-tight text-rose-700 dark:text-rose-300 truncate">
+                    {isBalanceVisible ? formatCurrency(totalSpentMonth, currency) : '••••••'}
+                  </span>
+                  <span className="block mt-1 text-[9px] font-semibold text-rose-700/65 dark:text-rose-300/65">
+                    Realizados
+                  </span>
+                </motion.button>
+              </div>
+              <span className="mt-2 text-[9px] text-slate-400 dark:text-slate-500 leading-tight">
+                Valores efetivados em {formatMonthName(selectedMonth, locale)}
+              </span>
+            </div>
           </div>
+        </div>
       </motion.div>
 
       {/* 3. QUICK ACTION PILLS - Micro-interactions */}
