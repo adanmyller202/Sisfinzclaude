@@ -831,6 +831,27 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // Route core financial questions directly to real SisFinz data before asking an LLM.
   const targetMonth = extractTargetMonth(question, currentMonthStr);
+
+  // Hypothetical purchase/spending questions are simulations only: calculate the
+  // impact on the selected month's projected balance without creating a transaction.
+  const asksHypotheticalPurchase =
+    /\\b(?:se\\s+(?:eu\\s+)?(?:fizer|faco|faca|comprar|comprasse|gastar|gastasse|pagar|pagasse)|caso\\s+(?:eu\\s+)?(?:compre|comprar|gaste|pague)|e\\s+se\\s+(?:eu\\s+)?(?:comprar|gastar|pagar))\\b/i.test(norm) &&
+    /\\b(?:compra|comprar|gasto|gastar|despesa|pagar)\\b/i.test(norm) &&
+    /\\b(?:sobr\\w*|rest\\w*|saldo|previs[aã]o)\\b/i.test(norm);
+  if (asksHypotheticalPurchase) {
+    const simulatedAmount = parseAmountFromText(question);
+    if (simulatedAmount !== null && simulatedAmount > 0) {
+      const monthData = calculateMonthFinancials(context, targetMonth);
+      const projectedBeforePurchase = monthData.projectedBalanceByCurrency.get(currency) ?? 0;
+      const projectedAfterPurchase = projectedBeforePurchase - simulatedAmount;
+      const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
+      const resultText = projectedAfterPurchase < 0
+        ? `Considerando a previsão de ${formatCurrencySpoken(projectedBeforePurchase, currency)} para ${monthName}, uma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)} deixaria seu saldo em -${formatCurrencySpoken(Math.abs(projectedAfterPurchase), currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`
+        : `Considerando a previsão de ${formatCurrencySpoken(projectedBeforePurchase, currency)} para ${monthName}, depois de uma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)}, sobrariam ${formatCurrencySpoken(projectedAfterPurchase, currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`;
+      return { text: resultText, isInternalCalculation: true };
+    }
+  }
+
   const asksForecast =
     /\b(?:quanto\s+(?:que\s+)?(?:vai\s+)?(?:me\s+)?sobr\w*|quanto\s+(?:que\s+)?(?:me\s+)?rest\w*|previs[aã]o|proje[cç][aã]o|saldo\s+(?:final|no\s+fim)|fim\s+do\s+m[eê]s|fechamento\s+do\s+m[eê]s)\b/i.test(norm) ||
     (/\bsaldo\b/i.test(norm) && /\b(?:em|de|no|na|para|do|da)\s+(?:pr[oó]xim[oa]\s+m[eê]s|m[eê]s\s+que\s+vem|janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|20\d{2})\b/i.test(norm));
