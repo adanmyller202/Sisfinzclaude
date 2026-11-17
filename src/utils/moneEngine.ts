@@ -835,9 +835,9 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
   // Hypothetical purchase/spending questions are simulations only: calculate the
   // impact on the selected month's projected balance without creating a transaction.
   const asksHypotheticalPurchase =
-    /\\b(?:se\\s+(?:eu\\s+)?(?:fizer|faco|faca|comprar|comprasse|gastar|gastasse|pagar|pagasse)|caso\\s+(?:eu\\s+)?(?:compre|comprar|gaste|pague)|e\\s+se\\s+(?:eu\\s+)?(?:comprar|gastar|pagar))\\b/i.test(norm) &&
-    /\\b(?:compra|comprar|gasto|gastar|despesa|pagar)\\b/i.test(norm) &&
-    /\\b(?:sobr\\w*|rest\\w*|saldo|previs[aã]o)\\b/i.test(norm);
+    /\b(?:se\s+(?:eu\s+)?(?:fizer|faco|faca|comprar|comprasse|gastar|gastasse|pagar|pagasse)|caso\s+(?:eu\s+)?(?:compre|comprar|gaste|pague)|e\s+se\s+(?:eu\s+)?(?:comprar|gastar|pagar))\b/i.test(norm) &&
+    /\b(?:compra|comprar|gasto|gastar|despesa|pagar)\b/i.test(norm) &&
+    /\b(?:sobr\w*|rest\w*|saldo|previs[aã]o)\b/i.test(norm);
   if (asksHypotheticalPurchase) {
     const simulatedAmount = parseAmountFromText(question);
     if (simulatedAmount !== null && simulatedAmount > 0) {
