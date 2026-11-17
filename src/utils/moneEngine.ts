@@ -834,10 +834,22 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
 
   // Mone identity is deterministic: never expose the underlying AI model name.
   if (/\b(?:qual\s+(?:(?:e|era)\s+)?(?:o\s+)?nome(?:\s+proprio)?(?:\s+(?:dela|dele|seu|da\s+mone))?|como\s+(?:voce|ela)\s+se\s+chama|quem\s+(?:e|sou)\s+(?:voce|a\s+mone)|seu\s+nome)\b/i.test(norm)) {
-    r  const asksHypotheticalPurchase =
+    return {
+      text: 'Sou a Mone, assistente oficial do SisFinz e parte integrante deste aplicativo. Estou aqui para conversar com você, acompanhar o contexto das nossas conversas e ajudar a consultar, organizar e atualizar suas finanças usando os dados reais da sua conta no SisFinz.',
+      isInternalCalculation: true,
+    };
+  }
+
+  // Route core financial questions directly to real SisFinz data before asking an LLM.
+  const targetMonth = extractTargetMonth(question, currentMonthStr);
+
+  // Hypothetical purchase/spending questions are simulations only: calculate the
+  // impact on the selected month's projected balance without creating a transaction.
+  const asksHypotheticalPurchase =
     /\b(?:se\s+(?:eu\s+)?(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse)|caso\s+(?:eu\s+)?(?:compre|comprar|gaste|pague)|e\s+se\s+(?:eu\s+)?(?:comprar|gastar|pagar)|(?:quando|se)\s+eu\s+(?:comprar|gastar|pagar))\b/i.test(norm) &&
     /\b(?:compra|comprar|compre|gasto|gastar|despesa|pagar)\b/i.test(norm) &&
     /\b(?:sobr\w*|rest\w*|saldo|previs[aã]o|fic\w*|terei|fica|ficaria|com\s+quanto)\b/i.test(norm);
+
   if (asksHypotheticalPurchase) {
     const simulatedAmount = parseHypotheticalAmountFromText(question);
     if (simulatedAmount !== null && simulatedAmount > 0) {
@@ -847,12 +859,6 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       const monthName = formatMonthName(targetMonth, locale).split(' ')[0];
       const resultText = projectedAfterPurchase < 0
         ? `Considerando a previsão de ${formatCurrencySpoken(projectedBeforePurchase, currency)} para ${monthName}, uma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)} deixaria seu saldo em -${formatCurrencySpoken(Math.abs(projectedAfterPurchase), currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`
-        : `Considerando a previsão de ${formatCurrencySpoken(projectedBeforePurchase, currency)} para ${monthName}, depois de uma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)}, sobrariam ${formatCurrencySpoken(projectedAfterPurchase, currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`;
-      return { text: resultText, isInternalCalculation: true };
-    }
-  }
-
-ma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)} deixaria seu saldo em -${formatCurrencySpoken(Math.abs(projectedAfterPurchase), currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`
         : `Considerando a previsão de ${formatCurrencySpoken(projectedBeforePurchase, currency)} para ${monthName}, depois de uma compra hipotética de ${formatCurrencySpoken(simulatedAmount, currency)}, sobrariam ${formatCurrencySpoken(projectedAfterPurchase, currency)}. Isso é apenas uma simulação: nenhuma compra ou despesa foi cadastrada.`;
       return { text: resultText, isInternalCalculation: true };
     }
