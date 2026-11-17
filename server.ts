@@ -5,7 +5,7 @@
 
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Modality, Type, Behavior } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -57,99 +57,6 @@ function checkRateLimit(ip: string): boolean {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
- 
-// Issue a single-use, short-lived Gemini Live token only to an authenticated SisFinz user.
-// The browser connects directly to Gemini for lower audio latency; the long-lived API key stays server-side.
-app.post('/api/mone/live-token', async (req, res) => {
-  try {
-    const firebaseApiKey = firebaseConfig.apiKey;
-    const geminiApiKey = process.env.GEMINI_API_KEY || '';
-    if (!firebaseApiKey || !geminiApiKey) {
-      res.status(503).json({ error: 'Configuração segura da Mone Live indisponível no servidor.' });
-      return;
-    }
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Autenticação necessária.' });
-      return;
-    }
-    const idToken = authHeader.slice(7).trim();
-    if (!idToken) {
-      res.status(401).json({ error: 'Token de autenticação vazio.' });
-      return;
-    }
-
-    const verifyResp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
-    });
-    if (!verifyResp.ok) {
-      res.status(401).json({ error: 'Sessão expirada. Entre novamente no SisFinz.' });
-      return;
-    }
-    const verifyData: any = await verifyResp.json();
-    const uid = verifyData.users?.[0]?.localId;
-    if (!uid) {
-      res.status(401).json({ error: 'Não foi possível validar o usuário.' });
-      return;
-    }
-
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-    if (!checkRateLimit(`mone_live_ip:${ip}`) || !checkRateLimit(`mone_live_uid:${uid}`)) {
-      res.status(429).json({ error: 'Muitas conexões de voz. Aguarde um minuto.' });
-      return;
-    }
-
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey, httpOptions: { apiVersion: 'v1beta' } });
-    const now = Date.now();
-    const token = await ai.authTokens.create({
-      config: {
-        uses: 1,
-        expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-        newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
-        liveConnectConstraints: {
-          model: 'gemini-3.8-live',
-          config: {
-            responseModalities: [Modality.AUDIO],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-            sessionResumption: {},
-            tools: [{
-              functionDeclarations: [{
-                name: 'sisfinz_action',
-                behavior: Behavior.BLOCKING,
-                description: 'Executa uma ação financeira solicitada explicitamente pelo usuário no SisFinz ou responde uma consulta financeira. Use somente quando o usuário pedir claramente uma operação ou pergunta financeira. Não invente dados.',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                    request: { type: Type.STRING, description: 'Pedido original do usuário em linguagem natural, sem alterar valores ou nomes.' },
-                  },
-                  required: ['request'],
-                },
-              }],
-            }],
-          },
-        },
-      },
-    });
-
-    if (!token?.name) {
-      res.status(502).json({ error: 'O Google não retornou um token de voz válido.' });
-      return;
-    }
-    res.json({
-      token: token.name,
-      model: 'gemini-3.8-live',
-      expiresAt: new Date(now + 30 * 60 * 1000).toISOString(),
-    });
-  } catch (err: any) {
-    console.error('[Mone Live] Token creation failed:', err);
-    res.status(502).json({ error: 'Não foi possível iniciar a conexão de voz em tempo real.' });
-  }
-});
-
 
 // Secure Exact-Email User Lookup with Abuse & Rate-Limiting Protection (Server Token Verified)
 app.post('/api/search-user', async (req, res) => {
@@ -231,9 +138,9 @@ app.post('/api/search-user', async (req, res) => {
 
     console.log(`[SearchUser] Searching for ${cleanEmail} (hash: ${emailHash})`);
 
-    // -------------------------------------------------------------
+    // ---------------------------------------------
     // Tier 1: Exact REST document lookup on user_directory_lookup/${emailHash}
-    // -------------------------------------------------------------
+    // ---------------------------------------------
     try {
       const lookupUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/user_directory_lookup/${emailHash}?key=${apiKey}`;
       const lookupResp = await fetch(lookupUrl, { headers: firestoreHeaders });
@@ -262,10 +169,9 @@ app.post('/api/search-user', async (req, res) => {
 
     const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery?key=${apiKey}`;
 
-    // -------------------------------------------------------------
+    // ---------------------------------------------
     // Tier 2: Query user_directory collection by email
-    // -------------------------------------------------------------
-    // NOTE: Requires 'allow list' permissions which may be blocked.
+    // ---------------------------------------------
     try {
       const queryBodyUserDir = {
         structuredQuery: {
@@ -309,10 +215,9 @@ app.post('/api/search-user', async (req, res) => {
       console.warn('[SearchUser] Tier 2 error:', e);
     }
 
-    // -------------------------------------------------------------
+    // ---------------------------------------------
     // Tier 3: Query users collection by email
-    // -------------------------------------------------------------
-    // NOTE: Usually blocked as it contains PII.
+    // ---------------------------------------------
     try {
       const queryBodyUsers = {
         structuredQuery: {
@@ -356,10 +261,9 @@ app.post('/api/search-user', async (req, res) => {
       console.warn('[SearchUser] Tier 3 error:', e);
     }
 
-    // -------------------------------------------------------------
+    // ---------------------------------------------
     // Tier 4: Master Auth lookup via Google Identity Toolkit
-    // -------------------------------------------------------------
-    // NOTE: Only works if API Key has required permissions.
+    // ---------------------------------------------
     try {
       const identityUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`;
       const identityResp = await fetch(identityUrl, {
@@ -390,7 +294,6 @@ app.post('/api/search-user', async (req, res) => {
       console.warn('[SearchUser] Tier 4 error:', e);
     }
 
-    // User not found across all 4 tiers
     console.log(`[SearchUser] User ${cleanEmail} NOT found after all 4 tiers.`);
     res.json({ found: false, user: null });
   } catch (err: any) {
@@ -422,31 +325,27 @@ app.post('/api/mone', async (req, res) => {
       return;
     }
 
-    // Reuse a recently verified Firebase UID for this exact ID token to avoid
-    // an extra Identity Toolkit round-trip on every chat turn (5-minute TTL).
-    let verifiedUid = getCachedUid(idToken);
-    if (!verifiedUid) {
-      const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKeyConfig}`;
-      const verifyResp = await fetch(verifyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      });
+    // Cryptographic token verification on Google Identity Toolkit
+    const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKeyConfig}`;
+    const verifyResp = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
 
-      if (!verifyResp.ok) {
-        res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' });
-        return;
-      }
-
-      const verifyData: any = await verifyResp.json();
-      const verifiedUser = verifyData.users?.[0];
-      if (!verifiedUser || !verifiedUser.localId) {
-        res.status(401).json({ error: 'Falha ao identificar usuário autenticado a partir do token.' });
-        return;
-      }
-      verifiedUid = verifiedUser.localId;
-      setCachedUid(idToken, verifiedUser.localId);
+    if (!verifyResp.ok) {
+      res.status(401).json({ error: 'Token de autenticação inválido ou expirado.' });
+      return;
     }
+
+    const verifyData: any = await verifyResp.json();
+    const verifiedUser = verifyData.users?.[0];
+    if (!verifiedUser || !verifiedUser.localId) {
+      res.status(401).json({ error: 'Falha ao identificar usuário autenticado a partir do token.' });
+      return;
+    }
+
+    const verifiedUid = verifiedUser.localId;
     const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
 
     if (!checkRateLimit(`mone_ip:${clientIp}`) || !checkRateLimit(`mone_uid:${verifiedUid}`)) {
@@ -454,18 +353,10 @@ app.post('/api/mone', async (req, res) => {
       return;
     }
 
-    const { message, audio, audioMimeType, history = [], context = {}, persona: rawPersona } = req.body;
-    const requestedTimeZone = typeof req.body?.timeZone === 'string' ? req.body.timeZone : 'UTC';
-    let userTimeZone = 'UTC';
-    try {
-      // Validate the browser-provided IANA timezone before using it in date calculations.
-      new Intl.DateTimeFormat('en-US', { timeZone: requestedTimeZone }).format(new Date());
-      userTimeZone = requestedTimeZone;
-    } catch {
-      userTimeZone = 'UTC';
-    }
+    const { message, history = [], context = {}, persona: rawPersona } = req.body;
 
-    if ((!message || typeof message !== 'string') && (!audio || typeof audio !== 'string')) {
+
+    if (!message || typeof message !== 'string') {
       res.status(400).json({ error: 'Message is required' });
       return;
     }
@@ -483,135 +374,31 @@ app.post('/api/mone', async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Fast conversational lane: casual/general messages do not need the full financial
-    // context or the structured-action prompt. This avoids turning greetings into commands
-    // and reduces latency and token usage for ordinary conversation.
-        const financialIntentPattern = /\b(saldo|balances?|contas?|cuentas?|accounts?|account|faturas?|facturas?|faturas?|bills?|bill|invoices?|invoice|despesas?|gastos?|expenses?|expense|gastar|gastei|receitas?|ingresos?|income|salary|sueldo|sal[aá]rio|renda|finan[cç]as?|financeir[oa]s?|economia|economiz|ahorro|ahorros|saving|savings|poup|cofrinh\w*|guardad\w*|poupad\w*|convid\w*|convites?|aceit\w*|recus\w*|categorias?|planej\w*|calend[aá]rio|calendar|relat[oó]rios?|report|liberdade|freedom|ritmo|metas?|objetivos?|goals?|goal|budget|presupuesto|or[cç]amento|sobrou|sobra|previs[aã]o|proyecci[oó]n|proje[cç][aã]o|desafio|desaf[ií]o|challenge|semanas?|weekly|pagar|paguei|pagamento|payment|pay|receber|recebi|receive|received|invest|cart[aã]o|tarjeta|banco|bank|transfer[eê]ncia|transferencia|transfer|d[oó]lar|dollar|pesos?|reais|currency|cot[aã]ç[aã]o|parcelas?|cuotas?|vencimento|vencimiento|due|boleto|comprar|compra|purchase|consigo|cabe no|moto|carro|financiar|d[ií]vida|deuda|debt|compartilh|compartid|my share|mi parte|minha parte|quanto tenho|cuanto tengo|how much do i have|na conta|en la cuenta|in my account|no banco|en el banco)\b/i;
-    const accountNamesInContext = Array.isArray(req.body?.context?.accounts)
-      ? req.body.context.accounts.map((account: any) => String(account?.name || '').trim().toLowerCase()).filter(Boolean)
-      : [];
-    const mentionsKnownAccount = typeof message === 'string' &&
-      accountNamesInContext.some((name: string) => message.toLowerCase().includes(name));
-    const isGeneralConversation = typeof message === 'string' && message.trim().length > 0 &&
-      !audio && !financialIntentPattern.test(message) && !mentionsKnownAccount;
-
-    if (isGeneralConversation) {
-      const recentHistory = Array.isArray(history)
-        ? history.slice(-24).map((item: any) => ({
-            role: item?.sender === 'mone' ? 'Mone' : 'Usuário',
-            text: typeof item?.text === 'string' ? item.text.slice(0, 1200) : '',
-          })).filter((item: any) => item.text)
-        : [];
-      const conversationPrompt = `Você é Mone, uma assistente de IA natural, inteligente, calorosa e útil, integrada ao aplicativo SisFinz.
-Converse como uma IA geral moderna: responda sobre qualquer assunto, cumprimente naturalmente, explique, raciocine, faça perguntas pertinentes e mantenha o fio da conversa.
-IDENTIDADE FIXA: seu nome é Mone. Se perguntarem seu nome, responda sempre "Meu nome é Mone". Nunca diga que seu nome é Gemini, Google, Flash ou qualquer nome de modelo; o modelo é apenas a tecnologia interna que executa você.
-Não transforme mensagens casuais em tarefas financeiras. Não ofereça cadastrar despesas ou receitas sem que isso tenha sido pedido.
-Responda no idioma da mensagem do usuário. Seja direta quando a pergunta for simples e detalhada quando o assunto exigir. Adote este estilo de personalidade escolhido pelo usuário: ${({
-          direto: 'direto, claro, objetivo e sem rodeios',
-          coach: 'motivador, positivo e focado em progresso, sem exagerar',
-          vovo: 'acolhedor, paciente, carinhoso e simples',
-          sincerao: 'franco, energético e bem-humorado, sem ser rude',
-        } as Record<string, string>)[persona] || 'natural, acolhedor e objetivo'}. Nunca afirme que fez alterações no SisFinz neste modo.
-Histórico recente:
-${recentHistory.map((item: any) => item.role + ': ' + item.text).join('\n') || 'Sem histórico.'}
-Mensagem atual do usuário: ${message.trim()}`;
-
-      const fastResponse = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
-        contents: conversationPrompt,
-        config: {
-          maxOutputTokens: 350,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      });
-      const naturalText = fastResponse.text?.trim();
-      if (naturalText) {
-        res.json({ intent: 'conversation', directResponse: naturalText });
-        return;
-      }
-    }
-
     const {
       currentBalance = 0,
-      forecastBalance = currentBalance,
-      accounts = [],
-      statusRecords = [],
       currency = 'BRL',
       language = 'pt',
       bills = [],
       incomes = [],
       expenses = [],
       goals = [],
-      savings = [],
-      savingTransactions = [],
-      categories = [],
-      sharedBills = [],
-      sharedPartners = [],
-      sharedInvitations = [],
-      weeklyChallenges = [],
       lastActionItem = null,
     } = context;
 
     const today = new Date();
-    const dateParts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: userTimeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(today);
-    const datePart = (type: string) => dateParts.find((part) => part.type === type)?.value || '';
-    const todayStr = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+    const todayStr = today.toISOString().split('T')[0];
     const currentMonthStr = todayStr.substring(0, 7);
 
-    const DOLLAR_SIGN = String.fromCharCode(36);
-    const currencyNames: Record<string, string> = {
-      ARS: 'pesos argentinos',
-      USD: 'dólares estadounidenses',
-      BRL: 'reais brasileiros',
-      EUR: 'euros',
-    };
-    const currencySymbols: Record<string, string> = {
-      ARS: 'ARS ' + DOLLAR_SIGN,
-      USD: 'US' + DOLLAR_SIGN,
-      BRL: 'R' + DOLLAR_SIGN,
-      EUR: '€',
-    };
-    const billsSummary = bills.map((b: any) => {
-      const linkedAccount = (accounts || []).find((account: any) => account.id === b.accountId);
-      const distributions = (b.accountDistributions || []).map((distribution: any) => {
-        const account = (accounts || []).find((item: any) => item.id === distribution.accountId);
-        const distributionCurrency = account?.currency || currency;
-        return {
-          accountName: account?.name || null,
-          amount: distribution.amount,
-          currency: distributionCurrency,
-          currencyName: currencyNames[distributionCurrency] || 'moeda não identificada',
-          currencySymbol: currencySymbols[distributionCurrency] || '',
-        };
-      });
-      const distributionCurrencies = [...new Set(distributions.map((item: any) => item.currency))] as string[];
-      const billCurrency = distributionCurrencies.length === 1
-        ? distributionCurrencies[0]
-        : distributionCurrencies.length > 1
-          ? 'MULTI'
-          : linkedAccount?.currency || currency;
-      return {
-        id: b.id,
-        name: b.name,
-        amount: b.amount,
-        currency: billCurrency,
-        currencyName: billCurrency === 'MULTI' ? 'moedas diferentes' : currencyNames[billCurrency] || 'moeda não identificada',
-        currencySymbol: billCurrency === 'MULTI' ? '' : currencySymbols[billCurrency] || '',
-        currencyBreakdown: distributions,
-        accountId: b.accountId || null,
-        accountName: linkedAccount?.name || null,
-        dueDay: b.dueDay,
-        dueDate: b.dueDate,
-        category: b.category,
-        recurrence: b.recurrence,
-        recurrenceMonthsCount: b.recurrenceMonthsCount,
-      };
-    });
+    const billsSummary = bills.map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      amount: b.amount,
+      dueDay: b.dueDay,
+      dueDate: b.dueDate,
+      category: b.category,
+      recurrence: b.recurrence,
+      recurrenceMonthsCount: b.recurrenceMonthsCount,
+    }));
 
     const incomesSummary = incomes.map((i: any) => ({
       id: i.id,
@@ -629,103 +416,14 @@ Mensagem atual do usuário: ${message.trim()}`;
       category: e.category,
     }));
 
-    const goalsSummary = (goals || []).map((g: any) => {
-      const savedAmount = (g.history || []).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-      return {
-        id: g.id,
-        title: g.title,
-        targetAmount: g.targetAmount || g.totalTarget,
-        savedAmount,
-        remainingAmount: Math.max(0, (Number(g.totalTarget || g.targetAmount) || 0) - savedAmount),
-        completedSquares: (g.completedSquares || []).length,
-        totalSquares: g.totalSquares || 0,
-        currency: g.currency || currency,
-      };
-    });
-
-    const categoriesSummary = (categories || []).map((category: any) => ({
-      id: category.id,
-      name: category.name,
-      scope: category.scope || 'all',
-      isPredefined: Boolean(category.isPredefined),
-    }));
-    const savingsSummary = (savings || []).map((saving: any) => ({
-      id: saving.id,
-      name: saving.name,
-      hasTarget: saving.hasTarget !== false,
-      targetAmount: saving.targetAmount || null,
-      currentAmount: Number(saving.currentAmount) || 0,
-      currency: saving.currency || currency,
-      deadline: saving.deadline || null,
-      notes: saving.notes || '',
-    }));
-    const savingTransactionsSummary = (savingTransactions || []).slice(0, 40).map((tx: any) => ({
-      id: tx.id,
-      savingId: tx.savingId,
-      savingName: tx.savingName,
-      type: tx.type,
-      amount: tx.amount,
-      currency: tx.currency || currency,
-      date: tx.date,
-      note: tx.note || '',
-    }));
-
-    const sharedInvitationsSummary = (sharedInvitations || [])
-      .filter((invitation: any) => invitation.status === 'pending')
-      .map((invitation: any) => ({
-        id: invitation.id,
-        fromUserName: invitation.fromUserName,
-        fromUserEmail: invitation.fromUserEmail,
-        createdAt: invitation.createdAt,
-      }));
-    const sharedPartnersSummary = (sharedPartners || []).map((partner: any) => ({
-      uid: partner.uid,
-      displayName: partner.displayName,
-      email: partner.email || '',
-    }));
-    const userIdForContext = verifiedUid ?? '';
-    const sharedBillsSummary = (sharedBills || []).map((b: any) => ({
-      id: b.id,
-      title: b.title,
-      amount: b.amount,
-      dueDate: b.dueDate,
-      month: b.month,
-      category: b.category,
-      status: b.status,
-      myShare: b.shares?.[userIdForContext]?.amount,
-      myShareStatus: b.shares?.[userIdForContext]?.status,
-    }));
-
-    const weeklyChallengesSummary = (weeklyChallenges || []).map((challenge: any) => ({
-      id: challenge.id,
-      title: challenge.title,
-      currency: challenge.currency,
-      initialAmount: challenge.initialAmount,
-      totalWeeks: challenge.totalWeeks || 52,
-      totalTarget: challenge.totalTarget,
-      completedWeeks: challenge.completedWeeks || [],
-      status: challenge.status,
-      savingMode: challenge.savingMode || 'progressive',
-    }));
-
-    const accountsSummary = (accounts || []).map((account: any) => ({
-      id: account.id,
-      name: account.name,
-      type: account.type,
-      currency: account.currency,
-      currentBalance: account.currentBalance,
-      isActive: account.isActive !== false,
-    }));
-
-    const completionSummary = (statusRecords || []).slice(-120).map((record: any) => ({
-      id: record.id,
-      isCompleted: Boolean(record.isCompleted),
-      month: record.month,
-      type: record.type,
+    const goalsSummary = (goals || []).map((g: any) => ({
+      id: g.id,
+      title: g.title,
+      targetAmount: g.targetAmount,
     }));
 
     const conversationHistoryStr = (history || [])
-      .slice(-24)
+      .slice(-8)
       .map((m: any) => `${m.sender === 'user' ? 'Usuário' : 'Mone'}: "${m.text}"`)
       .join('\n');
 
@@ -736,221 +434,40 @@ Mensagem atual do usuário: ${message.trim()}`;
     };
 
     const stylePrompt = persona !== 'direto' && personaDescriptions[persona]
-      ? `\n\nESTILO DO MONE: ${personaDescriptions[persona]}. O estilo afeta SOMENTE o tom do directResponse. Nunca altere intent, data, números, datas ou valores: continuam exatos. Responda no idioma preferido do usuário, com naturalidade e sem sacrificar contexto. Nunca zombe da aparência, origem, renda ou dívidas da pessoa. Se a mensagem indicar aflição financeira séria (dívida impagável, desespero, 'não aguento mais'), responda calmo e acolhedor mesmo no estilo sincero.`
+      ? `\n\nESTILO DO MONE: ${personaDescriptions[persona]}. O estilo afeta SOMENTE o tom do directResponse. Nunca altere intent, data, números, datas ou valores: continuam exatos. Máximo 2 frases curtas. Responda no idioma preferido do usuário. Nunca zombe da aparência, origem, renda ou dívidas da pessoa. Se a mensagem indicar aflição financeira séria (dívida impagável, desespero, 'não aguento mais'), responda calmo e acolhedor mesmo no estilo sincero.`
       : '';
 
-    const systemPrompt = `Você é Mone, a assistente pessoal inteligente integrada ao SisFinz. Você é uma IA conversacional completa, não um robô de comandos financeiros.
-IDENTIDADE FIXA: seu nome é Mone. Se perguntarem seu nome, responda sempre "Meu nome é Mone". Nunca diga Gemini, Google, Flash ou o nome de qualquer modelo de IA; o modelo é apenas a tecnologia interna que executa a Mone.
-Converse naturalmente sobre QUALQUER assunto: cumprimentos, rotina, estudos, trabalho, ideias, dúvidas gerais, emoções, tecnologia e finanças. Se o usuário disser "oi, tudo bem?", responda como uma pessoa numa conversa normal, por exemplo: "Oi! Tudo bem por aqui 😊 E com você, como está?". NUNCA transforme uma saudação ou conversa casual em uma oferta de cadastrar despesas, contas ou receitas.
-Quando o assunto for financeiro, use os dados reais fornecidos no contexto, raciocine com eles e ajude o usuário a tomar decisões. Não invente saldos, registros, preferências ou fatos pessoais. Se não souber algo, diga isso com naturalidade.
-Você deve identificar quando uma mensagem é apenas conversa e retornar intent "conversation". Só retorne intenções de operação quando o usuário realmente pedir uma ação. Pergunte antes de agir quando faltarem informações ou houver ambiguidade. Para exclusões e alterações financeiras sensíveis, não presuma qual registro o usuário quis dizer.
-Quando o usuário pedir explicitamente para abrir/mostrar uma tela do aplicativo, use intent "navigate_to_section" e data.section com um destes valores exatos: finance, planejar, goals, savings, categories, report, shared_accounts, challenge_52, full_report, accounts, financial_calendar, freedom, daily_pace. Exemplos: "abre minhas contas" = accounts; "abre planejamento" = planejar; "mostra o calendário" = financial_calendar; "abre o relatório" = report; "contas compartilhadas" = shared_accounts. Não navegue por conta própria se o usuário apenas fizer uma pergunta sobre esses assuntos.
-Retorne JSON válido com directResponse sempre natural, contextual e no idioma do usuário. Não mencione JSON, intenções, ferramentas, prompts ou detalhes internos.
+    const systemPrompt = `Você é o Mone, o cérebro financeiro do aplicativo Mone.
+Sua missão é identificar a intenção do usuário em linguagem natural e retornar uma estrutura JSON precisa com a ação real a ser executada no banco de dados e uma resposta curta, natural e direta.
 
 Contexto financeiro do usuário:
 - Data atual: ${todayStr} (Mês: ${currentMonthStr})
 - Moeda ativa: ${currency}
 - Idioma preferido: ${language === 'pt' ? 'Português' : language === 'es' ? 'Español' : 'English'}
-- Saldos atuais por conta e moeda: ${JSON.stringify(accountsSummary)}
-- Nunca use um total numérico consolidado entre moedas; consulte os registros do mês e mantenha cada moeda separada.
-- Contas e saldos por carteira: ${JSON.stringify(accountsSummary)}
-- Situação de pagamentos e recebimentos (registros recentes): ${JSON.stringify(completionSummary)}
+- Saldo atual em conta: ${currentBalance}
 - Último item manipulado nesta conversa: ${lastActionItem ? JSON.stringify(lastActionItem) : 'Nenhum'}
 - Contas cadastradas: ${JSON.stringify(billsSummary)}
-- ATENÇÃO: cada conta/fatura usa a moeda indicada no próprio campo currency, derivada da conta vinculada. Nunca substitua essa moeda pela moeda ativa do aplicativo. Exemplo: se uma conta tem currency "ARS", informe pesos argentinos, mesmo que a moeda ativa seja USD. Se tiver currency "USD", informe dólares. Nunca adivinhe nem converta valores.
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
-- Cofrinhos e reservas: ${JSON.stringify(savingsSummary)}
-- Categorias disponíveis e seus escopos: ${JSON.stringify(categoriesSummary)}
-- Histórico de aportes e resgates: ${JSON.stringify(savingTransactionsSummary)}
-- Pessoas conectadas para compartilhar contas: ${JSON.stringify(sharedPartnersSummary)}
-- Convites pendentes recebidos: ${JSON.stringify(sharedInvitationsSummary)}
-- Contas compartilhadas e situação da minha parte: ${JSON.stringify(sharedBillsSummary)}
-- Desafios semanais e semanas concluídas: ${JSON.stringify(weeklyChallengesSummary)}
 
 Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
-REGRAS DE RESPOSTA E EXECUÇÃO (MUITO RIGOROSO):
-0. MOEDA É DADO OBRIGATÓRIO E DEVE SER DITA POR EXTENSO: ao consultar contas, use o campo currency de cada registro em Contas cadastradas, junto de currencyName e currencySymbol. Se currencyBreakdown estiver preenchido, informe cada parcela com a moeda da respectiva conta, sem aplicar uma única moeda ao valor total. O código é a fonte da verdade; nunca deduza a moeda pelo cifrão genérico, pois ARS e USD podem usar o mesmo caractere. ARS significa PESOS ARGENTINOS e deve ser falado como "pesos argentinos"; seu prefixo visual inequívoco é "ARS" seguido do cifrão. USD significa DÓLARES ESTADUNIDENSES e deve ser falado como "dólares"; seu prefixo é "US" seguido do cifrão. BRL significa REAIS e usa o prefixo "R" seguido do cifrão; EUR significa EUROS e usa o símbolo do euro. Sempre fale e escreva o nome da moeda junto ao valor (ex.: "45.000 pesos argentinos"), nunca responda apenas "45.000". O campo Moeda ativa é apenas padrão geral, não sobrescreve a moeda individual da conta. Não some valores de moedas diferentes; apresente subtotais separados por moeda. Nunca converta moedas sem pedido explícito e cotação fornecida. Se o registro não tiver moeda identificável, diga que não conseguiu confirmar a moeda; nunca adivinhe.
-1. Responda como uma conversa humana, acolhedora e inteligente. Não force respostas curtas demais; acompanhe o tom e a complexidade do usuário. Para cumprimentos e papo casual, converse normalmente e não fale de finanças sem motivo.
-2. Seja natural, tenha personalidade e faça perguntas de continuidade quando fizer sentido. Não use saudações robóticas nem respostas padronizadas.
-3. Nunca mostre termos técnicos, nomes de tabelas, intenções, JSON ou detalhes internos. Nunca invente que executou uma operação.
-4. Se o usuário fizer uma pergunta matemática (ex: "quanto é 50.000 + 50.000?"), intent: "math", directResponse: "100.000."
-5. SE O USUÁRIO PEDIR PARA MODIFICAR/EDITAR DADOS DE UMA CONTA OU REGISTRO EXISTENTE:
-   - Alterar vencimento ou data de conta existente (ex: "mudar o vencimento da compra da sapatilha para o dia 20", "alterar vencimento da sapatilha para dia 20", "trocar data da conta de luz para o dia 10"):
-     intent: "update_bill"
-     name: "Compra da sapatilha" (ou o nome correspondente encontrado)
-     matchedId: id da conta correspondente encontrada em Contas cadastradas
-     dueDay: 20
-     directResponse: "Vencimento de Compra da sapatilha alterado para o dia 20."
-   - Alterar valor de conta existente (ex: "mudar valor da sapatilha para 150", "alterar conta de internet para 130"):
-     intent: "update_bill"
-     name: "Compra da sapatilha"
-     matchedId: id da conta correspondente
-     amount: 150
-     directResponse: "Valor de Compra da sapatilha alterado para 150 na moeda da conta."
-   - Alterar valor de despesa (ex: "mudar valor do uber para 35"):
-     intent: "update_expense"
-     name: "Uber"
-     matchedId: id da despesa
-     amount: 35
-     directResponse: "Despesa de Uber alterada para 35 na moeda da conta."
-   - Alterar receita ou salário (ex: "mudar meu salário para 55 mil"):
-     intent: "update_income"
-     name: "Salário"
-     matchedId: id da receita
-     amount: 55000
-     directResponse: "Salário alterado para 55.000 na moeda do registro."
-6. SE O USUÁRIO PEDIR PARA CRIAR REGISTROS:
-   - Compra parcelada (ex: "comprei um tênis de 200 mil em 5 vezes", "compra de tênis de 200.000 em 5 parcelas vencendo dia 17"):
-     intent: "add_installment_bill"
-     name: "Compra de tênis"
-     totalAmount: 200000
-     installmentsCount: 5
-     amount: 40000
-     dueDay: 17
-     accountName: nome da conta, se citada; se houver várias contas e nenhuma for indicada, pergunte qual conta
-     directResponse: confirmação natural somente após a gravação.
-   - Despesa avulsa (ex: "gastei 2500 pesos de uber agora", "adicione despesa de 4000 de uber hoje"):
-     intent: "add_expense"
-     name: "Uber"
-     amount: 2500
-     category: "Transporte"
-     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta foi o gasto
-     directResponse: confirmação natural somente após a gravação.
-   - Receita (ex: "recebi 50 mil de salário", "adicione receita de 1500"):
-     intent: "add_income"
-     name: "Salário"
-     amount: 50000
-     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta entra o dinheiro
-     isReceived: true somente se o usuário disser que já recebeu/caiu; caso contrário false
-     isRecurring: true se pediu repetição mensal; salário pode ser mensal por padrão, exceto se disser "sem repetição", "uma vez" ou "avulso"
-     directResponse: confirmação natural somente após a gravação.
-   - Conta/fatura (ex: "crie uma conta de internet de 80 mil para dia 10, repetindo todo mês", ou "crie uma fatura de 80 mil sem repetição"):
-     intent: "add_bill"
-     name: "Internet"
-     amount: 80000
-     dueDay: 10
-     accountName: nome da conta, se citada; se houver várias contas ativas e nenhuma for indicada, pergunte em qual conta vincular
-     isRecurring: true para repetição mensal; false quando disser "sem repetição", "uma vez" ou "avulso"
-     targetMonth: mês inicial solicitado ou mês atual
-     Se faltar valor ou vencimento essencial, use "ask_clarification" e pergunte apenas o dado que falta.
-   - Despesa com repetição: cadastre como "add_bill" recorrente, nunca como uma despesa avulsa.
-7. OUTRAS AÇÕES:
-   - Transferência entre contas próprias (ex: "transfira 20 mil do Galicia para o dinheiro"):
-     intent: "transfer_between_accounts"
-     fromAccountId: id exato da conta de origem na lista de contas
-     toAccountId: id exato da conta de destino na lista de contas
-     amount: valor numérico exato
-     directResponse: confirmação natural somente se a ação for executada
-   - Concluir uma semana de desafio semanal (ex: "conclua a semana 3 do desafio moto usando o Galicia"):
-     intent: "complete_challenge_week"
-     challengeId: id exato do desafio
-     challengeName: nome do desafio
-     weekNumber: número inteiro da semana
-     accountId: id exato da conta de onde sairá o dinheiro
-     accountName: nome da conta
-     directResponse: confirmação natural somente se a ação for executada
-   - Desfazer uma semana já concluída de um desafio semanal e devolver o dinheiro para uma conta escolhida:
-     intent: "undo_challenge_week"
-     challengeId: id exato do desafio
-     challengeName: nome do desafio
-     weekNumber: número inteiro da semana já concluída
-     accountId: id exato da conta que receberá a devolução
-     accountName: nome da conta de destino
-     directResponse: confirmação natural somente se a ação for executada
-   - Marcar somente minha parte de conta compartilhada como paga (ex: "marque minha parte do aluguel compartilhado como paga"):
-     intent: "mark_shared_share_paid"
-     name: título exato da conta compartilhada
-     matchedId: id exato da conta compartilhada
-     targetMonth: mês de referência "YYYY-MM"
-     directResponse: confirmação natural somente se a ação for executada
-   - Marcar como pago (ex: "paguei a academia", "marca a sapatilha como paga"):
-     intent: "mark_bill_paid"
-     name: nome da conta
-     matchedBillId: id correspondente
-     directResponse: "Pronto. Academia marcada como paga."
-   - Marcar receita recebida (ex: "recebi meu salário", "marque a receita de freelance como recebida"):
-     intent: "mark_income_received"
-     name: nome da receita correspondente
-     matchedId: id da receita correspondente
-     targetMonth: mês de referência "YYYY-MM"
-     directResponse: "Pronto. Receita marcada como recebida."
-   - Corrigir item anterior (ex: "na verdade foi 3000, não 2500"):
-     intent: "correct_last_item"
-     newAmount: 3000
-     directResponse: "Corrigido. Valor alterado para 3.000 na moeda do registro."
-   - Excluir item (ex: "apaga a despesa de uber", "excluir conta da academia", "excluir compra da sapatilha"):
-     intent: "delete_item"
-     name: nome do item
-     itemType: "bill" | "expense" | "income"
-     matchedId: id do item correspondente
-     directResponse: "Registro excluído."
-   - Consultas financeiras (quanto gastei este mês?, quanto vou receber?, tenho algo para pagar?, qual meu saldo?):
-     intent: "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast"
-     targetMonth: "YYYY-MM"
-     directResponse: resposta direta e exata.
-   - Consultar todas as contas e saldos: intent "query_accounts".
-   - Criar conta: intent "create_account", name, type (bank, wallet, cash, safe ou other), currency e initialBalance.
-   - Editar conta: intent "update_account", accountId ou accountName exato e newName, type, currency, currentBalance ou notes conforme pedido.
-   - Excluir conta: intent "delete_account", accountId ou accountName exato.
-   - Ativar/desativar conta: intent "toggle_account_active", accountId ou accountName exato e isActive true para ativar ou false para desativar.
-   - Consultar saldo de uma conta específica (ex: "quanto tenho no Galicia?"):
-     intent: "query_account_balance"
-     accountId: id exato da conta
-     accountName: nome exato da conta
-   - Consultar pessoas conectadas e convites pendentes: intent "query_shared_partners".
-   - Enviar convite: intent "send_shared_invitation", email do destinatário.
-   - Aceitar ou recusar convite: intent "respond_shared_invitation", invitationId ou invitationName e accept true/false. Só responda quando o usuário pedir explicitamente.
-   - Consultar contas compartilhadas (ex: "quanto falta pagar da minha parte?"):
-     intent: "query_shared_bills"
-     name: título da conta, se o usuário citar uma
-     targetMonth: "YYYY-MM"
-   - Criar conta compartilhada: intent "create_shared_bill", title, amount, dueDay, targetMonth, partnerName ou partnerId, myPercentage, partnerPercentage, isRecurring e category.
-   - Editar conta compartilhada: intent "update_shared_bill", name ou matchedId e os campos que devem mudar.
-   - Excluir conta compartilhada: intent "delete_shared_bill", name ou matchedId exato.
-   - Use somente pessoas em "Pessoas conectadas para compartilhar contas". Se houver mais de uma e não for indicada, pergunte quem é o parceiro. Se não houver conexão, explique que precisa conectar a pessoa primeiro.
-   - Se o usuário não informar percentuais, reutilize a divisão da última conta compartilhada com essa pessoa; se não houver histórico, use 50/50. As porcentagens devem somar 100%.
-   - Se o usuário disser apenas "60/40" sem deixar claro qual percentual é dele e qual é do parceiro, pergunte antes de criar ou alterar. Nunca inverta nem adivinhe as partes.
-   - Consultar progresso do desafio semanal (ex: "como está meu desafio da moto?"):
-     intent: "query_weekly_challenge"
-     challengeId: id exato do desafio
-     challengeName: nome do desafio
-   - Consultar progresso de metas de economia (ex: "quanto falta para minha meta da moto?"):
-     intent: "query_goal_progress"
-     goalId: id exato da meta
-     goalName: nome da meta
-   - Consultar categorias: intent "query_categories".
-   - Criar categoria: intent "create_category", name e scope (all, bill, income ou expense).
-   - Renomear/alterar categoria: intent "update_category", categoryId ou categoryName exato e newName/scope.
-   - Excluir categoria: intent "delete_category", categoryId ou categoryName exato.
-   - Consultar cofrinhos/reservas: intent "query_savings", savingId ou savingName se citar um cofrinho específico.
-   - Consultar histórico de aportes/resgates: intent "query_saving_transactions", savingId ou savingName se citar um cofrinho específico.
-   - Criar cofrinho: intent "create_saving_goal", name, hasTarget, targetAmount se houver meta, currency e deadline se informado.
-   - Fazer aporte: intent "deposit_to_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
-   - Fazer resgate: intent "withdraw_from_saving", savingId ou savingName, amount, exchangeRate para moeda diferente de ARS, date e note.
-   - Excluir cofrinho: intent "delete_saving_goal", savingId ou savingName exato; nunca exclua se houver mais de uma correspondência.
-   - Editar cofrinho: intent "update_saving_goal", savingId ou savingName exato e newName, targetAmount, hasTarget, deadline ou notes conforme solicitado.
-   - Editar uma meta de economia (ex: "renomeie minha meta da moto para viagem"):
-     intent: "update_goal"
-     goalId: id exato da meta
-     goalName: nome atual da meta
-     newName: novo nome, se solicitado
-     icon: novo ícone, se solicitado
-     notes: nova observação, se solicitada
-   - Excluir uma meta de economia (ex: "exclua a meta da moto"):
-     intent: "delete_goal"
-     goalId: id exato da meta
-     goalName: nome da meta
-
-REGRA ABSOLUTA:
-NUNCA use 'general_query' quando o usuário pedir para criar, alterar data, alterar vencimento, alterar valor ou excluir um registro. Identifique a conta ou registro nas listas fornecidas e retorne a intenção de modificação correspondente.${stylePrompt}
+REGRAS DE SIMULAÇÃO HIPOTÉTICA E CONTEXTO (MUITO IMPORTANTE):
+1. Se o usuário fizer uma pergunta simulando uma compra ou gasto hipotético (ex: "E se eu fizer uma compra de 700000?", "E se eu gastasse o mesmo valor em janeiro de 2027?"):
+   - Analise se o usuário mencionou um mês (ex: dezembro, janeiro de 2027). Se o usuário não citar o mês explicitamente na pergunta atual, HERDE O MÊS que estava sendo discutido nas mensagens anteriores do histórico.
+   - Se o usuário disser "o mesmo valor" ou "esse valor" sem digitar um novo número, recupere o valor numérico da última compra ou gasto simulado mencionado no histórico recente.
+   - Retorne intent 'query_forecast' para o mês correto, com directResponse explicando o cálculo.
+2. Respostas ULTRA DIRETAS e CURTAS.
+3. NUNCA diga saudações repetitivas como "Olá, sou Mone...".
+4. NUNCA mostre termos técnicos como "Cálculo Interno Direto".
+5. Se o usuário fizer uma pergunta matemática, intent: "math".
+6. SE O USUÁRIO PEDIR PARA CRIAR OU ALTERAR REGISTROS, retorne o intent correspondente (${stylePrompt}).
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
-  "intent": "conversation" | "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "mark_shared_share_paid" | "complete_challenge_week" | "undo_challenge_week" | "mark_income_received" | "correct_last_item" | "delete_item" | "create_goal" | "transfer_between_accounts" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "query_account_balance" | "query_shared_bills" | "query_weekly_challenge" | "query_goal_progress" | "update_goal" | "delete_goal" | "ask_clarification" | "general_query" | "math",
+  "intent": "add_expense" | "add_income" | "add_installment_bill" | "add_bill" | "update_bill" | "update_expense" | "update_income" | "mark_bill_paid" | "correct_last_item" | "delete_item" | "create_goal" | "query_spending" | "query_incomes" | "query_bills" | "query_balance" | "query_forecast" | "ask_clarification" | "general_query" | "math",
   "data": {
     "name": "string",
     "amount": number,
@@ -963,24 +480,9 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
     "category": "string",
     "matchedId": "string",
     "matchedBillId": "string",
-    "matchedIncomeId": "string",
     "itemType": "expense" | "bill" | "income",
     "newAmount": number,
-    "newName": "string",
-    "icon": "string",
-    "fromAccountId": "string",
-    "toAccountId": "string",
-    "fromAccountName": "string",
-    "toAccountName": "string",
-    "challengeId": "string",
-    "challengeName": "string",
-    "goalId": "string",
-    "goalName": "string",
-    "weekNumber": number,
-    "accountId": "string",
-    "accountName": "string",
-    "date": "YYYY-MM-DD",
-    "notes": "string"
+    "newName": "string"
   },
   "directResponse": "string"
 }`;
@@ -990,17 +492,16 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
       contents: [
         {
           role: 'user',
-          parts: audio
-            ? [
-                { inlineData: { mimeType: typeof audioMimeType === 'string' ? audioMimeType : 'audio/webm', data: audio } },
-                { text: `${systemPrompt}\n\nInterprete o áudio anexado como a mensagem do usuário. Entenda português informal, valores falados, correções e intenção. Não invente informações que não foram ditas.` },
-              ]
-            : [{ text: `${systemPrompt}\n\nMensagem do usuário: "${message}"` }],
+          parts: [
+            {
+              text: `${systemPrompt}\n\nMensagem do usuário: "${message}"`,
+            },
+          ],
         },
       ],
       config: {
         responseMimeType: 'application/json',
-        maxOutputTokens: 600,
+        maxOutputTokens: 300,
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
@@ -1098,7 +599,6 @@ app.post('/api/parse-lancamento', async (req, res) => {
       return;
     }
 
-    // 1. Fast Token Verification (using cache if available)
     const tokenStart = Date.now();
     let verifiedUid = getCachedUid(idToken);
 
@@ -1152,7 +652,6 @@ app.post('/api/parse-lancamento', async (req, res) => {
 
     const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
 
-    // Rate limiting: 30 requests/min per user / IP
     if (!checkRateLimit(`v_ip:${clientIp}`) || !checkRateLimit(`v_uid:${verifiedUid}`)) {
       const errPayload = {
         erro: 'Limite de solicitações excedido',
@@ -1189,7 +688,6 @@ app.post('/api/parse-lancamento', async (req, res) => {
     const ai = new GoogleGenAI({ apiKey: geminiKey });
     const refDate = dataAtual || new Date().toISOString().split('T')[0];
 
-    // Ultra-concise direct prompt with strict numeric rules for pt-BR / es-AR
     const systemPrompt = `Você é o parser financeiro de alta velocidade do SisFinz.
 Extraia lançamentos financeiros do comando do usuário (seja texto ou áudio em pt-BR).
 Hoje: ${refDate}
@@ -1198,13 +696,12 @@ Contas: ${JSON.stringify(contas)}
 Preferências do usuário: ${JSON.stringify(userPreferences)}
 
 REGRAS RÁPIDAS DE VALORES MONETÁRIOS (CRÍTICO):
-1. O ponto com exatamente 3 dígitos depois é separador de milhar: "20.000" = 20000 (vinte mil, NUNCA vinte); "1.234.567" = 1234567.
-2. A vírgula ou ponto com 1 ou 2 dígitos é decimal: "20,50" ou "20.50" = 20.5; "20,5" = 20.5.
-3. Expressões textuais e gírias: "20 mil" = 20000; "1,5 mil" = 1500; "2 milhões" = 2000000; "50 conto/pila/pau" = 50; "1k" = 1000.
-4. O campo "valor" DEVE ser um número (number) puro maior que 0, NUNCA texto ou string.
-5. Na descrição, REMOVA totalmente a quantia monetária e a unidade de moeda (ex: em "gastei 20.000 pesos no bolso", o valor é 20000 e a descrição é "Bolso", sem resíduos como ".pesos").
-6. Se for enviado um áudio, transcreva a fala exata e inclua a transcrição em "textoTranscrito".
-7. Retorne obrigatoriamente um objeto JSON com array "lancamentos".`;
+1. O ponto com exatamente 3 dígitos depois é separador de milhar: "20.000" = 20000; "1.234.567" = 1234567.
+2. A vírgula ou ponto com 1 ou 2 dígitos é decimal.
+3. Expressões textuais e gírias: "20 mil" = 20000; "1k" = 1000.
+4. O campo "valor" DEVE ser um número (number) puro maior que 0.
+5. Na descrição, REMOVA totalmente a quantia monetária.
+6. Retorne obrigatoriamente um objeto JSON com array "lancamentos".`;
 
     const generateConfig = {
       systemInstruction: systemPrompt,
@@ -1258,7 +755,6 @@ REGRAS RÁPIDAS DE VALORES MONETÁRIOS (CRÍTICO):
     let response: any = null;
     let lastError: any = null;
 
-    // Fast model candidates with strict 8s timeout on attempt 1, and 5s timeout on retry
     const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
     for (let attempt = 0; attempt < 2 && !response; attempt++) {
       const modelName = modelsToTry[attempt] || 'gemini-3.1-flash-lite';
@@ -1282,7 +778,6 @@ REGRAS RÁPIDAS DE VALORES MONETÁRIOS (CRÍTICO):
     aiTime = Date.now() - aiStart;
     const totalTime = Date.now() - startTime;
 
-    // Output performance metrics to server log
     console.log(
       `[Parse-Lançamento] InputType: ${audio ? 'AUDIO' : 'TEXT'} | Token verify: ${tokenVerifyTime}ms | Gemini AI: ${aiTime}ms | Total: ${totalTime}ms`
     );
@@ -1315,16 +810,13 @@ REGRAS RÁPIDAS DE VALORES MONETÁRIOS (CRÍTICO):
       return;
     }
 
-    // Post-process and sanitize items to guarantee valid numbers and clean descriptions
     if (parsed.lancamentos && Array.isArray(parsed.lancamentos)) {
       parsed.lancamentos = parsed.lancamentos.map((item: any) => {
-        // Sanitize numeric value using server-side rules if needed
         let val = Number(item.valor);
         if (isNaN(val) || !isFinite(val) || val <= 0) {
           val = 0;
         }
 
-        // Clean up description residue if any
         let desc = String(item.descricao || '')
           .replace(/^[.,\s]+|[.,\s]+$/g, '')
           .replace(/^\.?(?:pesos|peso|reais|real)\b/gi, '')
@@ -1371,8 +863,8 @@ async function startServer() {
     });
   }
 
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${port}`);
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
   });
 }
 
