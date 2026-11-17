@@ -43,6 +43,7 @@ const FINANCE_TERMS = new Set([
   'antes','depois','tambem','agora','hoje','amanha','ontem','qual','quando','quanto','qualquer','tanto','faz',
   'fizer','faco','faria','sobra','sobrar','sobram','sobraria','sobrariam','resta','restar','restam','restaria','restariam',
   'fica','ficar','ficaria','ficariam','terei','tera','caso','compre','comprasse','gaste','gastasse','pagasse',
+  'mesmo','mesma','valor','esse','essa','isso','realizasse','realizar',
   'mil','milhao','milhoes','reais','real','pesos','peso','argentinos','argentino','dolares','dolar','usd','ars','brl',
   'cria','criar','crie','faz','faca','fazer','adiciona','adicionar','registra','registrar',
   'cadastra','cadastrar','inclui','incluir','anota','anotar','lanca','lancar','gera','gerar',
@@ -93,8 +94,32 @@ function correctKnownTypos(text: string): string {
 export function normalizeMoneCommand(input: string): string {
   let text = fold(input);
   text = correctKnownTypos(text);
-  for (const [pattern, replacement] of ACTION_ALIASES) text = text.replace(pattern, replacement);
+
+  // Check if this is a conditional hypothetical simulation question before applying ACTION_ALIASES
+  const isConditionalPurchaseQuestion =
+    /\b(?:se\s+(?:eu\s+)?(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse|realizasse|realizar)|caso\s+(?:eu\s+)?(?:compre|comprar|gaste|pague|faca)|e\s+se\s+(?:eu\s+)?(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse|realizasse|realizar)|(?:quando|se)\s+eu\s+(?:comprar|gastar|pagar))\b/i.test(text);
+
+  for (const [pattern, replacement] of ACTION_ALIASES) {
+    // Do not rewrite "faca"/"fazer" to "cria" inside conditional simulation questions
+    if (isConditionalPurchaseQuestion && replacement === 'cria') continue;
+    text = text.replace(pattern, replacement);
+  }
+
+  // Ensure conditional simulation questions that omit "quanto sobra" or use "gastasse"
+  // satisfy all 3 regex branches of asksHypotheticalPurchase in moneEngine.ts
+  if (
+    isConditionalPurchaseQuestion &&
+    /\b(?:compra|comprar|compre|comprasse|gasto|gastar|gastasse|despesa|pagar|pagasse|mesm[oa]\s+valor|ess[ea]\s+valor)\b/i.test(text)
+  ) {
+    if (!/\b(?:compra|comprar|compre|gasto|gastar|despesa|pagar)\b/i.test(text)) {
+      text += ' gastar';
+    }
+    if (!/\b(?:sobr\w*|rest\w*|saldo|previs[aã]o|fic\w*|terei|fica|ficaria|com\s+quanto)\b/i.test(text)) {
+      text += ' saldo';
+    }
+  }
+
   return text;
 }
 
-export const MONE_VOCABULARY_VERSION = '1.0.1';
+export const MONE_VOCABULARY_VERSION = '1.0.2';
