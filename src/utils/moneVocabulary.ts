@@ -41,6 +41,8 @@ const FINANCE_TERMS = new Set([
   'meu','minha','meus','minhas','seu','sua','seus','suas','voce','quero','queria','preciso','pode','poder',
   'primeira','primeiro','segunda','segundo','terceira','terceiro','dia','ano','todo','toda','todos','todas',
   'antes','depois','tambem','agora','hoje','amanha','ontem','qual','quando','quanto','qualquer','tanto','faz',
+  'fizer','faco','faria','sobra','sobrar','sobram','sobraria','sobrariam','resta','restar','restam','restaria','restariam',
+  'fica','ficar','ficaria','ficariam','terei','tera','caso','compre','comprasse','gaste','gastasse','pagasse',
   'mil','milhao','milhoes','reais','real','pesos','peso','argentinos','argentino','dolares','dolar','usd','ars','brl',
   'cria','criar','crie','faz','faca','fazer','adiciona','adicionar','registra','registrar',
   'cadastra','cadastrar','inclui','incluir','anota','anotar','lanca','lancar','gera','gerar',
@@ -95,4 +97,4 @@ export function normalizeMoneCommand(input: string): string {
   return text;
 }
 
-export const MONE_VOCABULARY_VERSION = '1.0.0';
+export const MONE_VOCABULARY_VERSION = '1.0.1';
