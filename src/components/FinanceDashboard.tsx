@@ -663,57 +663,108 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
 
       {/* 2. SALDO ACTUAL CARD - Premium Glass & Depth */}
       <motion.div variants={itemVariants} className="px-1">
-        <div className="glass rounded-[2rem] p-6 shadow-xl relative ring-1 ring-white/20 dark:ring-emerald-500/20 premium-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="glass rounded-[2rem] p-5 sm:p-6 shadow-xl relative ring-1 ring-white/20 dark:ring-emerald-500/20 premium-shadow">
+          <div className="flex justify-between items-stretch gap-3">
+            {/* Left column: current balance and accounts */}
+            <div className="w-[58%] min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <div className="w-8 h-8 shrink-0 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                    Saldo Actual
+                  </span>
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
-                  Saldo Actual
-                </span>
+                <div className="min-h-[3.25rem] flex items-center">
+                  {isBalanceVisible ? (
+                    <NumberTicker
+                      value={Object.is(effectiveCurrentBalance, -0) ? 0 : effectiveCurrentBalance}
+                      currency={currency}
+                      className="text-3xl sm:text-5xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
+                    />
+                  ) : (
+                    <span className="text-3xl sm:text-5xl font-black tracking-[0.18em] text-slate-500 dark:text-slate-400 select-none" aria-label="Saldo oculto">
+                      ••••••
+                    </span>
+                  )}
+                </div>
               </div>
-              <motion.button
-                whileHover={{ rotate: 180 }}
-                transition={{ duration: 0.4 }}
-                type="button"
-                onClick={() => setIsBalanceVisible((visible) => !visible)}
-                aria-label={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
-                aria-pressed={!isBalanceVisible}
-                title={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
-                className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
-              >
-                {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </motion.button>
-            </div>
-
-            <div className="mb-6 min-h-[3.25rem] flex items-center">
-              {isBalanceVisible ? (
-                <NumberTicker 
-                  value={effectiveCurrentBalance} 
-                  currency={currency} 
-                  className="text-4xl sm:text-5xl font-black font-mono-numbers tracking-tight text-slate-900 dark:text-white block"
-                />
-              ) : (
-                <span className="text-4xl sm:text-5xl font-black tracking-[0.18em] text-slate-500 dark:text-slate-400 select-none" aria-label="Saldo oculto">
-                  ••••••
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
                 type="button"
                 onClick={() => setIsBalanceBreakdownOpen(true)}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-500/10 cursor-pointer"
+                className="mt-5 w-full flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-shadow shadow-md hover:shadow-emerald-500/10 cursor-pointer"
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Cuentas</span>
               </motion.button>
             </div>
+
+            {/* Right column: privacy toggle and paid monthly cashflow comparison */}
+            <div className="w-[42%] min-w-0 flex flex-col">
+              <div className="flex justify-end">
+                <motion.button
+                  whileHover={{ rotate: 180 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ duration: 0.4 }}
+                  type="button"
+                  onClick={() => setIsBalanceVisible((visible) => !visible)}
+                  aria-label={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
+                  aria-pressed={!isBalanceVisible}
+                  title={isBalanceVisible ? 'Ocultar saldo' : 'Mostrar saldo'}
+                  className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
+                >
+                  {isBalanceVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </motion.button>
+              </div>
+              <div className="mt-2 flex flex-col gap-5 w-full">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { setActiveTab('incomes'); setIncomeFilter('received'); }}
+                  aria-label="Ver ingresos recibidos del mes"
+                  className="w-full min-w-0 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 cursor-pointer group"
+                >
+                  <span className="block text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">Ingresos</span>
+                  <span className="block mt-0.5 text-lg sm:text-xl font-black font-mono-numbers text-emerald-700 dark:text-emerald-400 truncate">
+                    {isBalanceVisible ? formatCurrency(Math.max(0, Number(totalReceivedMonth) || 0), currency) : '••••'}
+                  </span>
+                  <span className="mt-2 block h-2.5 w-full overflow-hidden rounded-full bg-slate-100/90 dark:bg-slate-700/60">
+                    <motion.span
+                      initial={false}
+                      animate={{ width: isBalanceVisible && Math.max(0, Number(totalReceivedMonth) || 0) + Math.max(0, Number(totalSpentMonth) || 0) > 0 ? `${(Math.max(0, Number(totalReceivedMonth) || 0) / Math.max(Math.max(0, Number(totalReceivedMonth) || 0), Math.max(0, Number(totalSpentMonth) || 0))) * 100}%` : '0%' }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                      className="block h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_4px_12px_rgba(16,185,129,0.28)]"
+                    />
+                  </span>
+                </motion.button>
+
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setActiveTab('expenses')}
+                  aria-label="Ver gastos realizados del mes"
+                  className="w-full min-w-0 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60 cursor-pointer group"
+                >
+                  <span className="block text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">Gastos</span>
+                  <span className="block mt-0.5 text-lg sm:text-xl font-black font-mono-numbers text-rose-600 dark:text-rose-400 truncate">
+                    {isBalanceVisible ? formatCurrency(Math.max(0, Number(totalSpentMonth) || 0), currency) : '••••'}
+                  </span>
+                  <span className="mt-2 block h-2.5 w-full overflow-hidden rounded-full bg-slate-100/90 dark:bg-slate-700/60">
+                    <motion.span
+                      initial={false}
+                      animate={{ width: isBalanceVisible && Math.max(0, Number(totalReceivedMonth) || 0) + Math.max(0, Number(totalSpentMonth) || 0) > 0 ? `${(Math.max(0, Number(totalSpentMonth) || 0) / Math.max(Math.max(0, Number(totalReceivedMonth) || 0), Math.max(0, Number(totalSpentMonth) || 0))) * 100}%` : '0%' }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                      className="block h-full rounded-full bg-gradient-to-r from-rose-600 to-orange-400 shadow-[0_4px_12px_rgba(244,63,94,0.24)]"
+                    />
+                  </span>
+                </motion.button>
+              </div>
+            </div>
           </div>
+        </div>
       </motion.div>
 
       {/* 3. QUICK ACTION PILLS - Micro-interactions */}
