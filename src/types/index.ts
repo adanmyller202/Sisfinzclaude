@@ -128,6 +128,8 @@ export interface BillItem {
   investmentExchangeRate?: number;
   /** Fixed installment amount in the savings goal currency. */
   investmentGoalAmount?: number;
+  /** Exact remaining target amount allocated across the generated installments. */
+  investmentGoalTotalAmount?: number;
   /** Marks bills generated from a goal-level recurring investment plan. */
   investmentPlanId?: string;
   investmentPlanMonths?: number;
