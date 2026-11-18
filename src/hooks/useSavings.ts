@@ -20,6 +20,7 @@ import { registerPendingWrite, registerResolvedWrite } from './useSyncStatus';
 
 interface TransferFinanceOps {
   addExpense: (expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
+  deleteExpense?: (expenseId: string) => Promise<void>;
   currency: CurrencyCode;
   accountId?: string;
   accountName?: string;
@@ -286,6 +287,20 @@ export function useSavings() {
     [userId, getLocalKey]
   );
 
+  const reverseRecurringSavingDeposit = useCallback(
+    async (idempotencyKey: string, deleteExpense?: (expenseId: string) => Promise<void>) => {
+      if (!userId) throw new Error('Usuário não autenticado.');
+      const txId = `stx_${idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const tx = transactions.find((item) => item.id === txId);
+      if (!tx) return;
+      const goal = savings.find((item) => item.id === tx.savingId);
+      if (goal) await updateSavingGoal(goal.id, { currentAmount: Math.max(0, (goal.currentAmount || 0) - tx.amount) });
+      if (tx.expenseId && deleteExpense) await deleteExpense(tx.expenseId);
+      await deleteSavingTransaction(txId);
+    },
+    [userId, transactions, savings, updateSavingGoal, deleteSavingTransaction]
+  );
+
   // 5. Transfer money from Available Balance to a Saving Goal (Aporte)
   // - If foreign currency (USD/BRL): foreign amount is converted to ARS using exchangeRate
   // - Decreases available balance by registering an expense in "Inversiones" using baseAmountARS
@@ -532,6 +547,7 @@ export function useSavings() {
     deleteSavingGoal,
     deleteSavingTransaction,
     transferToSaving,
+    reverseRecurringSavingDeposit,
     withdrawFromSaving,
   };
 }
