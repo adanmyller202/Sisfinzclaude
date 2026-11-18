@@ -465,13 +465,14 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       { currency, idempotencyKey: `investment_${bill.id}_${month}` }
     );
 
-    // Future installments keep their original value unless the user opts in.
-    if (updateFutureInstallments) {
-      await updateBill(bill.id, {
-        amount: actualBaseAmount,
-        investmentExchangeRate: effectiveRate,
-      });
-    }
+    // Preserve the amount from the original recurring-bill creation so the
+    // user can always choose to return to it after a previous repricing.
+    const originalAmount = Number(bill.investmentOriginalAmount ?? bill.amount) || 0;
+    await updateBill(bill.id, {
+      amount: updateFutureInstallments ? actualBaseAmount : originalAmount,
+      investmentOriginalAmount: originalAmount,
+      ...(updateFutureInstallments ? { investmentExchangeRate: effectiveRate } : {}),
+    });
   };
 
   const handleExecuteTransfer = async (
