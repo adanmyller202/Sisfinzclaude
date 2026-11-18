@@ -587,10 +587,12 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
   );
 
   const toggleBillPaid = useCallback(
-    async (billId: string, month: string, isPaid: boolean, paidDate?: string) => {
+    async (billId: string, month: string, isPaid: boolean, paidDate?: string, amountOverride?: number) => {
       if (!userId) throw new Error('Usuário não autenticado.');
       const bill = bills.find((b) => b.id === billId);
-      const amount = bill ? Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0 : 0;
+      const amount = amountOverride !== undefined
+        ? Number(amountOverride) || 0
+        : bill ? Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0 : 0;
       const isRecurringInvestment = Boolean(bill?.investmentSavingId || bill?.exceptions?.[month]?.investmentSavingId);
       const isCurrentMonth = month === getCurrentMonthStr();
 
