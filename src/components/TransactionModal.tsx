@@ -330,6 +330,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
 
     if (type === 'bill') {
+      const selectedInvestmentGoal = savings.find((goal) => goal.id === investmentSavingId);
+      if (investmentSavingId && recurrence !== 'monthly') {
+        setError('Um investimento vinculado precisa ser mensal.');
+        return;
+      }
+      const investmentRate = selectedInvestmentGoal?.currency === 'ARS' || !selectedInvestmentGoal?.currency
+        ? 1
+        : Number(investmentExchangeRate);
+      if (investmentSavingId && (!selectedInvestmentGoal || !Number.isFinite(investmentRate) || investmentRate <= 0)) {
+        setError('Informe uma cotação válida para a moeda do cofrinho.');
+        return;
+      }
       const payload: Omit<BillItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
         name: name.trim(),
         amount: val,
@@ -342,7 +354,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrenceMonthsCount,
         startMonth,
         investmentSavingId: investmentSavingId || undefined,
-        investmentExchangeRate: investmentSavingId ? Math.max(1, Number(investmentExchangeRate) || 1) : undefined,
+        investmentExchangeRate: investmentSavingId ? investmentRate : undefined,
       };
 
       if (editingTransaction && editingTransaction.type === 'bill' && (editingTransaction.item as BillItem).recurrence === 'monthly' && onUpdateBillOccurrence) {
@@ -1020,7 +1032,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         <label className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.2em]">Investimento recorrente (opcional)</label>
                         <p className="text-xs text-slate-500">Vincule esta cobrança mensal a um cofrinho. O valor da cobrança é debitado em ARS e convertido para a moeda da meta quando for pago.</p>
                       </div>
-                      <select value={investmentSavingId} onChange={(e) => { setInvestmentSavingId(e.target.value); if (e.target.value) setRecurrence('monthly'); setInvestmentExchangeRate('1'); }} className="w-full px-5 py-4 text-sm font-bold bg-white border border-emerald-200 rounded-2xl text-slate-900">
+                      <select value={investmentSavingId} onChange={(e) => { const selected = savings.find((goal) => goal.id === e.target.value); setInvestmentSavingId(e.target.value); if (e.target.value) setRecurrence('monthly'); setInvestmentExchangeRate(selected?.currency && selected.currency !== 'ARS' ? '' : '1'); }} className="w-full px-5 py-4 text-sm font-bold bg-white border border-emerald-200 rounded-2xl text-slate-900">
                         <option value="">Não vincular a um cofrinho</option>
                         {savings.map((goal) => <option key={goal.id} value={goal.id}>{goal.icon || '🎯'} {goal.name} ({goal.currency || 'ARS'})</option>)}
                       </select>
