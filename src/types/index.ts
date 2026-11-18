@@ -122,6 +122,10 @@ export interface BillItem {
   isRefunded?: boolean;
   refundedAt?: string;
   refundTransferId?: string;
+  /** Optional savings goal funded by this recurring monthly investment. */
+  investmentSavingId?: string;
+  /** ARS per one unit of the linked goal currency (1 for ARS goals). */
+  investmentExchangeRate?: number;
 }
 
 export interface IncomeItem {
