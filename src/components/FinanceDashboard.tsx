@@ -268,7 +268,11 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     updateExpense,
     deleteExpense,
     sharedBills,
-  } = useFinanceControl(undefined, accounts.length > 0 ? accountsTotalBalance : undefined);
+  } = useFinanceControl(
+    undefined,
+    accounts.length > 0 ? accountsTotalBalance : undefined,
+    adjustAccountBalanceForFinancialItem
+  );
 
   const { user } = useAuth();
   const userId = user?.uid;
