@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SavingGoal, AccountItem, CurrencyCode } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -36,7 +36,6 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
   }, [goal?.id, accounts]);
 
   const activeAccounts = accounts.filter(a => a.isActive !== false);
-  const account = activeAccounts.find(a => a.id === accountId);
   const endMonth = goal?.deadline?.slice(0, 7) || '';
   const months = startMonth && endMonth ? monthDiffInclusive(startMonth, endMonth) : 0;
   const remaining = goal ? Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0)) : 0;
