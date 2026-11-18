@@ -26,8 +26,8 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
   const safeGoals = Array.isArray(goals) ? goals : [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 w-full pb-20">
+      <div className="flex justify-between items-center px-4 md:px-0">
         <h2 className="text-xl font-bold text-gray-900">Reservas e Metas</h2>
         <button
           onClick={onOpenCreateModal}
@@ -38,123 +38,138 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {safeGoals.map((goal) => {
-          if (!goal) return null;
-          const hasTarget = Boolean(goal.hasTarget || (goal.target_amount && goal.target_amount > 0));
-          const currentAmount = goal.current_amount || 0;
-          const targetAmount = goal.target_amount || 0;
-          const percentage = targetAmount > 0 ? Math.min(100, Math.round((currentAmount / targetAmount) * 100)) : 0;
+      {safeGoals.length === 0 ? (
+        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100 mx-4 md:mx-0 shadow-sm">
+          <span className="text-4xl mb-2 block">🎯</span>
+          <h3 className="text-lg font-bold text-gray-900">Nenhuma reserva cadastrada</h3>
+          <p className="text-sm text-gray-500 mt-1 mb-4">Crie sua primeira reserva ou cofrinho para começar a planejar.</p>
+          <button
+            onClick={onOpenCreateModal}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors shadow-sm inline-flex items-center gap-2 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Criar Nova Reserva
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 md:px-0">
+          {safeGoals.map((goal) => {
+            if (!goal) return null;
+            const hasTarget = Boolean(goal.hasTarget || (goal.target_amount && goal.target_amount > 0));
+            const currentAmount = goal.current_amount || 0;
+            const targetAmount = goal.target_amount || 0;
+            const percentage = targetAmount > 0 ? Math.min(100, Math.round((currentAmount / targetAmount) * 100)) : 0;
 
-          return (
-            <div key={goal.id || Math.random()} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{goal.icon || '🎯'}</span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-md">
-                          {goal.currency || 'BRL'}
-                        </span>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-md ${hasTarget ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600'}`}>
-                          {hasTarget ? 'META DEFINIDA' : 'LIVRE'}
-                        </span>
+            return (
+              <div key={goal.id || Math.random()} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{goal.icon || '🎯'}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-md">
+                            {goal.currency || 'BRL'}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-md ${hasTarget ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600'}`}>
+                            {hasTarget ? 'META DEFINIDA' : 'LIVRE'}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 mt-0.5">{goal.name || 'Reserva'}</h3>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900 mt-0.5">{goal.name || 'Reserva'}</h3>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onEdit(goal)}
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onDelete(goal.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onEdit(goal)}
-                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                      title="Editar"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(goal.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
 
-                {goal.deadline && (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{goal.deadline}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-end my-3">
-                  <div>
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Acumulado</span>
-                    <div className="text-2xl font-black text-gray-900">
-                      {goal.currency === 'USD' ? 'US$' : goal.currency === 'BRL' ? 'R$' : '$'} {currentAmount.toLocaleString()}
+                  {goal.deadline && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{goal.deadline}</span>
                     </div>
+                  )}
+
+                  <div className="flex justify-between items-end my-3">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Acumulado</span>
+                      <div className="text-2xl font-black text-gray-900">
+                        {goal.currency === 'USD' ? 'US$' : goal.currency === 'BRL' ? 'R$' : '$'} {currentAmount.toLocaleString()}
+                      </div>
+                    </div>
+                    {hasTarget && (
+                      <div className="text-right">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Meta</span>
+                        <div className="text-lg font-bold text-gray-700">
+                          {goal.currency === 'USD' ? 'US$' : goal.currency === 'BRL' ? 'R$' : '$'} {targetAmount.toLocaleString()}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
                   {hasTarget && (
-                    <div className="text-right">
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Meta</span>
-                      <div className="text-lg font-bold text-gray-700">
-                        {goal.currency === 'USD' ? 'US$' : goal.currency === 'BRL' ? 'R$' : '$'} {targetAmount.toLocaleString()}
+                    <div className="mb-4">
+                      <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center mt-1 text-xs text-gray-500 font-medium">
+                        <span>{percentage}% concluído</span>
+                        <span>Falta {(targetAmount - currentAmount > 0 ? targetAmount - currentAmount : 0).toLocaleString()} {goal.currency || 'BRL'}</span>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {hasTarget && (
-                  <div className="mb-4">
-                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                      <div
-                        className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center mt-1 text-xs text-gray-500 font-medium">
-                      <span>{percentage}% concluído</span>
-                      <span>Falta {(targetAmount - currentAmount > 0 ? targetAmount - currentAmount : 0).toLocaleString()} {goal.currency || 'BRL'}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-3 border-t border-gray-100 flex flex-wrap gap-2">
-                <button
-                  onClick={() => onDeposit(goal)}
-                  className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors shadow-sm text-sm"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Aporte
-                </button>
-                <button
-                  onClick={() => onWithdraw(goal)}
-                  className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors text-sm"
-                >
-                  <ArrowDownLeft className="w-4 h-4" />
-                  Resgate
-                </button>
-                {hasTarget && (
+                <div className="pt-3 border-t border-gray-100 flex flex-wrap gap-2">
                   <button
-                    onClick={() => {
-                      if (onCreateRecurringInvestment) {
-                        onCreateRecurringInvestment(goal);
-                      }
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-sm text-sm"
+                    onClick={() => onDeposit(goal)}
+                    className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors shadow-sm text-sm"
                   >
-                    <TrendingUp className="w-4 h-4" />
-                    Investir mensalmente
+                    <ArrowUpRight className="w-4 h-4" />
+                    Aporte
                   </button>
-                )}
+                  <button
+                    onClick={() => onWithdraw(goal)}
+                    className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors text-sm"
+                  >
+                    <ArrowDownLeft className="w-4 h-4" />
+                    Resgate
+                  </button>
+                  {hasTarget && (
+                    <button
+                      onClick={() => {
+                        if (onCreateRecurringInvestment) {
+                          onCreateRecurringInvestment(goal);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-sm text-sm"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                      Investir mensalmente
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
