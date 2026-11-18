@@ -95,31 +95,32 @@ export function normalizeMoneCommand(input: string): string {
   let text = fold(input);
   text = correctKnownTypos(text);
 
-  // Check if this is a conditional hypothetical simulation question before applying ACTION_ALIASES
-  const isConditionalPurchaseQuestion =
+  // Common mobile typo: "de eu gastar/comprar/fizer/pagar" -> "se eu gastar/comprar/fizer/pagar"
+  text = text.replace(/\bde\s+eu\s+(?=(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse|realizasse|realizar)\b)/gi, 'se eu ');
+
+  // When an explicit month name follows "proximo mes" / "mes que vem" (e.g. "no próximo mês de janeiro"),
+  // strip the relative prefix so extractTargetMonth resolves the explicit month ("janeiro") instead of +1 month.
+  text = text.replace(
+    /\b(?:no\s+|do\s+|para\s+o\s+|em\s+)?(?:proximo\s+mes|mes\s+que\s+vem|mes\s+passado|mes\s+anterior)\s+(?:de\s+|em\s+)?(?=(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|setiembre|octubre|noviembre|diciembre)\b)/gi,
+    'em '
+  );
+
+  // Hypothetical questions must NOT be caught by rigid regexes in moneEngine.ts — let them reach the AI (/api/mone)
+  // so Gemini can reason with full context, history, and 12-month projections.
+  const isHypotheticalOrSimulation =
     /\b(?:se\s+(?:eu\s+)?(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse|realizasse|realizar)|caso\s+(?:eu\s+)?(?:compre|comprar|gaste|pague|faca)|e\s+se\s+(?:eu\s+)?(?:fizer|faco|faca|faria|comprar|comprasse|gastar|gastasse|pagar|pagasse|realizasse|realizar)|(?:quando|se)\s+eu\s+(?:comprar|gastar|pagar))\b/i.test(text);
 
-  for (const [pattern, replacement] of ACTION_ALIASES) {
-    // Do not rewrite "faca"/"fazer" to "cria" inside conditional simulation questions
-    if (isConditionalPurchaseQuestion && replacement === 'cria') continue;
-    text = text.replace(pattern, replacement);
+  if (isHypotheticalOrSimulation) {
+    // Prefix with a marker token so moneEngine's rigid regexes (asksHypotheticalPurchase / asksForecast)
+    // do not short-circuit the question before it reaches /api/mone!
+    return `__ai_reason__ ${text.replace(/\b(?:se|caso)\b/gi, 'hipotese_condicional').replace(/\b(?:sobra\w*|resta\w*|previsao|projecao)\b/gi, 'resultado_simulado')}`;
   }
 
-  // Ensure conditional simulation questions that omit "quanto sobra" or use "gastasse"
-  // satisfy all 3 regex branches of asksHypotheticalPurchase in moneEngine.ts
-  if (
-    isConditionalPurchaseQuestion &&
-    /\b(?:compra|comprar|compre|comprasse|gasto|gastar|gastasse|despesa|pagar|pagasse|mesm[oa]\s+valor|ess[ea]\s+valor)\b/i.test(text)
-  ) {
-    if (!/\b(?:compra|comprar|compre|gasto|gastar|despesa|pagar)\b/i.test(text)) {
-      text += ' gastar';
-    }
-    if (!/\b(?:sobr\w*|rest\w*|saldo|previs[aã]o|fic\w*|terei|fica|ficaria|com\s+quanto)\b/i.test(text)) {
-      text += ' saldo';
-    }
+  for (const [pattern, replacement] of ACTION_ALIASES) {
+    text = text.replace(pattern, replacement);
   }
 
   return text;
 }
 
-export const MONE_VOCABULARY_VERSION = '1.0.2';
+export const MONE_VOCABULARY_VERSION = '2.0.0';
