@@ -271,7 +271,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   } = useFinanceControl(
     undefined,
     accounts.length > 0 ? accountsTotalBalance : undefined,
-    adjustAccountBalanceForFinancialItem
+    adjustAccountBalanceForFinancialItem,
+    accounts
   );
 
   const { user } = useAuth();
@@ -279,7 +280,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const [isBalanceBreakdownOpen, setIsBalanceBreakdownOpen] = useState(false);
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
-  const effectiveCurrentBalance = accounts.length > 0 ? accountsTotalBalance : currentBalance;
+  const isCurrentMonthSelected = selectedMonth === getCurrentMonthStr();
+  const effectiveCurrentBalance = accounts.length > 0 && isCurrentMonthSelected
+    ? accountsTotalBalance
+    : currentBalance;
 
   // Unified Categories Hook (Supports editing and deleting predefined + custom)
   const {
@@ -686,12 +690,15 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
            // Restore balance if paid
            const recordKey = `bill_${billId}_${selectedMonth}`;
            const isPaid = statusRecords.find(r => r.id === recordKey)?.isCompleted;
-           if (isPaid && bill.accountId) {
-             // Use exception amount if exists for this month
+           const isRecurringInvestment = Boolean(
+             bill.investmentSavingId || bill.exceptions?.[selectedMonth]?.investmentSavingId
+           );
+           if (isPaid && bill.accountId && (!isRecurringInvestment || selectedMonth === getCurrentMonthStr())) {
+             // Restore only the amount that was actually posted to the live account.
              const amount = Number(bill.exceptions?.[selectedMonth]?.amount ?? bill.amount) || 0;
              await adjustAccountBalanceForFinancialItem(bill.accountId, amount);
            }
-           if (isPaid && (bill.investmentSavingId || bill.exceptions?.[selectedMonth]?.investmentSavingId)) {
+           if (isPaid && isRecurringInvestment) {
              await reverseRecurringSavingDeposit(`investment_${billId}_${selectedMonth}`, deleteExpense);
            }
          }
@@ -802,6 +809,21 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     try {
       setIsDeletingOccurrence(true);
       const targetMonth = billToDelete.month;
+      const bill = billToDelete.bill;
+      const statusKey = `bill_${bill.id}_${targetMonth}`;
+      const isPaid = Boolean(statusRecords.find((record) => record.id === statusKey)?.isCompleted);
+      const isRecurringInvestment = Boolean(
+        bill.investmentSavingId || bill.exceptions?.[targetMonth]?.investmentSavingId
+      );
+      if (isPaid) {
+        if (isRecurringInvestment) {
+          await reverseRecurringSavingDeposit(`investment_${bill.id}_${targetMonth}`, deleteExpense);
+        }
+        if (bill.accountId && (!isRecurringInvestment || targetMonth === getCurrentMonthStr())) {
+          const amount = Number(bill.exceptions?.[targetMonth]?.amount ?? bill.amount) || 0;
+          await adjustAccountBalanceForFinancialItem(bill.accountId, amount);
+        }
+      }
       if (onDeleteBillOccurrenceCustom) {
         await onDeleteBillOccurrenceCustom(billToDelete.bill.id, targetMonth, scope);
       } else {
@@ -1965,9 +1987,11 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
           const recordKey = `bill_${id}_${selectedMonth}`;
           const isPaid = Boolean(statusRecords.find((record) => record.id === recordKey)?.isCompleted);
 
-          // A paid bill has already affected the account. Editing it applies only
-          // the difference between the old and new paid amounts.
-          if (oldBill && isPaid) {
+          const isRecurringInvestment = Boolean(
+            oldBill?.investmentSavingId || oldBill?.exceptions?.[selectedMonth]?.investmentSavingId
+          );
+          // Keep historical/future investment edits isolated to their own month.
+          if (oldBill && isPaid && (!isRecurringInvestment || selectedMonth === getCurrentMonthStr())) {
             const oldAmount = Number(oldBill.exceptions?.[selectedMonth]?.amount ?? oldBill.amount) || 0;
             const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
             const oldAccountId = oldBill.accountId;
@@ -1986,8 +2010,11 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
           const affectsSelectedMonth = month === selectedMonth || (scope === 'this_and_future' && month < selectedMonth);
           const recordKey = `bill_${id}_${selectedMonth}`;
           const isPaid = Boolean(statusRecords.find((record) => record.id === recordKey)?.isCompleted);
+          const isRecurringInvestment = Boolean(
+            oldBill?.investmentSavingId || oldBill?.exceptions?.[selectedMonth]?.investmentSavingId
+          );
 
-          if (oldBill && isPaid && affectsSelectedMonth) {
+          if (oldBill && isPaid && affectsSelectedMonth && (!isRecurringInvestment || selectedMonth === getCurrentMonthStr())) {
             const oldAmount = Number(oldBill.exceptions?.[selectedMonth]?.amount ?? oldBill.amount) || 0;
             const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
             const oldAccountId = oldBill.accountId;
