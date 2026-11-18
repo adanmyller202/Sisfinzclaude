@@ -363,6 +363,23 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     date?: string,
     note?: string
   ) => {
+    const goal = savings.find((item) => item.id === savingId);
+    const goalCurrency = goal?.currency || 'ARS';
+    const baseAmountARS = goalCurrency === 'ARS' ? amount : amount * exchangeRate;
+    const matchingPendingInvestment = bills.find((bill) => {
+      const linkedSavingId = bill.exceptions?.[selectedMonth]?.investmentSavingId ?? bill.investmentSavingId;
+      const status = statusRecords.find((record) => record.id === `bill_${bill.id}_${selectedMonth}`);
+      const recurringAmount = Number(bill.exceptions?.[selectedMonth]?.amount ?? bill.amount) || 0;
+      return linkedSavingId === savingId && bill.recurrence === 'monthly' && !status?.isCompleted && Math.abs(recurringAmount - baseAmountARS) < 0.01;
+    });
+
+    // If the user manually contributes the exact amount of a pending linked
+    // recurrence, settle that occurrence instead of creating a second debit.
+    if (matchingPendingInvestment) {
+      await handleToggleBill(matchingPendingInvestment.id, selectedMonth, true);
+      return;
+    }
+
     await transferToSaving(savingId, amount, exchangeRate, date, note, { addExpense, currency });
   };
 
