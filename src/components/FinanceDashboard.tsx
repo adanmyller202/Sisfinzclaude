@@ -191,13 +191,22 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       await reverseRecurringSavingDeposit(investmentKey, deleteExpense);
     }
 
-    if (onToggleBillPaidCustom) {
-      await onToggleBillPaidCustom(billId, month, isPaid);
-    } else {
-      await toggleBillPaid(billId, month, isPaid);
-    }
-
+    // Create the goal contribution first. If the bill status cannot be changed,
+    // roll the contribution back so neither side is left half-completed.
     if (isLinkedInvestment && isPaid) await applyRecurringInvestment(linkedBill!, month);
+
+    try {
+      if (onToggleBillPaidCustom) {
+        await onToggleBillPaidCustom(billId, month, isPaid);
+      } else {
+        await toggleBillPaid(billId, month, isPaid);
+      }
+    } catch (error) {
+      if (isLinkedInvestment && isPaid) {
+        await reverseRecurringSavingDeposit(investmentKey, deleteExpense);
+      }
+      throw error;
+    }
   };
 
   // Accounts are the source of truth for the forecast starting balance.
