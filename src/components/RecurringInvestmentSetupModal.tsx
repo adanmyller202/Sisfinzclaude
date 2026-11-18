@@ -20,6 +20,7 @@ const monthDiffInclusive = (start: string, end: string) => {
 
 export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts, baseCurrency, onClose, onConfirm }) => {
   const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [endDate, setEndDate] = useState('');
   const [accountId, setAccountId] = useState('');
   const [exchangeRate, setExchangeRate] = useState('');
   const [dueDay, setDueDay] = useState('5');
@@ -29,6 +30,7 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
   useEffect(() => {
     if (!goal) return;
     setStartMonth(new Date().toISOString().slice(0, 7));
+    setEndDate(goal.deadline || '');
     setAccountId(accounts.find(a => a.isActive)?.id || '');
     setExchangeRate('');
     setDueDay('5');
@@ -36,13 +38,13 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
   }, [goal?.id, accounts]);
 
   const activeAccounts = accounts.filter(a => a.isActive !== false && a.currency === baseCurrency);
-  const endMonth = goal?.deadline?.slice(0, 7) || '';
+  const endMonth = endDate.slice(0, 7);
   const months = startMonth && endMonth ? monthDiffInclusive(startMonth, endMonth) : 0;
   const remaining = goal ? Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0)) : 0;
   const installmentAmount = months > 0 ? Math.round((remaining / months) * 100) / 100 : 0;
   const rate = goal?.currency === 'ARS' ? 1 : Number(exchangeRate);
   const estimatedBase = installmentAmount * (rate > 0 ? rate : 0);
-  const canSubmit = Boolean(goal && goal.hasTarget !== false && goal.deadline && remaining > 0 && months > 0 && accountId && (goal.currency === 'ARS' || rate > 0) && Number(dueDay) >= 1 && Number(dueDay) <= 28);
+  const canSubmit = Boolean(goal && goal.hasTarget !== false && endDate && remaining > 0 && months > 0 && accountId && (goal.currency === 'ARS' || rate > 0) && Number(dueDay) >= 1 && Number(dueDay) <= 28);
 
   if (!goal) return null;
 
@@ -55,7 +57,7 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
     setSaving(true);
     setError('');
     try {
-      await onConfirm({ goal, startMonth, accountId, exchangeRate: rate, dueDay: Number(dueDay), installmentAmount, months });
+      await onConfirm({ goal: { ...goal, deadline: endDate }, startMonth, accountId, exchangeRate: rate, dueDay: Number(dueDay), installmentAmount, months });
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Não foi possível criar o investimento recorrente.');
@@ -78,8 +80,12 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
           <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
             <div className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Valor que falta para a meta</div>
             <div className="text-2xl font-black text-slate-900">{formatCurrency(remaining, goal.currency || 'ARS')}</div>
-            <div className="text-xs text-slate-600 mt-1">A data final já está definida na meta: {new Date(goal.deadline + 'T12:00:00').toLocaleDateString('pt-BR')}.</div>
+            <div className="text-xs text-slate-600 mt-1">Defina quando pretende alcançar o valor da meta. Essa data será usada para calcular as parcelas mensais.</div>
           </div>
+          <label className="block space-y-1.5">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-2"><CalendarRange className="w-4 h-4 text-emerald-600"/> Até quando quer alcançar a meta?</span>
+            <input type="date" value={endDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setEndDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900" required />
+          </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-2"><CalendarRange className="w-4 h-4 text-emerald-600"/> Quando começar?</span>
             <input type="month" value={startMonth} max={endMonth || undefined} onChange={e => setStartMonth(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900" required />
@@ -106,7 +112,7 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
             <div className="flex justify-between text-xs text-slate-600"><span>Parcelas</span><strong>{months > 0 ? months : '—'} meses</strong></div>
             <div className="flex justify-between text-xs text-slate-600"><span>Parcela da meta</span><strong>{formatCurrency(installmentAmount, goal.currency || 'ARS')}</strong></div>
             {goal.currency !== 'ARS' && <div className="flex justify-between text-xs text-slate-600"><span>Fatura estimada</span><strong>{formatCurrency(estimatedBase, baseCurrency)}</strong></div>}
-            {months <= 0 && <p className="text-xs text-rose-600">A data inicial precisa ser anterior ou igual ao mês do prazo final.</p>}
+            {endDate && months <= 0 && <p className="text-xs text-rose-600">A data inicial precisa ser anterior ou igual ao mês do prazo final.</p>}
           </div>
           {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
           <button type="submit" disabled={!canSubmit || saving} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black py-3.5 flex items-center justify-center gap-2">
