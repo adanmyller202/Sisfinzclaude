@@ -1237,7 +1237,9 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
   // 11. Previsão de saldo no fim do mês:
   // Saldo previsto = saldo atual + valores ainda a receber - valores ainda a pagar
   const forecastBalance = useMemo(() => {
-    const startBalance = overrideCurrentBalance !== undefined ? overrideCurrentBalance : currentBalance;
+    const startBalance = selectedMonth === getCurrentMonthStr() && overrideCurrentBalance !== undefined
+      ? overrideCurrentBalance
+      : currentBalance;
     
     // Strict zero rule as requested by user:
     // If account balance, toReceive, and toPay are all 0, forecast is 0.
@@ -1251,7 +1253,7 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
     }
     
     return startBalance + toReceive - toPay;
-  }, [currentBalance, toReceive, toPay, overrideCurrentBalance, monthBills, monthIncomes, monthExpenses]);
+  }, [currentBalance, toReceive, toPay, overrideCurrentBalance, monthBills, monthIncomes, monthExpenses, selectedMonth]);
 
   // Atualizar saldo atual da conta (ajustando a base para que o saldo atual seja exatamente o valor desejado)
   const updateCurrentBalance = useCallback(
