@@ -1839,15 +1839,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
               if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
             }
           }
-          const wasLinkedInvestment = Boolean(oldBill?.investmentSavingId);
-          if (oldBill && isPaid && wasLinkedInvestment) {
-            await reverseRecurringSavingDeposit(`investment_${id}_${selectedMonth}`, deleteExpense);
-          }
           await updateBill(id, partial);
-          if (oldBill && isPaid) {
-            const nextBill = { ...oldBill, ...partial } as BillItem;
-            if (nextBill.investmentSavingId) await applyRecurringInvestment(nextBill, selectedMonth);
-          }
         }}
         onUpdateBillOccurrence={async (id, month, partial, scope) => {
           const oldBill = bills.find((bill) => bill.id === id);
@@ -1867,18 +1859,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
               if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
             }
           }
-          if (oldBill && isPaid && affectsSelectedMonth && oldBill.investmentSavingId) {
-            await reverseRecurringSavingDeposit(`investment_${id}_${selectedMonth}`, deleteExpense);
-          }
           await updateBillOccurrence(id, month, partial, scope);
-          if (oldBill && isPaid && affectsSelectedMonth) {
-            const nextBill = scope === 'this'
-              ? { ...oldBill, exceptions: { ...oldBill.exceptions, [month]: { ...oldBill.exceptions?.[month], ...partial } } }
-              : { ...oldBill, ...partial };
-            if (nextBill.exceptions?.[selectedMonth]?.investmentSavingId || nextBill.investmentSavingId) {
-              await applyRecurringInvestment(nextBill as BillItem, selectedMonth);
-            }
-          }
         }}
         onDeleteBill={deleteBill}
         onSaveIncome={async (data) => {
