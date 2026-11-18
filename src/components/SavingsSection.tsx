@@ -37,7 +37,7 @@ interface SavingsSectionProps {
   onOpenEditModal: (goal: SavingGoal) => void;
   onOpenTransferModal: (goalId?: string, type?: 'deposit' | 'withdrawal') => void;
   onDeleteGoal: (goalId: string) => Promise<void>;
-  onCreateRecurringInvestment?: (goal: SavingGoal) => void;
+  onCreateRecurringInvestment: (goal: SavingGoal) => void;
 }
 
 export const SavingsSection: React.FC<SavingsSectionProps> = ({
@@ -444,16 +444,15 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         >
                           <ArrowUpRight className="w-4 h-4 stroke-[3]" /> Aporte
                         </motion.button>
-                        {hasTarget && onCreateRecurringInvestment && (
-                          <motion.button
+                        {/* Sempre exibir a ação em cada cartão; a configuração valida se a meta possui objetivo. */}
+                        <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => onCreateRecurringInvestment(goal)}
                             disabled={Boolean(goal.recurringInvestmentBillId)}
                             className="flex-1 min-w-[120px] h-13 rounded-2xl bg-[#D1FAEB] border border-emerald-300 text-emerald-900 hover:bg-emerald-100 font-black text-[10px] uppercase tracking-wide flex items-center justify-center gap-1.5 disabled:opacity-60 shadow-xs cursor-pointer"
                           >
                             <Calendar className="w-4 h-4" /> {goal.recurringInvestmentBillId ? 'Recorrência ativa' : 'Investir mensalmente'}
-                          </motion.button>
-                        )}
+                        </motion.button>
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => onOpenTransferModal(goal.id, 'withdrawal')}
