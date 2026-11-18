@@ -554,11 +554,12 @@ REGRAS DE RACIOCÍNIO PROFUNDO E INTERPRETAÇÃO NATURAL (CRÍTICO):
    - Se a pergunta atual for uma continuação (ex: "E se eu fizer uma compra de 700000?", "E se eu gastasse o mesmo valor em janeiro?"):
      a) Se não houver mês na frase atual, HERDE o targetMonth que estava sendo discutido nas mensagens imediatamente anteriores do histórico.
      b) Se o usuário disser "o mesmo valor", "esse valor", "essa compra" ou similar, recupere o valor numérico simulado na mensagem anterior do histórico.
-3. SIMULAÇÕES E CONSULTAS DE PREVISÃO ("query_forecast"):
-   - Sempre que o usuário perguntar quanto sobra em um mês, qual a previsão de um mês, ou simular um gasto/compra hipotética em um mês (sem querer cadastrar de verdade):
-     - Retorne intent: "query_forecast"
-     - Preencha data.targetMonth com o mês correto no formato "YYYY-MM" (ex: "2026-12", "2027-01").
-     - Se houver um gasto/compra hipotética sendo simulada, preencha data.simulatedAmount com o valor numérico exato (ex: 200000, 700000, 1300000) e escreva em directResponse o cálculo claro usando a previsão real daquele mês em Projeções Mensais Reais Calculadas (previsaoSaldoFinal - simulatedAmount), deixando claro que é apenas uma simulação.
+3. SIMULAÇÕES E CONSULTAS ANALÍTICAS:
+   - Se o usuário simular um gasto/compra hipotética em um mês (ex: "Quanto sobra em janeiro se eu gastar 200000?", "E se eu fizer uma compra de 700000?", "E se eu gastasse o mesmo valor em janeiro?"):
+     - Retorne intent: "general_query" (para que o front-end exiba exatamente a sua resposta calculada em directResponse sem sobrescrevê-la!).
+     - Em directResponse, consulte o valor exato de 'previsaoSaldoFinal' do mês correspondente em Projeções Mensais Reais Calculadas, subtraia o valor simulado e responda de forma clara: "Considerando a previsão de [previsaoSaldoFinal] para [Mês], depois de um gasto hipotético de [Valor], sobrariam [Resultado]. Isso é apenas uma simulação: nenhuma despesa foi cadastrada."
+   - Se o usuário perguntar APENAS a previsão normal de um mês sem simular compra (ex: "Quanto sobra em janeiro?"):
+     - Retorne intent: "query_forecast", data.targetMonth: "YYYY-MM" e o directResponse com o valor.
 4. AÇÕES REAIS NO BANCO DE DADOS:
    - Só use intents de criação/edição/exclusão ("add_expense", "add_bill", "add_installment_bill", "add_income", "update_bill", "update_expense", "update_income", "mark_bill_paid", "delete_item", "correct_last_item") quando o usuário realmente afirmar ou pedir para registrar/alterar/apagar algo (ex: "gastei 2500 de uber", "comprei um tênis em 5x", "muda o valor da internet"). NUNCA cadastre despesas quando a frase for uma pergunta condicional/hipotética ("se eu gastar", "de eu gastar", "quanto sobra se eu comprar").
 5. Respostas diretas, claras e exatas, sem saudações repetitivas.${stylePrompt}
