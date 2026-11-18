@@ -591,8 +591,14 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
       if (!userId) throw new Error('Usuário não autenticado.');
       const bill = bills.find((b) => b.id === billId);
       const amount = bill ? Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0 : 0;
+      const isRecurringInvestment = Boolean(bill?.investmentSavingId || bill?.exceptions?.[month]?.investmentSavingId);
+      const isCurrentMonth = month === getCurrentMonthStr();
 
-      await adjustAccountBalanceForStatusChange('bill', billId, month, isPaid, amount, bill?.accountId);
+      // Historical/future recurring-investment installments are posted only
+      // to their own month. They must not change the live account balance.
+      if (!isRecurringInvestment || isCurrentMonth) {
+        await adjustAccountBalanceForStatusChange('bill', billId, month, isPaid, amount, bill?.accountId);
+      }
 
       const recordId = `bill_${billId}_${month}`;
       const updatedRecord: MonthlyStatusRecord = {
