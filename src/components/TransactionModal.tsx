@@ -1040,7 +1040,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cotação: 1 {goalCurrency} em pesos argentinos (ARS)</label>
                           <input type="number" min="0.000001" step="any" value={investmentExchangeRate} onChange={(e) => setInvestmentExchangeRate(e.target.value)} className="w-full px-5 py-4 text-sm font-bold bg-white border border-slate-200 rounded-2xl text-slate-900" placeholder="Ex.: 1575" />
-                          <p className="text-[11px] text-slate-500">Aporte mensal estimado: {formatCurrency((Number(amountStr) || 0) / Math.max(Number(investmentExchangeRate) || 1, 0.000001), goalCurrency)}.</p>
+                          <p className="text-[11px] text-slate-500">{Number(investmentExchangeRate) > 0 ? `Aporte mensal estimado: ${formatCurrency((Number(amountStr) || 0) / Number(investmentExchangeRate), goalCurrency)}.` : 'Informe a cotação para calcular o aporte na moeda do cofrinho.'}</p>
                         </div>
                       ) : <p className="text-xs font-semibold text-emerald-700">Aporte mensal: {formatCurrency(Number(amountStr) || 0, 'ARS')} (mesma moeda).</p>; })()}
                     </div>
