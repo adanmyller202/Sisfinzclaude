@@ -197,23 +197,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       await toggleBillPaid(billId, month, isPaid);
     }
 
-    if (isLinkedInvestment && isPaid && effectiveSavingId) {
-      const goal = savings.find((item) => item.id === effectiveSavingId);
-      if (!goal) throw new Error('O cofrinho vinculado a este investimento não existe mais.');
-      const baseAmountARS = Number(linkedBill.exceptions?.[month]?.amount ?? linkedBill.amount) || 0;
-      const goalCurrency = goal.currency || 'ARS';
-      const rate = goalCurrency === 'ARS' ? 1 : Number(effectiveRate) || 0;
-      if (baseAmountARS <= 0 || rate <= 0) throw new Error('Confira o valor e a cotação do investimento recorrente.');
-      const goalAmount = goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100;
-      await transferToSaving(
-        goal.id,
-        goalAmount,
-        rate,
-        linkedBill.exceptions?.[month]?.dueDate || linkedBill.dueDate,
-        `Aporte automático da recorrência ${linkedBill.name} (${month})`,
-        { addExpense, currency, idempotencyKey: investmentKey }
-      );
-    }
+    if (isLinkedInvestment && isPaid) await applyRecurringInvestment(linkedBill!, month);
   };
 
   // Accounts are the source of truth for the forecast starting balance.
@@ -328,6 +312,27 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     reverseRecurringSavingDeposit,
     withdrawFromSaving,
   } = useSavings();
+
+  const applyRecurringInvestment = async (bill: BillItem, month: string) => {
+    const occurrence = bill.exceptions?.[month];
+    const savingId = occurrence?.investmentSavingId ?? bill.investmentSavingId;
+    if (!savingId) return;
+    const goal = savings.find((item) => item.id === savingId);
+    if (!goal) throw new Error('O cofrinho vinculado a este investimento não existe mais.');
+    const baseAmountARS = Number(occurrence?.amount ?? bill.amount) || 0;
+    const goalCurrency = goal.currency || 'ARS';
+    const rate = goalCurrency === 'ARS' ? 1 : Number(occurrence?.investmentExchangeRate ?? bill.investmentExchangeRate) || 0;
+    if (baseAmountARS <= 0 || rate <= 0) throw new Error('Confira o valor e a cotação do investimento recorrente.');
+    const goalAmount = goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100;
+    await transferToSaving(
+      goal.id,
+      goalAmount,
+      rate,
+      occurrence?.dueDate || bill.dueDate,
+      `Aporte automático da recorrência ${bill.name} (${month})`,
+      { addExpense, currency, idempotencyKey: `investment_${bill.id}_${month}` }
+    );
+  };
 
   const [isSavingGoalModalOpen, setIsSavingGoalModalOpen] = useState(false);
   const [savingGoalToEdit, setSavingGoalToEdit] = useState<SavingGoal | null>(null);
@@ -1834,7 +1839,15 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
               if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
             }
           }
+          const wasLinkedInvestment = Boolean(oldBill?.investmentSavingId);
+          if (oldBill && isPaid && wasLinkedInvestment) {
+            await reverseRecurringSavingDeposit(`investment_${id}_${selectedMonth}`, deleteExpense);
+          }
           await updateBill(id, partial);
+          if (oldBill && isPaid) {
+            const nextBill = { ...oldBill, ...partial } as BillItem;
+            if (nextBill.investmentSavingId) await applyRecurringInvestment(nextBill, selectedMonth);
+          }
         }}
         onUpdateBillOccurrence={async (id, month, partial, scope) => {
           const oldBill = bills.find((bill) => bill.id === id);
@@ -1854,7 +1867,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
               if (delta !== 0) await adjustAccountBalanceForFinancialItem(accountId, delta);
             }
           }
+          if (oldBill && isPaid && affectsSelectedMonth && oldBill.investmentSavingId) {
+            await reverseRecurringSavingDeposit(`investment_${id}_${selectedMonth}`, deleteExpense);
+          }
           await updateBillOccurrence(id, month, partial, scope);
+          if (oldBill && isPaid && affectsSelectedMonth) {
+            const nextBill = scope === 'this'
+              ? { ...oldBill, exceptions: { ...oldBill.exceptions, [month]: { ...oldBill.exceptions?.[month], ...partial } } }
+              : { ...oldBill, ...partial };
+            if (nextBill.exceptions?.[selectedMonth]?.investmentSavingId || nextBill.investmentSavingId) {
+              await applyRecurringInvestment(nextBill as BillItem, selectedMonth);
+            }
+          }
         }}
         onDeleteBill={deleteBill}
         onSaveIncome={async (data) => {
