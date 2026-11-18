@@ -90,6 +90,8 @@ import { UpcomingBillsView } from './UpcomingBillsView';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
+import { RecurringInvestmentSetupModal } from './RecurringInvestmentSetupModal';
+import { RecurringInvestmentPaymentModal } from './RecurringInvestmentPaymentModal';
 import { CashflowCalendar } from './CashflowCalendar';
 import { BillComparisonBadge } from './BillComparisonBadge';
 import { MonthlyFreedomScale } from './MonthlyFreedomScale';
@@ -184,6 +186,22 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     const effectiveSavingId = linkedBill?.exceptions?.[month]?.investmentSavingId ?? linkedBill?.investmentSavingId;
     const effectiveRate = linkedBill?.exceptions?.[month]?.investmentExchangeRate ?? linkedBill?.investmentExchangeRate;
     const isLinkedInvestment = Boolean(effectiveSavingId);
+    const linkedGoal = effectiveSavingId ? savings.find((item) => item.id === effectiveSavingId) : undefined;
+
+    // Foreign-currency goal installments require the user to enter the actual
+    // ARS amount sent for this month before the bill is settled.
+    if (isLinkedInvestment && isPaid && linkedGoal && linkedGoal.currency !== 'ARS' && linkedBill) {
+      const planMonths = Number(linkedBill.investmentPlanMonths) || linkedBill.recurrenceMonthsCount || 0;
+      const start = linkedBill.startMonth.split('-').map(Number);
+      const current = month.split('-').map(Number);
+      const monthIndex = (current[0] - start[0]) * 12 + current[1] - start[1];
+      const baseInstallment = Number(linkedBill.investmentGoalAmount) || 0;
+      const finalInstallment = planMonths > 0 && monthIndex === planMonths - 1
+        ? Math.max(0, (Number(linkedBill.investmentGoalTotalAmount) || baseInstallment * planMonths) - baseInstallment * (planMonths - 1))
+        : baseInstallment;
+      setInvestmentPaymentToConfirm({ bill: linkedBill, month, goal: linkedGoal, installmentAmount: finalInstallment });
+      return;
+    }
 
     // Reverse the linked goal entry before unpaying, so the account refund and
     // the goal balance are both restored exactly once.
@@ -323,7 +341,16 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     const goalCurrency = goal.currency || 'ARS';
     const rate = goalCurrency === 'ARS' ? 1 : Number(occurrence?.investmentExchangeRate ?? bill.investmentExchangeRate) || 0;
     if (baseAmountARS <= 0 || rate <= 0) throw new Error('Confira o valor e a cotação do investimento recorrente.');
-    const goalAmount = goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100;
+    const planMonths = Number(bill.investmentPlanMonths) || bill.recurrenceMonthsCount || 0;
+    const start = bill.startMonth.split('-').map(Number);
+    const current = month.split('-').map(Number);
+    const monthIndex = (current[0] - start[0]) * 12 + current[1] - start[1];
+    const baseInstallment = Number(bill.investmentGoalAmount) || 0;
+    const goalAmount = baseInstallment > 0
+      ? (planMonths > 0 && monthIndex === planMonths - 1
+          ? Math.max(0, (Number(bill.investmentGoalTotalAmount) || baseInstallment * planMonths) - baseInstallment * (planMonths - 1))
+          : baseInstallment)
+      : (goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100);
     await transferToSaving(
       goal.id,
       goalAmount,
@@ -336,6 +363,8 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
 
   const [isSavingGoalModalOpen, setIsSavingGoalModalOpen] = useState(false);
   const [savingGoalToEdit, setSavingGoalToEdit] = useState<SavingGoal | null>(null);
+  const [recurringGoalToConfigure, setRecurringGoalToConfigure] = useState<SavingGoal | null>(null);
+  const [investmentPaymentToConfirm, setInvestmentPaymentToConfirm] = useState<{ bill: BillItem; month: string; goal: SavingGoal; installmentAmount: number } | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferDefaultSavingId, setTransferDefaultSavingId] = useState<string | undefined>(undefined);
   const [transferDefaultType, setTransferDefaultType] = useState<'deposit' | 'withdrawal'>('deposit');
@@ -354,6 +383,81 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const handleOpenEditSaving = (goal: SavingGoal) => {
     setSavingGoalToEdit(goal);
     setIsSavingGoalModalOpen(true);
+  };
+
+  const handleCreateRecurringInvestment = async (params: {
+    goal: SavingGoal;
+    startMonth: string;
+    accountId: string;
+    exchangeRate: number;
+    dueDay: number;
+    installmentAmount: number;
+    months: number;
+  }) => {
+    const { goal, startMonth, accountId, exchangeRate, dueDay, installmentAmount, months } = params;
+    if (goal.recurringInvestmentBillId) throw new Error('Esta meta já possui um investimento recorrente configurado.');
+    const selectedAccount = accounts.find((item) => item.id === accountId);
+    if (!selectedAccount) throw new Error('Selecione uma conta válida.');
+    if (selectedAccount.currency !== currency) throw new Error('A conta selecionada precisa usar a moeda principal do controle financeiro.');
+    if (months < 1 || installmentAmount <= 0) throw new Error('O período da meta não permite criar parcelas.');
+    if (goal.currency !== 'ARS' && exchangeRate <= 0) throw new Error('Informe uma cotação inicial válida.');
+
+    const goalCurrency = goal.currency || 'ARS';
+    const estimatedAmount = goalCurrency === 'ARS'
+      ? installmentAmount
+      : Math.round(installmentAmount * exchangeRate * 100) / 100;
+    const billIdPlan = 'goal_investment_' + goal.id + '_' + Date.now();
+    const dueDate = `${startMonth}-${String(dueDay).padStart(2, '0')}`;
+    const createdBill = await addBill({
+      name: `Investimento mensal — ${goal.name}`,
+      amount: estimatedAmount,
+      dueDate,
+      dueDay,
+      category: 'Inversiones',
+      notes: `Parcela de ${formatCurrency(installmentAmount, goalCurrency)} para a meta ${goal.name}.`,
+      accountId,
+      recurrence: 'monthly',
+      recurrenceMonthsCount: months,
+      startMonth,
+      investmentSavingId: goal.id,
+      investmentExchangeRate: goalCurrency === 'ARS' ? 1 : exchangeRate,
+      investmentGoalAmount: installmentAmount,
+      investmentGoalTotalAmount: Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0)),
+      investmentPlanId: billIdPlan,
+      investmentPlanMonths: months,
+    } as any);
+    await updateSavingGoal(goal.id, {
+      recurringInvestmentBillId: createdBill.id,
+      recurringInvestmentStartMonth: startMonth,
+      recurringInvestmentAccountId: accountId,
+      recurringInvestmentExchangeRate: goalCurrency === 'ARS' ? 1 : exchangeRate,
+    });
+  };
+
+  const handleConfirmRecurringInvestmentPayment = async (actualBaseAmount: number) => {
+    if (!investmentPaymentToConfirm) return;
+    const { bill, month, goal, installmentAmount } = investmentPaymentToConfirm;
+    const effectiveRate = actualBaseAmount / installmentAmount;
+    if (!Number.isFinite(effectiveRate) || effectiveRate <= 0) throw new Error('Informe um valor válido em pesos.');
+    const estimatedAmount = Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0;
+
+    // Store the real amount and effective rate on this occurrence only.
+    await updateBillOccurrence(bill.id, month, {
+      amount: actualBaseAmount,
+      investmentExchangeRate: effectiveRate,
+    }, 'this');
+    await toggleBillPaid(bill.id, month, true);
+    if (bill.accountId && Math.abs(actualBaseAmount - estimatedAmount) > 0.001) {
+      await adjustAccountBalanceForFinancialItem(bill.accountId, estimatedAmount - actualBaseAmount);
+    }
+    await transferToSaving(
+      goal.id,
+      installmentAmount,
+      effectiveRate,
+      bill.exceptions?.[month]?.dueDate || bill.dueDate,
+      `Aporte recorrente confirmado em ${month}; débito real: ${formatCurrency(actualBaseAmount, currency)}`,
+      { currency, idempotencyKey: `investment_${bill.id}_${month}` }
+    );
   };
 
   const handleExecuteTransfer = async (
@@ -1695,6 +1799,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
                 onOpenEditModal={handleOpenEditSaving}
                 onOpenTransferModal={handleOpenTransfer}
                 onDeleteGoal={deleteSavingGoal}
+                onCreateRecurringInvestment={(goal) => setRecurringGoalToConfigure(goal)}
               />
             </ErrorBoundary>
           </motion.div>
@@ -1979,6 +2084,26 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         activePartners={activePartners}
         onShareWithPartner={onShareWithPartner}
       />
+
+      <RecurringInvestmentSetupModal
+        goal={recurringGoalToConfigure}
+        accounts={accounts}
+        baseCurrency={currency}
+        onClose={() => setRecurringGoalToConfigure(null)}
+        onConfirm={handleCreateRecurringInvestment}
+      />
+
+      {investmentPaymentToConfirm && (
+        <RecurringInvestmentPaymentModal
+          bill={investmentPaymentToConfirm.bill}
+          goal={investmentPaymentToConfirm.goal}
+          installmentAmount={investmentPaymentToConfirm.installmentAmount}
+          month={investmentPaymentToConfirm.month}
+          currency={currency}
+          onClose={() => setInvestmentPaymentToConfirm(null)}
+          onConfirm={handleConfirmRecurringInvestmentPayment}
+        />
+      )}
 
       {/* 3. Saving Goal Modal (Create / Edit) */}
       <SavingGoalModal
