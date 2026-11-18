@@ -35,7 +35,7 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
     setError('');
   }, [goal?.id, accounts]);
 
-  const activeAccounts = accounts.filter(a => a.isActive !== false);
+  const activeAccounts = accounts.filter(a => a.isActive !== false && a.currency === baseCurrency);
   const endMonth = goal?.deadline?.slice(0, 7) || '';
   const months = startMonth && endMonth ? monthDiffInclusive(startMonth, endMonth) : 0;
   const remaining = goal ? Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0)) : 0;
