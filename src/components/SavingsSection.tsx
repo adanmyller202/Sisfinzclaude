@@ -444,7 +444,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         >
                           <ArrowUpRight className="w-4 h-4 stroke-[3]" /> Aporte
                         </motion.button>
-                        {hasTarget && goal.deadline && onCreateRecurringInvestment && (
+                        {hasTarget && onCreateRecurringInvestment && (
                           <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => onCreateRecurringInvestment(goal)}
