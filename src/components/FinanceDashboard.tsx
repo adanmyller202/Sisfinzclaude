@@ -179,10 +179,38 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const locale = getLocaleForLanguage(language);
 
   const handleToggleBill = async (billId: string, month: string, isPaid: boolean) => {
+    const linkedBill = bills.find((item) => item.id === billId);
+    const investmentKey = `investment_${billId}_${month}`;
+    const isLinkedInvestment = Boolean(linkedBill?.investmentSavingId);
+
+    // Reverse the linked goal entry before unpaying, so the account refund and
+    // the goal balance are both restored exactly once.
+    if (isLinkedInvestment && !isPaid) {
+      await reverseRecurringSavingDeposit(investmentKey, deleteExpense);
+    }
+
     if (onToggleBillPaidCustom) {
       await onToggleBillPaidCustom(billId, month, isPaid);
     } else {
       await toggleBillPaid(billId, month, isPaid);
+    }
+
+    if (isLinkedInvestment && isPaid && linkedBill?.investmentSavingId) {
+      const goal = savings.find((item) => item.id === linkedBill.investmentSavingId);
+      if (!goal) throw new Error('O cofrinho vinculado a este investimento não existe mais.');
+      const baseAmountARS = Number(linkedBill.exceptions?.[month]?.amount ?? linkedBill.amount) || 0;
+      const goalCurrency = goal.currency || 'ARS';
+      const rate = goalCurrency === 'ARS' ? 1 : Number(linkedBill.investmentExchangeRate) || 0;
+      if (baseAmountARS <= 0 || rate <= 0) throw new Error('Confira o valor e a cotação do investimento recorrente.');
+      const goalAmount = goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100;
+      await transferToSaving(
+        goal.id,
+        goalAmount,
+        rate,
+        linkedBill.exceptions?.[month]?.dueDate || linkedBill.dueDate,
+        `Aporte automático da recorrência ${linkedBill.name} (${month})`,
+        { addExpense, currency, idempotencyKey: investmentKey }
+      );
     }
   };
 
@@ -295,6 +323,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     deleteSavingGoal,
     deleteSavingTransaction,
     transferToSaving,
+    reverseRecurringSavingDeposit,
     withdrawFromSaving,
   } = useSavings();
 
@@ -1774,6 +1803,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
           setEditingTx(null);
         }}
         accounts={accounts}
+        savings={savings}
         onOpenNewAccount={onNavigateToAccounts}
         currency={currency}
         language={language}
