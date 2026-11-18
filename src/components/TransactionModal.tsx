@@ -55,7 +55,6 @@ interface TransactionModalProps {
   currency: CurrencyCode;
   language?: LanguageCode;
   accounts?: AccountItem[];
-  savings?: SavingGoal[];
   onOpenNewAccount?: () => void;
   selectedMonth?: string;
   initialType?: TransactionType;
@@ -97,7 +96,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   currency,
   language = 'pt',
   accounts = [],
-  savings = [],
   onOpenNewAccount,
   selectedMonth,
   initialType = 'bill',
@@ -131,8 +129,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [recurrence, setRecurrence] = useState<RecurrenceType>('none');
   const [recurrenceMode, setRecurrenceMode] = useState<'forever' | 'limited'>('forever');
   const [monthsCountStr, setMonthsCountStr] = useState<string>('6');
-  const [investmentSavingId, setInvestmentSavingId] = useState('');
-  const [investmentExchangeRate, setInvestmentExchangeRate] = useState('1');
 
   // Status & Errors
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -353,8 +349,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrence,
         recurrenceMonthsCount,
         startMonth,
-        investmentSavingId: investmentSavingId || undefined,
-        investmentExchangeRate: investmentSavingId ? investmentRate : undefined,
       };
 
       if (editingTransaction && editingTransaction.type === 'bill' && (editingTransaction.item as BillItem).recurrence === 'monthly' && onUpdateBillOccurrence) {
@@ -1025,26 +1019,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       )}
                     </AnimatePresence>
                   </div>
-
-                  {type === 'bill' && (
-                    <div className="p-6 rounded-[2rem] bg-emerald-500/5 border border-emerald-500/20 space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.2em]">Investimento recorrente (opcional)</label>
-                        <p className="text-xs text-slate-500">Vincule esta cobrança mensal a um cofrinho. O valor da cobrança é debitado em ARS e convertido para a moeda da meta quando for pago.</p>
-                      </div>
-                      <select value={investmentSavingId} onChange={(e) => { const selected = savings.find((goal) => goal.id === e.target.value); setInvestmentSavingId(e.target.value); if (e.target.value) setRecurrence('monthly'); setInvestmentExchangeRate(selected?.currency && selected.currency !== 'ARS' ? '' : '1'); }} className="w-full px-5 py-4 text-sm font-bold bg-white border border-emerald-200 rounded-2xl text-slate-900">
-                        <option value="">Não vincular a um cofrinho</option>
-                        {savings.map((goal) => <option key={goal.id} value={goal.id}>{goal.icon || '🎯'} {goal.name} ({goal.currency || 'ARS'})</option>)}
-                      </select>
-                      {investmentSavingId && (() => { const goal = savings.find((item) => item.id === investmentSavingId); const goalCurrency = goal?.currency || 'ARS'; return goalCurrency !== 'ARS' ? (
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cotação: 1 {goalCurrency} em pesos argentinos (ARS)</label>
-                          <input type="number" min="0.000001" step="any" value={investmentExchangeRate} onChange={(e) => setInvestmentExchangeRate(e.target.value)} className="w-full px-5 py-4 text-sm font-bold bg-white border border-slate-200 rounded-2xl text-slate-900" placeholder="Ex.: 1575" />
-                          <p className="text-[11px] text-slate-500">{Number(investmentExchangeRate) > 0 ? `Aporte mensal estimado: ${formatCurrency((Number(amountStr) || 0) / Number(investmentExchangeRate), goalCurrency)}.` : 'Informe a cotação para calcular o aporte na moeda do cofrinho.'}</p>
-                        </div>
-                      ) : <p className="text-xs font-semibold text-emerald-700">Aporte mensal: {formatCurrency(Number(amountStr) || 0, 'ARS')} (mesma moeda).</p>; })()}
-                    </div>
-                  )}
 
                   {/* Recorrência (Only for Bills and Income) */}
                   {(type === 'bill' || type === 'income') && (
