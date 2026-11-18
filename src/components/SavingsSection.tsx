@@ -1,28 +1,30 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Plus, TrendingUp, Calendar, Trash2, Edit2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { SavingGoal, CashAccount } from '../types';
 
 interface SavingsSectionProps {
-  goals: SavingGoal[];
-  accounts: CashAccount[];
-  onDeposit: (goal: SavingGoal) => void;
-  onWithdraw: (goal: SavingGoal) => void;
-  onEdit: (goal: SavingGoal) => void;
-  onDelete: (id: string) => void;
-  onOpenCreateModal: () => void;
+  goals?: SavingGoal[];
+  accounts?: CashAccount[];
+  onDeposit?: (goal: SavingGoal) => void;
+  onWithdraw?: (goal: SavingGoal) => void;
+  onEdit?: (goal: SavingGoal) => void;
+  onDelete?: (id: string) => void;
+  onOpenCreateModal?: () => void;
   onCreateRecurringInvestment?: (goal: SavingGoal) => void;
 }
 
 export const SavingsSection: React.FC<SavingsSectionProps> = ({
-  goals,
-  accounts,
-  onDeposit,
-  onWithdraw,
-  onEdit,
-  onDelete,
-  onOpenCreateModal,
+  goals = [],
+  accounts = [],
+  onDeposit = () => {},
+  onWithdraw = () => {},
+  onEdit = () => {},
+  onDelete = () => {},
+  onOpenCreateModal = () => {},
   onCreateRecurringInvestment,
 }) => {
+  const safeGoals = Array.isArray(goals) ? goals : [];
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -37,14 +39,15 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {goals.map((goal) => {
+        {safeGoals.map((goal) => {
+          if (!goal) return null;
           const hasTarget = Boolean(goal.hasTarget || (goal.target_amount && goal.target_amount > 0));
           const currentAmount = goal.current_amount || 0;
           const targetAmount = goal.target_amount || 0;
           const percentage = targetAmount > 0 ? Math.min(100, Math.round((currentAmount / targetAmount) * 100)) : 0;
 
           return (
-            <div key={goal.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div key={goal.id || Math.random()} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-3">
@@ -58,7 +61,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                           {hasTarget ? 'META DEFINIDA' : 'LIVRE'}
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900 mt-0.5">{goal.name}</h3>
+                      <h3 className="text-lg font-bold text-gray-900 mt-0.5">{goal.name || 'Reserva'}</h3>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
