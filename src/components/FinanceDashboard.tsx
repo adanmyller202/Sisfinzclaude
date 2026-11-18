@@ -445,16 +445,9 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       amount: actualBaseAmount,
       investmentExchangeRate: effectiveRate,
     }, 'this');
-    await toggleBillPaid(bill.id, month, true);
-
-    // A payment booked in another month belongs to that month's independent
-    // cash flow and must not mutate today's live account balance.
-    if (month === getCurrentMonthStr() && bill.accountId) {
-      const estimatedAmount = Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0;
-      if (Math.abs(actualBaseAmount - estimatedAmount) > 0.001) {
-        await adjustAccountBalanceForFinancialItem(bill.accountId, estimatedAmount - actualBaseAmount);
-      }
-    }
+    // Pass the actual ARS debit explicitly; the occurrence update above is async,
+    // so the bills array may still contain the pre-payment estimate here.
+    await toggleBillPaid(bill.id, month, true, undefined, actualBaseAmount);
 
     await transferToSaving(
       goal.id,
