@@ -19,7 +19,7 @@ import { formatCurrency } from '../utils/currency';
 import { registerPendingWrite, registerResolvedWrite } from './useSyncStatus';
 
 interface TransferFinanceOps {
-  addExpense: (expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
+  addExpense?: (expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
   deleteExpense?: (expenseId: string) => Promise<void>;
   currency: CurrencyCode;
   accountId?: string;
