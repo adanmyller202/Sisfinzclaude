@@ -37,7 +37,7 @@ interface SavingsSectionProps {
   onOpenEditModal: (goal: SavingGoal) => void;
   onOpenTransferModal: (goalId?: string, type?: 'deposit' | 'withdrawal') => void;
   onDeleteGoal: (goalId: string) => Promise<void>;
-  onCreateRecurringInvestment: (goal: SavingGoal) => void;
+  onCreateRecurringInvestment?: (goal: SavingGoal) => void;
 }
 
 export const SavingsSection: React.FC<SavingsSectionProps> = ({
@@ -444,7 +444,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         >
                           <ArrowUpRight className="w-4 h-4 stroke-[3]" /> Aporte
                         </motion.button>
-                        {hasTarget && goal.deadline && (
+                        {hasTarget && goal.deadline && onCreateRecurringInvestment && (
                           <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => onCreateRecurringInvestment(goal)}
