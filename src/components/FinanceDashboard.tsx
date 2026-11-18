@@ -458,6 +458,12 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       `Aporte recorrente confirmado em ${month}; débito real: ${formatCurrency(actualBaseAmount, currency)}`,
       { currency, idempotencyKey: `investment_${bill.id}_${month}` }
     );
+    // Carry the latest real exchange rate into future pending installments.
+    // The just-paid month keeps its actual amount/rate in its exception.
+    await updateBill(bill.id, {
+      amount: Math.round(installmentAmount * effectiveRate * 100) / 100,
+      investmentExchangeRate: effectiveRate,
+    });
   };
 
   const handleExecuteTransfer = async (
@@ -678,6 +684,9 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
              // Use exception amount if exists for this month
              const amount = Number(bill.exceptions?.[selectedMonth]?.amount ?? bill.amount) || 0;
              await adjustAccountBalanceForFinancialItem(bill.accountId, amount);
+           }
+           if (isPaid && (bill.investmentSavingId || bill.exceptions?.[selectedMonth]?.investmentSavingId)) {
+             await reverseRecurringSavingDeposit(`investment_${billId}_${selectedMonth}`, deleteExpense);
            }
          }
          
