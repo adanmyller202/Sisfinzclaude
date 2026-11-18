@@ -24,6 +24,7 @@ interface TransferFinanceOps {
   accountId?: string;
   accountName?: string;
   adjustAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>;
+  idempotencyKey?: string;
 }
 
 interface WithdrawFinanceOps {
@@ -304,6 +305,10 @@ export function useSavings() {
 
       const targetGoal = savings.find((s) => s.id === savingId);
       if (!targetGoal) throw new Error('Meta de ahorro não encontrada.');
+      const txId = financeOps?.idempotencyKey
+        ? `stx_${financeOps.idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+        : 'stx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      if (transactions.some((tx) => tx.id === txId)) return;
 
       const goalCurrency = (targetGoal.currency as CurrencyCode) || 'ARS';
       const effectiveRate = goalCurrency === 'ARS' ? 1 : (exchangeRate > 0 ? exchangeRate : 1);
@@ -337,7 +342,6 @@ export function useSavings() {
       await updateSavingGoal(savingId, { currentAmount: newCurrentAmount });
 
       // 3. Record transaction
-      const txId = 'stx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const newTx: SavingTransaction = {
         id: txId,
         userId,
@@ -374,7 +378,7 @@ export function useSavings() {
         registerResolvedWrite();
       }
     },
-    [userId, savings, updateSavingGoal, getLocalKey]
+    [userId, savings, transactions, updateSavingGoal, getLocalKey]
   );
 
   // 6. Withdraw money from a Saving Goal back to Available Balance (Resgate)
