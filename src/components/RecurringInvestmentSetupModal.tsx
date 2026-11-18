@@ -68,15 +68,29 @@ export const RecurringInvestmentSetupModal: React.FC<Props> = ({ goal, accounts,
 
   return createPortal(
     <div className="fixed inset-0 z-[10030] flex items-center justify-center p-3 bg-slate-950/30" onClick={onClose}>
-      <div role="dialog" aria-modal="true" className="glass-modal w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-[2rem] shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between p-5 bg-[#D1FAEB]/95 border-b border-emerald-200">
-          <div>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="glass-modal w-full max-w-md max-h-[90dvh] flex flex-col overflow-hidden rounded-[2rem] shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Cabeçalho fixo: fica fora da área rolável em vez de depender de position: sticky. */}
+        <div className="relative z-20 flex shrink-0 items-center justify-between p-5 bg-[#D1FAEB] border-b border-emerald-200">
+          <div className="min-w-0 pr-3">
             <h3 className="text-lg font-black text-slate-900">Investimento recorrente</h3>
-            <p className="text-xs text-slate-600">{goal.icon || '🎯'} {goal.name}</p>
+            <p className="text-xs text-slate-600 truncate">{goal.icon || '🎯'} {goal.name}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-white/70 text-slate-600"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="shrink-0 p-2 rounded-xl hover:bg-white/70 text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+        {/* Somente o formulário rola; o cabeçalho permanece sempre visível. */}
+        <form
+          onSubmit={handleSubmit}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 space-y-4"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
             <div className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Valor que falta para a meta</div>
             <div className="text-2xl font-black text-slate-900">{formatCurrency(remaining, goal.currency || 'ARS')}</div>
