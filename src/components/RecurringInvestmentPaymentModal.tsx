@@ -11,11 +11,12 @@ interface Props {
   month: string;
   currency: CurrencyCode;
   onClose: () => void;
-  onConfirm: (actualBaseAmount: number) => Promise<void>;
+  onConfirm: (actualBaseAmount: number, updateFutureInstallments: boolean) => Promise<void>;
 }
 
 export const RecurringInvestmentPaymentModal: React.FC<Props> = ({ bill, goal, installmentAmount, month, currency, onClose, onConfirm }) => {
   const [actualAmount, setActualAmount] = useState('');
+  const [updateFutureInstallments, setUpdateFutureInstallments] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const parsed = Number(actualAmount);
@@ -34,7 +35,7 @@ export const RecurringInvestmentPaymentModal: React.FC<Props> = ({ bill, goal, i
     setSaving(true);
     setError('');
     try {
-      await onConfirm(parsed);
+      await onConfirm(parsed, updateFutureInstallments);
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Não foi possível confirmar o pagamento.');
@@ -66,12 +67,34 @@ export const RecurringInvestmentPaymentModal: React.FC<Props> = ({ bill, goal, i
             </div>
           </label>
           {parsed > 0 && (
-            <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2">
-              <div className="flex justify-between text-xs text-slate-600"><span>Valor debitado</span><strong>{formatCurrency(parsed, currency)}</strong></div>
-              <div className="flex justify-between text-xs text-slate-600"><span>Cotação efetiva</span><strong>1 {goal.currency} = {formatCurrency(rate, currency)}</strong></div>
-              <div className="flex justify-between text-xs text-slate-600"><span>Crédito na meta</span><strong>{formatCurrency(installmentAmount, goal.currency || 'ARS')}</strong></div>
-              <div className="flex items-center gap-2 text-[11px] text-emerald-700"><ArrowRightLeft className="w-4 h-4"/> A cotação desta parcela será salva no histórico.</div>
-            </div>
+            <>
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-2">
+                <div className="flex justify-between text-xs text-slate-600"><span>Valor debitado nesta parcela</span><strong>{formatCurrency(parsed, currency)}</strong></div>
+                <div className="flex justify-between text-xs text-slate-600"><span>Cotação efetiva</span><strong>1 {goal.currency} = {formatCurrency(rate, currency)}</strong></div>
+                <div className="flex justify-between text-xs text-slate-600"><span>Crédito na meta</span><strong>{formatCurrency(installmentAmount, goal.currency || 'ARS')}</strong></div>
+                <div className="flex items-center gap-2 text-[11px] text-emerald-700"><ArrowRightLeft className="w-4 h-4"/> O valor real desta parcela ficará salvo no histórico.</div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-3">
+                <div>
+                  <div className="text-sm font-bold text-slate-800">E as próximas faturas?</div>
+                  <p className="text-xs text-slate-500 mt-1">O valor informado agora não altera as próximas parcelas automaticamente. Você decide se quer atualizar.</p>
+                </div>
+                <label className="flex items-start gap-3 rounded-xl bg-white border border-slate-200 p-3 cursor-pointer">
+                  <input type="radio" name="future-installments" checked={!updateFutureInstallments} onChange={() => setUpdateFutureInstallments(false)} className="mt-0.5 accent-emerald-600"/>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-bold text-slate-800">Manter valor original</span>
+                    <span className="block text-xs text-slate-500 mt-0.5">Próximas faturas: {formatCurrency(Number(bill.amount) || 0, currency)}</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-xl bg-white border border-emerald-200 p-3 cursor-pointer">
+                  <input type="radio" name="future-installments" checked={updateFutureInstallments} onChange={() => setUpdateFutureInstallments(true)} className="mt-0.5 accent-emerald-600"/>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-bold text-slate-800">Atualizar próximas faturas</span>
+                    <span className="block text-xs text-slate-500 mt-0.5">Novo valor por parcela: {formatCurrency(parsed, currency)}</span>
+                  </span>
+                </label>
+              </div>
+            </>
           )}
           {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
           <button type="submit" disabled={saving || parsed <= 0} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black py-3.5 flex items-center justify-center gap-2">
