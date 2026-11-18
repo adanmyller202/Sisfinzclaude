@@ -303,6 +303,39 @@ app.post('/api/search-user', async (req, res) => {
 });
 
 
+// Helper functions to compute exact multi-month projections on the server so the AI has full visibility
+function shiftServerMonthStr(monthStr: string, delta: number): string {
+  const parts = (monthStr || '').split('-');
+  if (parts.length < 2) return monthStr;
+  const [y, m] = parts.map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getServerMonthDiff(startMonthStr: string, targetMonthStr: string): number {
+  const p1 = (startMonthStr || '').split('-');
+  const p2 = (targetMonthStr || '').split('-');
+  if (p1.length < 2 || p2.length < 2) return 0;
+  const [y1, m1] = p1.map(Number);
+  const [y2, m2] = p2.map(Number);
+  return (y2 - y1) * 12 + (m2 - m1);
+}
+
+function doesServerItemOccurInMonth(
+  startMonthStr: string,
+  targetMonthStr: string,
+  recurrence?: string,
+  recurrenceMonthsCount?: number
+): boolean {
+  if (!startMonthStr) return false;
+  const diff = getServerMonthDiff(startMonthStr, targetMonthStr);
+  if (diff < 0) return false;
+  if (!recurrence || recurrence === 'none') return diff === 0;
+  if (!recurrenceMonthsCount || recurrenceMonthsCount <= 0) return true;
+  return diff < recurrenceMonthsCount;
+}
+
+
 // AI Chat Assistant endpoint for Mone (Server Token Verified)
 app.post('/api/mone', async (req, res) => {
   try {
@@ -382,6 +415,8 @@ app.post('/api/mone', async (req, res) => {
       incomes = [],
       expenses = [],
       goals = [],
+      statusRecords = [],
+      monthlyForecasts = null,
       lastActionItem = null,
     } = context;
 
@@ -395,6 +430,7 @@ app.post('/api/mone', async (req, res) => {
       amount: b.amount,
       dueDay: b.dueDay,
       dueDate: b.dueDate,
+      startMonth: b.startMonth || (b.dueDate ? b.dueDate.substring(0, 7) : currentMonthStr),
       category: b.category,
       recurrence: b.recurrence,
       recurrenceMonthsCount: b.recurrenceMonthsCount,
@@ -405,6 +441,9 @@ app.post('/api/mone', async (req, res) => {
       name: i.name,
       amount: i.amount,
       expectedDay: i.expectedDay,
+      startMonth: i.startMonth || (i.expectedDate ? i.expectedDate.substring(0, 7) : currentMonthStr),
+      recurrence: i.recurrence,
+      recurrenceMonthsCount: i.recurrenceMonthsCount,
       category: i.category,
     }));
 
@@ -422,8 +461,60 @@ app.post('/api/mone', async (req, res) => {
       targetAmount: g.targetAmount,
     }));
 
+    // Build a 12-month financial projection map so the AI can reason about ANY month with real numbers
+    const statusMap = new Map<string, boolean>();
+    if (Array.isArray(statusRecords)) {
+      for (const rec of statusRecords) {
+        if (rec && rec.id) statusMap.set(rec.id, Boolean(rec.isCompleted));
+      }
+    }
+
+    const computedProjections: Record<string, any> = monthlyForecasts || {};
+    if (!monthlyForecasts) {
+      for (let offset = -1; offset <= 12; offset++) {
+        const m = shiftServerMonthStr(currentMonthStr, offset);
+        let totalInc = 0;
+        let pendingInc = 0;
+        let totalBill = 0;
+        let pendingBill = 0;
+
+        for (const inc of incomes) {
+          const sMonth = inc.startMonth || (inc.expectedDate ? inc.expectedDate.substring(0, 7) : currentMonthStr);
+          if (doesServerItemOccurInMonth(sMonth, m, inc.recurrence, inc.recurrenceMonthsCount)) {
+            const exc = inc.exceptions?.[m];
+            if (exc?.isDeleted || inc.excludedMonths?.includes(m)) continue;
+            const amt = Number(exc?.amount ?? inc.amount) || 0;
+            totalInc += amt;
+            const isComp = statusMap.get(`income_${inc.id}_${m}`) === true;
+            if (!isComp) pendingInc += amt;
+          }
+        }
+
+        for (const bill of bills) {
+          const sMonth = bill.startMonth || (bill.dueDate ? bill.dueDate.substring(0, 7) : currentMonthStr);
+          if (doesServerItemOccurInMonth(sMonth, m, bill.recurrence, bill.recurrenceMonthsCount)) {
+            const exc = bill.exceptions?.[m];
+            if (exc?.isDeleted || bill.excludedMonths?.includes(m)) continue;
+            const amt = Number(exc?.amount ?? bill.amount) || 0;
+            totalBill += amt;
+            const isComp = statusMap.get(`bill_${bill.id}_${m}`) === true;
+            if (!isComp) pendingBill += amt;
+          }
+        }
+
+        const projectedBalance = Number(currentBalance) + pendingInc - pendingBill;
+        computedProjections[m] = {
+          receitasPrevistas: totalInc,
+          receitasPendentes: pendingInc,
+          contasPrevistas: totalBill,
+          contasPendentes: pendingBill,
+          previsaoSaldoFinal: projectedBalance,
+        };
+      }
+    }
+
     const conversationHistoryStr = (history || [])
-      .slice(-8)
+      .slice(-10)
       .map((m: any) => `${m.sender === 'user' ? 'Usuário' : 'Mone'}: "${m.text}"`)
       .join('\n');
 
@@ -437,16 +528,17 @@ app.post('/api/mone', async (req, res) => {
       ? `\n\nESTILO DO MONE: ${personaDescriptions[persona]}. O estilo afeta SOMENTE o tom do directResponse. Nunca altere intent, data, números, datas ou valores: continuam exatos. Máximo 2 frases curtas. Responda no idioma preferido do usuário. Nunca zombe da aparência, origem, renda ou dívidas da pessoa. Se a mensagem indicar aflição financeira séria (dívida impagável, desespero, 'não aguento mais'), responda calmo e acolhedor mesmo no estilo sincero.`
       : '';
 
-    const systemPrompt = `Você é o Mone, o cérebro financeiro do aplicativo Mone.
-Sua missão é identificar a intenção do usuário em linguagem natural e retornar uma estrutura JSON precisa com a ação real a ser executada no banco de dados e uma resposta curta, natural e direta.
+    const systemPrompt = `Você é a Mone, a inteligência financeira integrada ao aplicativo SisFinz.
+Sua missão é RACIOCINAR como um analista humano real sobre os dados financeiros do usuário, compreendendo qualquer forma de perguntar (mesmo com erros de digitação como "de eu gastar" em vez de "se eu gastar", gírias, frases invertidas ou perguntas de continuação) e retornar um JSON estruturado.
 
-Contexto financeiro do usuário:
-- Data atual: ${todayStr} (Mês: ${currentMonthStr})
+Contexto financeiro real do usuário no SisFinz:
+- Data atual: ${todayStr} (Mês atual: ${currentMonthStr})
 - Moeda ativa: ${currency}
 - Idioma preferido: ${language === 'pt' ? 'Português' : language === 'es' ? 'Español' : 'English'}
 - Saldo atual em conta: ${currentBalance}
 - Último item manipulado nesta conversa: ${lastActionItem ? JSON.stringify(lastActionItem) : 'Nenhum'}
-- Contas cadastradas: ${JSON.stringify(billsSummary)}
+- Projeções Mensais Reais Calculadas (por YYYY-MM): ${JSON.stringify(computedProjections)}
+- Contas/Faturas cadastradas: ${JSON.stringify(billsSummary)}
 - Receitas cadastradas: ${JSON.stringify(incomesSummary)}
 - Despesas recentes: ${JSON.stringify(recentExpensesSummary)}
 - Metas de economia: ${JSON.stringify(goalsSummary)}
@@ -454,16 +546,22 @@ Contexto financeiro do usuário:
 Histórico recente da conversa:
 ${conversationHistoryStr || 'Nenhuma mensagem anterior.'}
 
-REGRAS DE SIMULAÇÃO HIPOTÉTICA E CONTEXTO (MUITO IMPORTANTE):
-1. Se o usuário fizer uma pergunta simulando uma compra ou gasto hipotético (ex: "E se eu fizer uma compra de 700000?", "E se eu gastasse o mesmo valor em janeiro de 2027?"):
-   - Analise se o usuário mencionou um mês (ex: dezembro, janeiro de 2027). Se o usuário não citar o mês explicitamente na pergunta atual, HERDE O MÊS que estava sendo discutido nas mensagens anteriores do histórico.
-   - Se o usuário disser "o mesmo valor" ou "esse valor" sem digitar um novo número, recupere o valor numérico da última compra ou gasto simulado mencionado no histórico recente.
-   - Retorne intent 'query_forecast' para o mês correto, com directResponse explicando o cálculo.
-2. Respostas ULTRA DIRETAS e CURTAS.
-3. NUNCA diga saudações repetitivas como "Olá, sou Mone...".
-4. NUNCA mostre termos técnicos como "Cálculo Interno Direto".
-5. Se o usuário fizer uma pergunta matemática, intent: "math".
-6. SE O USUÁRIO PEDIR PARA CRIAR OU ALTERAR REGISTROS, retorne o intent correspondente (${stylePrompt}).
+REGRAS DE RACIOCÍNIO PROFUNDO E INTERPRETAÇÃO NATURAL (CRÍTICO):
+1. COMPREENSÃO DE LINGUAGEM NATURAL E ERROS DE DIGITAÇÃO:
+   - Entenda a intenção real por trás de qualquer frase, mesmo com erros de digitação (ex: "de eu gastar 200000" = "se eu gastar 200000", "no próximo mês de janeiro" = Janeiro do próximo ciclo, ou seja, se hoje é ${currentMonthStr}, janeiro é "2027-01").
+   - Se o usuário mencionar o nome de um mês (ex: "próximo mês de janeiro"), o nome explícito do mês ("janeiro" -> 2027-01) SEMPRE tem prioridade sobre "próximo mês".
+2. MEMÓRIA CONVERSACIONAL CONTÍNUA:
+   - Se a pergunta atual for uma continuação (ex: "E se eu fizer uma compra de 700000?", "E se eu gastasse o mesmo valor em janeiro?"):
+     a) Se não houver mês na frase atual, HERDE o targetMonth que estava sendo discutido nas mensagens imediatamente anteriores do histórico.
+     b) Se o usuário disser "o mesmo valor", "esse valor", "essa compra" ou similar, recupere o valor numérico simulado na mensagem anterior do histórico.
+3. SIMULAÇÕES E CONSULTAS DE PREVISÃO ("query_forecast"):
+   - Sempre que o usuário perguntar quanto sobra em um mês, qual a previsão de um mês, ou simular um gasto/compra hipotética em um mês (sem querer cadastrar de verdade):
+     - Retorne intent: "query_forecast"
+     - Preencha data.targetMonth com o mês correto no formato "YYYY-MM" (ex: "2026-12", "2027-01").
+     - Se houver um gasto/compra hipotética sendo simulada, preencha data.simulatedAmount com o valor numérico exato (ex: 200000, 700000, 1300000) e escreva em directResponse o cálculo claro usando a previsão real daquele mês em Projeções Mensais Reais Calculadas (previsaoSaldoFinal - simulatedAmount), deixando claro que é apenas uma simulação.
+4. AÇÕES REAIS NO BANCO DE DADOS:
+   - Só use intents de criação/edição/exclusão ("add_expense", "add_bill", "add_installment_bill", "add_income", "update_bill", "update_expense", "update_income", "mark_bill_paid", "delete_item", "correct_last_item") quando o usuário realmente afirmar ou pedir para registrar/alterar/apagar algo (ex: "gastei 2500 de uber", "comprei um tênis em 5x", "muda o valor da internet"). NUNCA cadastre despesas quando a frase for uma pergunta condicional/hipotética ("se eu gastar", "de eu gastar", "quanto sobra se eu comprar").
+5. Respostas diretas, claras e exatas, sem saudações repetitivas.${stylePrompt}
 
 FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
 {
@@ -471,6 +569,7 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
   "data": {
     "name": "string",
     "amount": number,
+    "simulatedAmount": number,
     "totalAmount": number,
     "installmentsCount": number,
     "dueDay": number,
@@ -501,7 +600,7 @@ FORMATO DE RESPOSTA (ESTRITAMENTE JSON):
       ],
       config: {
         responseMimeType: 'application/json',
-        maxOutputTokens: 300,
+        maxOutputTokens: 350,
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
@@ -619,8 +718,7 @@ app.post('/api/parse-lancamento', async (req, res) => {
         console.error('Error verifying token in /api/parse-lancamento:', fetchErr);
         res.status(401).json(errPayload);
         return;
-      }
-
+      }\n
       if (!verifyResp.ok) {
         const respText = await verifyResp.text();
         const errPayload = {
