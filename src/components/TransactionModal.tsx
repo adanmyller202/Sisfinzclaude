@@ -17,7 +17,6 @@ import {
   SharedUserSummary,
   AccountItem,
   AccountDistribution,
-  SavingGoal,
 } from '../types';
 import { getTodayStr, formatMonthName, getInstallmentPosition } from '../utils/finance';
 import { formatCurrency, CURRENCIES } from '../utils/currency';
@@ -203,8 +202,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           setDate(b.dueDate || getTodayStr());
           setCategory(b.category || '');
           setRecurrence(b.recurrence || 'none');
-          setInvestmentSavingId(b.investmentSavingId || '');
-          setInvestmentExchangeRate(String(b.investmentExchangeRate || 1));
           if (b.recurrenceMonthsCount && b.recurrenceMonthsCount > 0) {
             setRecurrenceMode('limited');
             setMonthsCountStr(String(b.recurrenceMonthsCount));
@@ -326,18 +323,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
 
     if (type === 'bill') {
-      const selectedInvestmentGoal = savings.find((goal) => goal.id === investmentSavingId);
-      if (investmentSavingId && recurrence !== 'monthly') {
-        setError('Um investimento vinculado precisa ser mensal.');
-        return;
-      }
-      const investmentRate = selectedInvestmentGoal?.currency === 'ARS' || !selectedInvestmentGoal?.currency
-        ? 1
-        : Number(investmentExchangeRate);
-      if (investmentSavingId && (!selectedInvestmentGoal || !Number.isFinite(investmentRate) || investmentRate <= 0)) {
-        setError('Informe uma cotação válida para a moeda do cofrinho.');
-        return;
-      }
       const payload: Omit<BillItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
         name: name.trim(),
         amount: val,
