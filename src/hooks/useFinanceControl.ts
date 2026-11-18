@@ -39,7 +39,11 @@ import {
 } from '../utils/finance';
 import { registerPendingWrite, registerResolvedWrite } from './useSyncStatus';
 
-export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCurrentBalance?: number) {
+export function useFinanceControl(
+  externalSharedBills?: SharedBill[],
+  overrideCurrentBalance?: number,
+  adjustExternalAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>
+) {
   const { user } = useAuth();
   const userId = user?.uid;
 
@@ -541,6 +545,13 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
           }
 
           if (targetAcc) {
+            // Keep the account hook's React state in sync with the Firestore/local
+            // balance. The home screen reads totalBalance from useAccounts().
+            if (adjustExternalAccountBalance) {
+              await adjustExternalAccountBalance(targetAcc.id, delta);
+              return;
+            }
+
             targetAcc.currentBalance = (Number(targetAcc.currentBalance) || 0) + delta;
             targetAcc.updatedAt = new Date().toISOString();
 
@@ -583,7 +594,7 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
         console.warn('Could not adjust account balance for status change:', err);
       }
     },
-    [userId, statusRecords, getLocalKey, financeSettings]
+    [userId, statusRecords, getLocalKey, financeSettings, adjustExternalAccountBalance]
   );
 
   const toggleBillPaid = useCallback(
