@@ -1932,7 +1932,6 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
           setEditingTx(null);
         }}
         accounts={accounts}
-        savings={savings}
         onOpenNewAccount={onNavigateToAccounts}
         currency={currency}
         language={language}
