@@ -330,7 +330,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       rate,
       occurrence?.dueDate || bill.dueDate,
       `Aporte automático da recorrência ${bill.name} (${month})`,
-      { addExpense, currency, idempotencyKey: `investment_${bill.id}_${month}` }
+      { currency, idempotencyKey: `investment_${bill.id}_${month}` }
     );
   };
 
