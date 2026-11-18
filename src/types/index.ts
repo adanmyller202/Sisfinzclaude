@@ -128,6 +128,8 @@ export interface BillItem {
   investmentExchangeRate?: number;
   /** Fixed installment amount in the savings goal currency. */
   investmentGoalAmount?: number;
+  /** Original ARS amount when recurring investment installments are explicitly repriced. */
+  investmentOriginalAmount?: number;
   /** Exact remaining target amount allocated across the generated installments. */
   investmentGoalTotalAmount?: number;
   /** Marks bills generated from a goal-level recurring investment plan. */
