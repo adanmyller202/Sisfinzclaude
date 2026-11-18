@@ -79,7 +79,7 @@ import { useSavings } from '../hooks/useSavings';
 import { useAccounts } from '../hooks/useAccounts';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency, getGoalSavedAmount } from '../utils/currency';
-import { formatMonthName, formatDayMonthLabel } from '../utils/finance';
+import { formatMonthName, formatDayMonthLabel, getCurrentMonthStr } from '../utils/finance';
 import { getTranslations, getLocaleForLanguage } from '../utils/i18n';
 import { BalanceModal } from './BalanceModal';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -268,7 +268,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     updateExpense,
     deleteExpense,
     sharedBills,
-  } = useFinanceControl(undefined, accounts.length > 0 ? accountsTotalBalance : undefined);
+  } = useFinanceControl(undefined, accounts.length > 0 && selectedMonth === getCurrentMonthStr() ? accountsTotalBalance : undefined);
 
   const { user } = useAuth();
   const userId = user?.uid;
@@ -434,22 +434,28 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     });
   };
 
-  const handleConfirmRecurringInvestmentPayment = async (actualBaseAmount: number) => {
+  const handleConfirmRecurringInvestmentPayment = async (actualBaseAmount: number, updateFutureInstallments: boolean) => {
     if (!investmentPaymentToConfirm) return;
     const { bill, month, goal, installmentAmount } = investmentPaymentToConfirm;
     const effectiveRate = actualBaseAmount / installmentAmount;
     if (!Number.isFinite(effectiveRate) || effectiveRate <= 0) throw new Error('Informe um valor válido em pesos.');
-    const estimatedAmount = Number(bill.exceptions?.[month]?.amount ?? bill.amount) || 0;
 
-    // Store the real amount and effective rate on this occurrence only.
+    // The actual amount and exchange rate belong only to the paid occurrence.
     await updateBillOccurrence(bill.id, month, {
       amount: actualBaseAmount,
       investmentExchangeRate: effectiveRate,
     }, 'this');
     await toggleBillPaid(bill.id, month, true);
-    if (bill.accountId && Math.abs(actualBaseAmount - estimatedAmount) > 0.001) {
-      await adjustAccountBalanceForFinancialItem(bill.accountId, estimatedAmount - actualBaseAmount);
+
+    // A payment booked in another month belongs to that month's independent
+    // cash flow and must not mutate today's live account balance.
+    if (month === getCurrentMonthStr() && bill.accountId) {
+      const estimatedAmount = Number(bill.amount) || 0;
+      if (Math.abs(actualBaseAmount - estimatedAmount) > 0.001) {
+        await adjustAccountBalanceForFinancialItem(bill.accountId, estimatedAmount - actualBaseAmount);
+      }
     }
+
     await transferToSaving(
       goal.id,
       installmentAmount,
@@ -458,12 +464,14 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       `Aporte recorrente confirmado em ${month}; débito real: ${formatCurrency(actualBaseAmount, currency)}`,
       { currency, idempotencyKey: `investment_${bill.id}_${month}` }
     );
-    // Carry the latest real exchange rate into future pending installments.
-    // The just-paid month keeps its actual amount/rate in its exception.
-    await updateBill(bill.id, {
-      amount: Math.round(installmentAmount * effectiveRate * 100) / 100,
-      investmentExchangeRate: effectiveRate,
-    });
+
+    // Future installments keep their original value unless the user opts in.
+    if (updateFutureInstallments) {
+      await updateBill(bill.id, {
+        amount: actualBaseAmount,
+        investmentExchangeRate: effectiveRate,
+      });
+    }
   };
 
   const handleExecuteTransfer = async (
