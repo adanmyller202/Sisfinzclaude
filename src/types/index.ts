@@ -126,6 +126,11 @@ export interface BillItem {
   investmentSavingId?: string;
   /** ARS per one unit of the linked goal currency (1 for ARS goals). */
   investmentExchangeRate?: number;
+  /** Fixed installment amount in the savings goal currency. */
+  investmentGoalAmount?: number;
+  /** Marks bills generated from a goal-level recurring investment plan. */
+  investmentPlanId?: string;
+  investmentPlanMonths?: number;
 }
 
 export interface IncomeItem {
@@ -250,6 +255,10 @@ export interface SavingGoal {
   currentAmount: number; // Monto ahorrado na moeda do cofrinho
   currency?: CurrencyCode; // 'ARS' | 'USD' | 'BRL'
   deadline?: string; // Fecha límite opcional (YYYY-MM-DD)
+  recurringInvestmentBillId?: string;
+  recurringInvestmentStartMonth?: string;
+  recurringInvestmentAccountId?: string;
+  recurringInvestmentExchangeRate?: number;
   icon?: string; // Emoji or icon identifier
   notes?: string;
   createdAt: string;
