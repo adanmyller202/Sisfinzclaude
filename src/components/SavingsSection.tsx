@@ -37,6 +37,7 @@ interface SavingsSectionProps {
   onOpenEditModal: (goal: SavingGoal) => void;
   onOpenTransferModal: (goalId?: string, type?: 'deposit' | 'withdrawal') => void;
   onDeleteGoal: (goalId: string) => Promise<void>;
+  onCreateRecurringInvestment: (goal: SavingGoal) => void;
 }
 
 export const SavingsSection: React.FC<SavingsSectionProps> = ({
@@ -49,6 +50,7 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
   onOpenEditModal,
   onOpenTransferModal,
   onDeleteGoal,
+  onCreateRecurringInvestment,
 }) => {
   const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
@@ -433,15 +435,25 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         )}
                       </div>
 
-                      {/* Bottom Action Buttons: Aporte & Resgate */}
-                      <div className="flex gap-3 relative z-10 pt-4 border-t border-slate-100">
+                      {/* Bottom Action Buttons: Aporte, investimento recorrente & resgate */}
+                      <div className="flex flex-wrap gap-2 relative z-10 pt-4 border-t border-slate-100">
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => onOpenTransferModal(goal.id, 'deposit')}
-                          className="flex-1 h-13 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                          className="flex-1 min-w-[90px] h-13 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <ArrowUpRight className="w-4 h-4 stroke-[3]" /> Aporte
                         </motion.button>
+                        {hasTarget && goal.deadline && (
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => onCreateRecurringInvestment(goal)}
+                            disabled={Boolean(goal.recurringInvestmentBillId)}
+                            className="flex-1 min-w-[120px] h-13 rounded-2xl bg-[#D1FAEB] border border-emerald-300 text-emerald-900 hover:bg-emerald-100 font-black text-[10px] uppercase tracking-wide flex items-center justify-center gap-1.5 disabled:opacity-60 shadow-xs cursor-pointer"
+                          >
+                            <Calendar className="w-4 h-4" /> {goal.recurringInvestmentBillId ? 'Recorrência ativa' : 'Investir mensalmente'}
+                          </motion.button>
+                        )}
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => onOpenTransferModal(goal.id, 'withdrawal')}
