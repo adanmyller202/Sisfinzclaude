@@ -718,7 +718,8 @@ app.post('/api/parse-lancamento', async (req, res) => {
         console.error('Error verifying token in /api/parse-lancamento:', fetchErr);
         res.status(401).json(errPayload);
         return;
-      }\n
+      }
+
       if (!verifyResp.ok) {
         const respText = await verifyResp.text();
         const errPayload = {
