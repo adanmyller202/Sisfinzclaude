@@ -181,7 +181,9 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const handleToggleBill = async (billId: string, month: string, isPaid: boolean) => {
     const linkedBill = bills.find((item) => item.id === billId);
     const investmentKey = `investment_${billId}_${month}`;
-    const isLinkedInvestment = Boolean(linkedBill?.investmentSavingId);
+    const effectiveSavingId = linkedBill?.exceptions?.[month]?.investmentSavingId ?? linkedBill?.investmentSavingId;
+    const effectiveRate = linkedBill?.exceptions?.[month]?.investmentExchangeRate ?? linkedBill?.investmentExchangeRate;
+    const isLinkedInvestment = Boolean(effectiveSavingId);
 
     // Reverse the linked goal entry before unpaying, so the account refund and
     // the goal balance are both restored exactly once.
@@ -195,12 +197,12 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       await toggleBillPaid(billId, month, isPaid);
     }
 
-    if (isLinkedInvestment && isPaid && linkedBill?.investmentSavingId) {
-      const goal = savings.find((item) => item.id === linkedBill.investmentSavingId);
+    if (isLinkedInvestment && isPaid && effectiveSavingId) {
+      const goal = savings.find((item) => item.id === effectiveSavingId);
       if (!goal) throw new Error('O cofrinho vinculado a este investimento não existe mais.');
       const baseAmountARS = Number(linkedBill.exceptions?.[month]?.amount ?? linkedBill.amount) || 0;
       const goalCurrency = goal.currency || 'ARS';
-      const rate = goalCurrency === 'ARS' ? 1 : Number(linkedBill.investmentExchangeRate) || 0;
+      const rate = goalCurrency === 'ARS' ? 1 : Number(effectiveRate) || 0;
       if (baseAmountARS <= 0 || rate <= 0) throw new Error('Confira o valor e a cotação do investimento recorrente.');
       const goalAmount = goalCurrency === 'ARS' ? baseAmountARS : Math.round((baseAmountARS / rate) * 100) / 100;
       await transferToSaving(
