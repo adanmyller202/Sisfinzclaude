@@ -234,8 +234,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setDate(defaultDate || getTodayStr());
         setNotes('');
         setRecurrence('none');
-        setInvestmentSavingId('');
-        setInvestmentExchangeRate('1');
         setRecurrenceMode('forever');
         setMonthsCountStr(initialType === 'income' ? '12' : '6');
         setCategory('');
