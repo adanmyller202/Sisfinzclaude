@@ -6,6 +6,8 @@ import { useFinanceControl } from '../hooks/useFinanceControl';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
+import { RecurringInvestmentSetupModal } from './RecurringInvestmentSetupModal';
+import { formatCurrency } from '../utils/currency';
 import { FiftyTwoWeekChallengeView } from './FiftyTwoWeekChallengeView';
 import {
   Target,
@@ -78,13 +80,51 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
     withdrawFromSaving,
   } = useSavings();
 
-  const { currentBalance, addExpense, addIncome, addIncomeAsReceived, toggleIncomeReceived, selectedMonth } = useFinanceControl();
+  const { currentBalance, addExpense, addIncome, addIncomeAsReceived, toggleIncomeReceived, selectedMonth, addBill } = useFinanceControl();
 
   const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
   const [savingToEdit, setSavingToEdit] = useState<SavingGoal | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferDefaultSavingId, setTransferDefaultSavingId] = useState<string | undefined>(undefined);
   const [transferDefaultType, setTransferDefaultType] = useState<'deposit' | 'withdrawal'>('deposit');
+  const [recurringGoalToConfigure, setRecurringGoalToConfigure] = useState<SavingGoal | null>(null);
+
+  const handleCreateRecurringInvestment = async (params: { goal: SavingGoal; startMonth: string; accountId: string; exchangeRate: number; dueDay: number; installmentAmount: number; months: number }) => {
+    const { goal, startMonth, accountId, exchangeRate, dueDay, installmentAmount, months } = params;
+    if (goal.recurringInvestmentBillId) throw new Error('Esta meta já possui um investimento recorrente configurado.');
+    const selectedAccount = accounts.find((item) => item.id === accountId && item.isActive !== false);
+    if (!selectedAccount) throw new Error('Selecione uma conta válida.');
+    if (selectedAccount.currency !== currency) throw new Error('A conta selecionada precisa usar a moeda principal do controle financeiro.');
+    if (months < 1 || installmentAmount <= 0) throw new Error('O período da meta não permite criar parcelas.');
+    const goalCurrency = goal.currency || 'ARS';
+    if (goalCurrency !== 'ARS' && exchangeRate <= 0) throw new Error('Informe uma cotação inicial válida.');
+    const estimatedAmount = goalCurrency === 'ARS' ? installmentAmount : Math.round(installmentAmount * exchangeRate * 100) / 100;
+    const planId = `goal_investment_${goal.id}_${Date.now()}`;
+    const createdBill = await addBill({
+      name: `Investimento mensal — ${goal.name}`,
+      amount: estimatedAmount,
+      dueDate: `${startMonth}-${String(dueDay).padStart(2, '0')}`,
+      dueDay,
+      category: 'Inversiones',
+      notes: `Parcela de ${formatCurrency(installmentAmount, goalCurrency)} para a meta ${goal.name}.`,
+      accountId,
+      recurrence: 'monthly',
+      recurrenceMonthsCount: months,
+      startMonth,
+      investmentSavingId: goal.id,
+      investmentExchangeRate: goalCurrency === 'ARS' ? 1 : exchangeRate,
+      investmentGoalAmount: installmentAmount,
+      investmentGoalTotalAmount: Math.max(0, (goal.targetAmount || 0) - (goal.currentAmount || 0)),
+      investmentPlanId: planId,
+      investmentPlanMonths: months,
+    } as any);
+    await updateSavingGoal(goal.id, {
+      recurringInvestmentBillId: createdBill.id,
+      recurringInvestmentStartMonth: startMonth,
+      recurringInvestmentAccountId: accountId,
+      recurringInvestmentExchangeRate: goalCurrency === 'ARS' ? 1 : exchangeRate,
+    });
+  };
 
   const tabs = [
     { id: 'savings', label: 'Cofrinhos', icon: PiggyBank, desc: 'Metas Livres' },
@@ -130,6 +170,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onOpenEditModal={(goal) => { setSavingToEdit(goal); setIsSavingModalOpen(true); }}
               onOpenTransferModal={(id, type) => { setTransferDefaultSavingId(id); setTransferDefaultType(type || 'deposit'); setIsTransferModalOpen(true); }}
               onDeleteGoal={deleteSavingGoal}
+              onCreateRecurringInvestment={(goal) => setRecurringGoalToConfigure(goal)}
             />
           )}
 
@@ -168,6 +209,14 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
             await createSavingGoal(p);
           }
         }}
+      />
+
+      <RecurringInvestmentSetupModal
+        goal={recurringGoalToConfigure}
+        accounts={accounts}
+        baseCurrency={currency}
+        onClose={() => setRecurringGoalToConfigure(null)}
+        onConfirm={handleCreateRecurringInvestment}
       />
 
       <TransferModal
