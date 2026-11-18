@@ -473,8 +473,12 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     const matchingPendingInvestment = bills.find((bill) => {
       const linkedSavingId = bill.exceptions?.[selectedMonth]?.investmentSavingId ?? bill.investmentSavingId;
       const status = statusRecords.find((record) => record.id === `bill_${bill.id}_${selectedMonth}`);
+      const recurringGoalAmount = Number(bill.investmentGoalAmount) || 0;
       const recurringAmount = Number(bill.exceptions?.[selectedMonth]?.amount ?? bill.amount) || 0;
-      return linkedSavingId === savingId && bill.recurrence === 'monthly' && !status?.isCompleted && Math.abs(recurringAmount - baseAmountARS) < 0.01;
+      const matchesGoalInstallment = recurringGoalAmount > 0
+        ? Math.abs(recurringGoalAmount - amount) < 0.01
+        : Math.abs(recurringAmount - baseAmountARS) < 0.01;
+      return linkedSavingId === savingId && bill.recurrence === 'monthly' && !status?.isCompleted && matchesGoalInstallment;
     });
 
     // If the user manually contributes the exact amount of a pending linked
