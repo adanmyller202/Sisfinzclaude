@@ -143,7 +143,12 @@ export default function App() {
     deleteExpense,
     updateCurrentBalance,
     resetAllFinanceData,
-  } = useFinanceControl(sharedAccounts.sharedBills, accounts.length > 0 ? accountsTotalBalance : undefined);
+  } = useFinanceControl(
+    sharedAccounts.sharedBills,
+    accounts.length > 0 ? accountsTotalBalance : undefined,
+    adjustAccountBalanceForFinancialItem,
+    accounts
+  );
 
   const overdueBillsCount = useMemo(() => {
     return (monthBills || []).filter((b) => b.status === 'overdue').length;
