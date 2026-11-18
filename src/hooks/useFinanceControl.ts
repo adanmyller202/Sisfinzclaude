@@ -336,6 +336,9 @@ export function useFinanceControl(externalSharedBills?: SharedBill[], overrideCu
             dueDate: newValues.dueDate,
             category: newValues.category,
             notes: newValues.notes,
+            investmentSavingId: newValues.investmentSavingId,
+            investmentExchangeRate: newValues.investmentExchangeRate,
+            investmentGoalAmount: newValues.investmentGoalAmount,
           },
         };
 
