@@ -26,6 +26,7 @@ import {
   MonthIncomeOccurrence,
   MonthTimelineItem,
   SharedBill,
+  AccountItem,
 } from '../types';
 import {
   getCurrentMonthStr,
@@ -42,7 +43,8 @@ import { registerPendingWrite, registerResolvedWrite } from './useSyncStatus';
 export function useFinanceControl(
   externalSharedBills?: SharedBill[],
   overrideCurrentBalance?: number,
-  adjustExternalAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>
+  adjustExternalAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>,
+  externalAccounts?: AccountItem[]
 ) {
   const { user } = useAuth();
   const userId = user?.uid;
@@ -534,6 +536,18 @@ export function useFinanceControl(
       const delta = amount * sign;
 
       try {
+        // Prefer live useAccounts() records over stale PWA/localStorage cache.
+        if (externalAccounts && externalAccounts.length > 0) {
+          const targetAcc = externalAccounts.find((a) => a.id === accountId)
+            || externalAccounts.find((a) => a.isActive !== false)
+            || externalAccounts[0];
+          if (!targetAcc || !adjustExternalAccountBalance) {
+            throw new Error('Não foi possível localizar uma conta ativa para aplicar este pagamento.');
+          }
+          await adjustExternalAccountBalance(targetAcc.id, delta);
+          return;
+        }
+
         const storedAccs =
           localStorage.getItem(`mc_acc_${userId}_accounts`) ||
           localStorage.getItem('mc_acc_last_accounts');
@@ -543,30 +557,16 @@ export function useFinanceControl(
           if (!targetAcc && accountsList.length > 0) {
             targetAcc = accountsList.find((a: any) => a.isActive !== false) || accountsList[0];
           }
-
           if (targetAcc) {
-            // Keep the account hook's React state in sync with the Firestore/local
-            // balance. The home screen reads totalBalance from useAccounts().
-            if (adjustExternalAccountBalance) {
-              await adjustExternalAccountBalance(targetAcc.id, delta);
-              return;
-            }
-
             targetAcc.currentBalance = (Number(targetAcc.currentBalance) || 0) + delta;
             targetAcc.updatedAt = new Date().toISOString();
-
             localStorage.setItem(`mc_acc_${userId}_accounts`, JSON.stringify(accountsList));
             localStorage.setItem('mc_acc_last_accounts', JSON.stringify(accountsList));
-
             const accRef = doc(db, 'users', userId, 'accounts', targetAcc.id);
-            await setDoc(
-              accRef,
-              sanitizeForFirestore({
-                currentBalance: targetAcc.currentBalance,
-                updatedAt: targetAcc.updatedAt,
-              }),
-              { merge: true }
-            );
+            await setDoc(accRef, sanitizeForFirestore({
+              currentBalance: targetAcc.currentBalance,
+              updatedAt: targetAcc.updatedAt,
+            }), { merge: true });
             return;
           }
         }
@@ -591,10 +591,12 @@ export function useFinanceControl(
           { merge: true }
         );
       } catch (err) {
-        console.warn('Could not adjust account balance for status change:', err);
+        console.error('Could not adjust account balance for status change:', err);
+        // Do not mark the bill as paid if the live account debit failed.
+        if (externalAccounts && externalAccounts.length > 0) throw err;
       }
     },
-    [userId, statusRecords, getLocalKey, financeSettings, adjustExternalAccountBalance]
+    [userId, statusRecords, getLocalKey, financeSettings, adjustExternalAccountBalance, externalAccounts]
   );
 
   const toggleBillPaid = useCallback(
@@ -1205,8 +1207,12 @@ export function useFinanceControl(
     if (financeSettings.monthlyInitialBalances?.[selectedMonth] !== undefined) {
       return financeSettings.monthlyInitialBalances[selectedMonth];
     }
+    // Other months use their own base and must not inherit today's live account balance.
+    if (overrideCurrentBalance !== undefined && selectedMonth !== getCurrentMonthStr()) {
+      return 0;
+    }
     return financeSettings.initialBalance ?? financeSettings.currentBalance ?? 0;
-  }, [financeSettings, selectedMonth]);
+  }, [financeSettings, selectedMonth, overrideCurrentBalance]);
 
   // 6. Saldo Atual em Conta:
   // "o saldo sempre deve ser um calculo entre o que foi recebido e o que esta saindo(esta sendo pago ou despeza realizada)"
