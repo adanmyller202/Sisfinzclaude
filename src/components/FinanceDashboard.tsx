@@ -971,6 +971,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
             whileTap={{ scale: 0.95 }}
             type="button"
             onClick={goToCurrentMonth}
+            aria-pressed={isCurrentMonthSelected}
             aria-label={language === 'es' ? 'Volver al mes actual' : language === 'en' ? 'Back to current month' : 'Voltar para o mês atual'}
             title={language === 'es' ? 'Volver al mes actual' : language === 'en' ? 'Back to current month' : 'Voltar para o mês atual'}
             className={`glass rounded-3xl px-3.5 shrink-0 flex items-center justify-center shadow-xs ring-1 text-[11px] font-black whitespace-nowrap cursor-pointer transition-all ${
