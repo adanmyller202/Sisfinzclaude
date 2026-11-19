@@ -475,9 +475,10 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         if (savingId !== goal.id) continue;
 
         await reverseRecurringSavingDeposit(`investment_${bill.id}_${month}`, deleteExpense);
-        if (month === getCurrentMonthStr() && bill.accountId) {
+        const paidAccountId = occurrence?.accountId ?? bill.accountId;
+        if (month === getCurrentMonthStr() && paidAccountId) {
           const paidAmount = Number(occurrence?.amount ?? bill.amount) || 0;
-          if (paidAmount > 0) await adjustAccountBalanceForFinancialItem(bill.accountId, paidAmount);
+          if (paidAmount > 0) await adjustAccountBalanceForFinancialItem(paidAccountId, paidAmount);
         }
       }
 
