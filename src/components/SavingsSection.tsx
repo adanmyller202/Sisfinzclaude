@@ -17,14 +17,8 @@ import {
   Calendar,
   Edit2,
   Trash2,
-  CheckCircle2,
-  Target,
-  Sparkles,
-  TrendingUp,
   History,
   Coins,
-  Lock,
-  Wallet,
 } from 'lucide-react';
 
 interface SavingsSectionProps {
@@ -44,7 +38,6 @@ interface SavingsSectionProps {
 export const SavingsSection: React.FC<SavingsSectionProps> = ({
   savings = [],
   transactions = [],
-  currentBalance = 0,
   currency = 'ARS',
   language = 'pt',
   onOpenCreateModal,
@@ -117,90 +110,135 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Premium Overview Header with Multi-Currency Breakdown */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
+      {/* Redesigned Vault Overview Card — Emerald & White Fintech Layout */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-panel rounded-[2.5rem] p-8 sm:p-10 shadow-md relative overflow-hidden group"
+        className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-lg shadow-emerald-900/5"
       >
-        <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
-          <PiggyBank className="w-48 h-48 text-emerald-600" />
-        </div>
-        
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 relative z-10">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-[1.25rem] bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                <PiggyBank className="w-6 h-6 text-white" />
+        {/* Top Emerald Vault Banner */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-600 to-teal-700 p-5 text-white sm:p-7">
+          <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-14 -left-10 h-36 w-36 rounded-full bg-teal-300/15 blur-2xl" />
+
+          {/* Header Row */}
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 backdrop-blur-sm">
+                <PiggyBank className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none uppercase">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-black tracking-tight sm:text-xl">
                   Cofrinhos & Reservas
                 </h2>
-                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mt-2">
-                  GESTÃO PATRIMONIAL MULTIMOEDAS
+                <p className="text-[11px] font-semibold text-emerald-100/90">
+                  Gestão patrimonial multimoedas
                 </p>
               </div>
             </div>
+            <span className="shrink-0 rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white backdrop-blur-sm">
+              {safeSavings.length} {safeSavings.length === 1 ? 'reserva' : 'reservas'}
+            </span>
+          </div>
 
-            {/* Separate Totals by Currency — Never mixed together */}
-            <div className="flex flex-wrap items-center gap-4 sm:gap-8 pt-2">
-              {activeCurrencies.length === 0 ? (
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Total Poupado</div>
-                  <div className="text-3xl font-black text-slate-900 font-mono tracking-tighter">
-                    {formatCurrency(0, currency)}
-                  </div>
-                </div>
-              ) : (
-                activeCurrencies.map((cur) => {
+          {/* Multi-Currency Balances Grid — Never mixed together */}
+          <div className="relative z-10 mt-5">
+            {activeCurrencies.length === 0 ? (
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-100">
+                  Total poupado
+                </p>
+                <p className="mt-1 font-mono text-2xl font-black tracking-tight text-white sm:text-3xl">
+                  {formatCurrency(0, currency)}
+                </p>
+              </div>
+            ) : (
+              <div
+                className={
+                  activeCurrencies.length === 1
+                    ? 'grid grid-cols-1 gap-3'
+                    : 'grid grid-cols-1 gap-3 sm:grid-cols-2'
+                }
+              >
+                {activeCurrencies.map((cur) => {
                   const data = totalsByCurrency[cur];
                   const cfg = CURRENCIES[cur] || CURRENCIES.ARS;
                   const curPercent = data.target > 0 ? Math.min(100, Math.round((data.saved / data.target) * 100)) : null;
 
                   return (
-                    <div key={cur} className="p-3.5 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs min-w-[140px]">
-                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
-                        <span>{cfg.flag}</span>
-                        <span>{cur}</span>
-                        <span className="text-slate-400 font-normal">({data.count})</span>
+                    <div
+                      key={cur}
+                      className="rounded-2xl border border-white/20 bg-white/12 p-4 backdrop-blur-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-emerald-50">
+                          <span>{cfg.flag}</span>
+                          <span>{cur}</span>
+                          <span className="font-semibold text-emerald-100/75">
+                            · {data.count} {data.count === 1 ? 'meta' : 'metas'}
+                          </span>
+                        </div>
+                        {curPercent !== null && (
+                          <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black text-white">
+                            {curPercent}% da meta
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono tracking-tight">
-                        {formatCurrency(data.saved, cur)}
+
+                      <div className="mt-2 flex items-baseline justify-between gap-3">
+                        <span className="font-mono text-2xl font-black tracking-tight text-white sm:text-3xl">
+                          {formatCurrency(data.saved, cur)}
+                        </span>
+                        {data.target > 0 && (
+                          <span className="truncate text-[11px] font-semibold text-emerald-100/85">
+                            de {formatCurrency(data.target, cur)}
+                          </span>
+                        )}
                       </div>
+
                       {curPercent !== null && (
-                        <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mt-1">
-                          {curPercent}% da meta
+                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-black/20">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${curPercent}%` }}
+                            transition={{ duration: 0.6 }}
+                            className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"
+                          />
                         </div>
                       )}
                     </div>
                   );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onOpenCreateModal}
-              className="h-14 px-8 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest shadow-md transition-all flex items-center gap-3 cursor-pointer"
-            >
-              <Plus className="w-5 h-5 stroke-[3]" /> Nova Reserva
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              disabled={safeSavings.length === 0}
-              onClick={() => onOpenTransferModal()}
-              className="h-14 px-8 rounded-2xl bg-white/80 border border-slate-200/80 text-slate-700 font-black text-xs uppercase tracking-widest hover:bg-white transition-all flex items-center gap-3 disabled:opacity-30 shadow-xs cursor-pointer"
-            >
-              <ArrowRightLeft className="w-5 h-5 text-emerald-600" /> Aporte / Resgate
-            </motion.button>
+                })}
+              </div>
+            )}
           </div>
         </div>
-      </motion.div>
+
+        {/* Bottom Symmetric Action Dock */}
+        <div className="grid grid-cols-2 gap-2.5 bg-white p-3.5 sm:gap-3 sm:p-4">
+          <motion.button
+            type="button"
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onOpenCreateModal}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700 cursor-pointer"
+          >
+            <Plus className="h-4 w-4 shrink-0 stroke-[3]" />
+            <span className="truncate">Nova Reserva</span>
+          </motion.button>
+          <motion.button
+            type="button"
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={safeSavings.length === 0}
+            onClick={() => onOpenTransferModal()}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3 text-xs font-extrabold uppercase tracking-wider text-emerald-800 transition-colors hover:bg-emerald-100/80 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+          >
+            <ArrowRightLeft className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span className="truncate">Aporte / Resgate</span>
+          </motion.button>
+        </div>
+      </motion.section>
 
       {/* Tabs & Filters Navigation */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -448,12 +486,12 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                         </motion.button>
                         {/* Sempre exibir a ação em cada cartão; a configuração valida se a meta possui objetivo. */}
                         <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => goal.recurringInvestmentBillId ? onManageRecurringInvestment?.(goal) : onCreateRecurringInvestment(goal)}
-                            disabled={Boolean(goal.recurringInvestmentBillId && !onManageRecurringInvestment)}
-                            className="flex-1 min-w-[120px] h-13 rounded-2xl bg-[#D1FAEB] border border-emerald-300 text-emerald-900 hover:bg-emerald-100 font-black text-[10px] uppercase tracking-wide flex items-center justify-center gap-1.5 disabled:opacity-60 shadow-xs cursor-pointer"
-                          >
-                            <Calendar className="w-4 h-4" /> {goal.recurringInvestmentBillId ? 'Recorrência ativa' : 'Investir mensalmente'}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => goal.recurringInvestmentBillId ? onManageRecurringInvestment?.(goal) : onCreateRecurringInvestment(goal)}
+                          disabled={Boolean(goal.recurringInvestmentBillId && !onManageRecurringInvestment)}
+                          className="flex-1 min-w-[120px] h-13 rounded-2xl bg-[#D1FAEB] border border-emerald-300 text-emerald-900 hover:bg-emerald-100 font-black text-[10px] uppercase tracking-wide flex items-center justify-center gap-1.5 disabled:opacity-60 shadow-xs cursor-pointer"
+                        >
+                          <Calendar className="w-4 h-4" /> {goal.recurringInvestmentBillId ? 'Recorrência ativa' : 'Investir mensalmente'}
                         </motion.button>
                         <motion.button
                           whileTap={{ scale: 0.95 }}
@@ -496,7 +534,6 @@ export const SavingsSection: React.FC<SavingsSectionProps> = ({
                 {safeTransactions.map((tx) => {
                   const isDeposit = tx.type === 'deposit';
                   const txCur: CurrencyCode = (tx.currency as CurrencyCode) || 'ARS';
-                  const curCfg = CURRENCIES[txCur] || CURRENCIES.ARS;
                   const isForeign = txCur !== 'ARS';
 
                   return (
