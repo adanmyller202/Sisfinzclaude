@@ -92,6 +92,7 @@ import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
 import { RecurringInvestmentSetupModal } from './RecurringInvestmentSetupModal';
 import { RecurringInvestmentPaymentModal } from './RecurringInvestmentPaymentModal';
+import { RecurringInvestmentManagerModal } from './RecurringInvestmentManagerModal';
 import { CashflowCalendar } from './CashflowCalendar';
 import { BillComparisonBadge } from './BillComparisonBadge';
 import { MonthlyFreedomScale } from './MonthlyFreedomScale';
@@ -372,6 +373,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   const [isSavingGoalModalOpen, setIsSavingGoalModalOpen] = useState(false);
   const [savingGoalToEdit, setSavingGoalToEdit] = useState<SavingGoal | null>(null);
   const [recurringGoalToConfigure, setRecurringGoalToConfigure] = useState<SavingGoal | null>(null);
+  const [recurringGoalToManage, setRecurringGoalToManage] = useState<SavingGoal | null>(null);
   const [investmentPaymentToConfirm, setInvestmentPaymentToConfirm] = useState<{ bill: BillItem; month: string; goal: SavingGoal; installmentAmount: number } | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferDefaultSavingId, setTransferDefaultSavingId] = useState<string | undefined>(undefined);
@@ -440,6 +442,70 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       recurringInvestmentAccountId: accountId,
       recurringInvestmentExchangeRate: goalCurrency === 'ARS' ? 1 : exchangeRate,
     });
+  };
+
+  const handleDeleteAllGoalRecurrences = async (goal: SavingGoal) => {
+    const linkedBills = bills.filter((bill) =>
+      bill.id === goal.recurringInvestmentBillId ||
+      bill.investmentSavingId === goal.id ||
+      Object.values(bill.exceptions || {}).some((exception: any) => exception?.investmentSavingId === goal.id)
+    );
+
+    // Refund only paid installments belonging to the live month. Historical
+    // months remain isolated and must never change today's account balance.
+    for (const bill of linkedBills) {
+      const generatedMonths = new Set<string>();
+      const start = bill.startMonth.split('-').map(Number);
+      const count = Number(bill.investmentPlanMonths) || Number(bill.recurrenceMonthsCount) || 0;
+      if (start.length === 2 && count > 0) {
+        for (let index = 0; index < count; index += 1) {
+          const date = new Date(start[0], start[1] - 1 + index, 1);
+          generatedMonths.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+        }
+      }
+      statusRecords
+        .filter((record) => record.itemType === 'bill' && record.itemId === bill.id)
+        .forEach((record) => generatedMonths.add(record.month));
+
+      for (const month of generatedMonths) {
+        const status = statusRecords.find((record) => record.id === `bill_${bill.id}_${month}`);
+        if (!status?.isCompleted) continue;
+        const occurrence = bill.exceptions?.[month];
+        const savingId = occurrence?.investmentSavingId ?? bill.investmentSavingId;
+        if (savingId !== goal.id) continue;
+
+        await reverseRecurringSavingDeposit(`investment_${bill.id}_${month}`, deleteExpense);
+        if (month === getCurrentMonthStr() && bill.accountId) {
+          const paidAmount = Number(occurrence?.amount ?? bill.amount) || 0;
+          if (paidAmount > 0) await adjustAccountBalanceForFinancialItem(bill.accountId, paidAmount);
+        }
+      }
+
+      await deleteBill(bill.id);
+    }
+
+    // Remove recurring contribution history records as part of cancelling this
+    // plan; the goal itself is reset after all invoice and balance operations.
+    const recurringTransactionIds = new Set<string>();
+    linkedBills.forEach((bill) => {
+      statusRecords
+        .filter((record) => record.itemType === 'bill' && record.itemId === bill.id)
+        .forEach((record) => recurringTransactionIds.add(`stx_investment_${bill.id}_${record.month}`));
+    });
+    for (const transactionId of recurringTransactionIds) {
+      if (savingTransactions.some((transaction) => transaction.id === transactionId)) {
+        await deleteSavingTransaction(transactionId);
+      }
+    }
+
+    await updateSavingGoal(goal.id, {
+      currentAmount: 0,
+      recurringInvestmentBillId: null as any,
+      recurringInvestmentStartMonth: null as any,
+      recurringInvestmentAccountId: null as any,
+      recurringInvestmentExchangeRate: null as any,
+    });
+    setRecurringGoalToManage(null);
   };
 
   const handleConfirmRecurringInvestmentPayment = async (actualBaseAmount: number, updateFutureInstallments: boolean) => {
@@ -1841,6 +1907,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
                 onOpenTransferModal={handleOpenTransfer}
                 onDeleteGoal={deleteSavingGoal}
                 onCreateRecurringInvestment={(goal) => setRecurringGoalToConfigure(goal)}
+                onManageRecurringInvestment={(goal) => setRecurringGoalToManage(goal)}
               />
             </ErrorBoundary>
           </motion.div>
@@ -2129,6 +2196,23 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         activePartners={activePartners}
         onShareWithPartner={onShareWithPartner}
       />
+
+      {recurringGoalToManage && (
+        <RecurringInvestmentManagerModal
+          goal={recurringGoalToManage}
+          bills={bills}
+          statusRecords={statusRecords}
+          currency={currency}
+          locale={locale}
+          onClose={() => setRecurringGoalToManage(null)}
+          onSelectOccurrence={(bill, month) => {
+            setRecurringGoalToManage(null);
+            setSelectedMonth(month);
+            handleEditBill(bill);
+          }}
+          onDeleteAllRecurrences={handleDeleteAllGoalRecurrences}
+        />
+      )}
 
       <RecurringInvestmentSetupModal
         goal={recurringGoalToConfigure}
