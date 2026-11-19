@@ -3,7 +3,10 @@ import App from './App.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { registerSW } from 'virtual:pwa-register';
+import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
 import './index.css';
+
+initTabBarAutoScroll();
 
 // Register PWA service worker with automatic update detection
 if (import.meta.env.PROD) {
