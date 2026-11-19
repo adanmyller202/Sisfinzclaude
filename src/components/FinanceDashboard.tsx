@@ -934,35 +934,52 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     >
       {/* 1. TOP HEADER - Translucent Glass */}
       <motion.div variants={itemVariants} className="px-1 pt-2">
-        <div className="glass rounded-3xl p-2 flex items-center justify-between shadow-xs ring-1 ring-white/10">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            type="button"
-            onClick={goToPreviousMonth}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </motion.button>
-          
-          <AnimatePresence mode="wait">
-            <motion.span 
-              key={selectedMonth}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="text-sm font-black text-slate-900 dark:text-white capitalize tracking-tight"
+        <div className="flex items-stretch gap-2">
+          <div className="glass rounded-3xl p-2 flex items-center justify-between shadow-xs ring-1 ring-white/10 flex-1 min-w-0">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={goToPreviousMonth}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
             >
-              {formatMonthName(selectedMonth, locale)}
-            </motion.span>
-          </AnimatePresence>
+              <ChevronLeft className="w-4 h-4" />
+            </motion.button>
+
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={selectedMonth}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="text-sm font-black text-slate-900 dark:text-white capitalize tracking-tight truncate min-w-0 text-center"
+              >
+                {formatMonthName(selectedMonth, locale)}
+              </motion.span>
+            </AnimatePresence>
+
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={goToNextMonth}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </motion.button>
+          </div>
 
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.95 }}
             type="button"
-            onClick={goToNextMonth}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            onClick={goToCurrentMonth}
+            aria-label={language === 'es' ? 'Volver al mes actual' : language === 'en' ? 'Back to current month' : 'Voltar para o mês atual'}
+            title={language === 'es' ? 'Volver al mes actual' : language === 'en' ? 'Back to current month' : 'Voltar para o mês atual'}
+            className={`glass rounded-3xl px-3.5 shrink-0 flex items-center justify-center shadow-xs ring-1 text-[11px] font-black whitespace-nowrap cursor-pointer transition-all ${
+              !isCurrentMonthSelected
+                ? 'text-emerald-700 dark:text-emerald-400 ring-emerald-500/30 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40'
+                : 'text-slate-500 dark:text-slate-400 ring-white/10 opacity-75'
+            }`}
           >
-            <ChevronRight className="w-4 h-4" />
+            {language === 'es' ? 'Mes actual' : language === 'en' ? 'Current' : 'Mês atual'}
           </motion.button>
         </div>
       </motion.div>
