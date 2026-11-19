@@ -207,7 +207,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                         <div className="text-lg font-black text-emerald-400 font-mono tracking-tighter">+{formatCurrency(m.sumIncomes, currency)}</div>
                       </div>
                       <div className="p-5 rounded-3xl bg-white/2 border border-white/5">
-                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-2">Custo de Vida</div>
+                        <div className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-2">Previsão de Saídas</div>
                         <div className="text-lg font-black text-rose-400 font-mono tracking-tighter">-{formatCurrency(m.sumExpenses, currency)}</div>
                       </div>
                     </div>
