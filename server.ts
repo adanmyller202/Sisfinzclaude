@@ -56,6 +56,7 @@ function checkRateLimit(ip: string): boolean {
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
 // Issue a single-use, short-lived Gemini Live token only to an authenticated SisFinz user.
 // The browser connects directly to Gemini for lower audio latency; the long-lived API key stays server-side.
@@ -147,8 +148,6 @@ app.post('/api/mone/live-token', async (req, res) => {
     console.error('[Mone Live] Token creation failed:', err);
     res.status(502).json({ error: 'Não foi possível iniciar a conexão de voz em tempo real.' });
   }
-});
-
 });
 
 // Secure Exact-Email User Lookup with Abuse & Rate-Limiting Protection (Server Token Verified)
@@ -247,8 +246,7 @@ app.post('/api/search-user', async (req, res) => {
             found: true,
             user: {
               uid: fields.uid.stringValue,
-              email: fields.email?.stringValue || cleanEmail,
-              displayName: fields.displayName?.stringValue || cleanEmail.split('@')[0],
+              email: fields.email?.stringValue || cleanEmail,              displayName: fields.displayName?.stringValue || cleanEmail.split('@')[0],
             },
           });
           return;
@@ -497,7 +495,6 @@ app.post('/api/mone', async (req, res) => {
       res.status(503).json({ error: 'GEMINI_API_KEY not configured on server' });
       return;
     }
-
     const ai = new GoogleGenAI({ apiKey });
 
     const {
@@ -747,8 +744,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage = 'Timeout
       })
       .catch((err) => {
         clearTimeout(timer);
-        reject(err);
-      });
+        reject(err);      });
   });
 }
 
@@ -997,8 +993,7 @@ REGRAS RÁPIDAS DE VALORES MONETÁRIOS (CRÍTICO):
       const errPayload = {
         erro: 'Erro ao interpretar resposta da IA',
         detalhe: `Resposta não é JSON válido: ${responseText.slice(0, 150)}`,
-      };
-      console.error('JSON Parse error in /api/parse-lancamento:', jsonErr, responseText);
+      };      console.error('JSON Parse error in /api/parse-lancamento:', jsonErr, responseText);
       res.status(500).json(errPayload);
       return;
     }
