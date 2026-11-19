@@ -298,17 +298,28 @@ export function useFinanceControl(
         return updated;
       });
 
+      const relatedStatuses = statusRecords.filter((record) => record.itemType === 'bill' && record.itemId === billId);
+      setStatusRecords((prev) => {
+        const updated = prev.filter((record) => !(record.itemType === 'bill' && record.itemId === billId));
+        try {
+          localStorage.setItem(getLocalKey('status'), JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
       registerPendingWrite();
       try {
-        const billRef = doc(db, 'users', userId, 'bills', billId);
-        await deleteDoc(billRef);
+        await deleteDoc(doc(db, 'users', userId, 'bills', billId));
+        await Promise.all(relatedStatuses.map((record) =>
+          deleteDoc(doc(db, 'users', userId, 'monthly_status', record.id))
+        ));
       } catch (err) {
-        console.warn('Bill deleted locally, will sync when online:', err);
+        console.warn('Bill or related status deleted locally, will sync when online:', err);
       } finally {
         registerResolvedWrite();
       }
     },
-    [userId, getLocalKey]
+    [userId, getLocalKey, statusRecords]
   );
 
   // Update bill occurrence (this month vs this and all future)
