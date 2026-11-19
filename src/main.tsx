@@ -4,8 +4,10 @@ import { AuthProvider } from './context/AuthContext.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { registerSW } from 'virtual:pwa-register';
 import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
+import { initColorTheme } from './utils/colorTheme.ts';
 import './index.css';
 
+initColorTheme();
 initTabBarAutoScroll();
 
 // Register PWA service worker with automatic update detection
