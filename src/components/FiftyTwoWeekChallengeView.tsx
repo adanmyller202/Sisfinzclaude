@@ -183,7 +183,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         await setDoc(
           challengeRef,
           sanitizeForFirestore({
-            title: title.trim() || 'Plano Semanal',
+            title: title.trim() || 'Frasco Semanal',
             storageLocation: storageLocation.trim(),
             currency: planCurrency,
             savingMode,
@@ -203,8 +203,8 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         setCreating(false);
       }
     }catch(err){
-      console.error('Erro ao salvar plano semanal:',err);
-      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar o plano. Tente novamente.');
+      console.error('Erro ao salvar frasco semanal:',err);
+      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar o frasco. Tente novamente.');
     }finally{setSaving(false);}
   };
   const activeAccounts = safeAccounts.filter(a => a.isActive !== false);
@@ -268,7 +268,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     const now = new Date();
     const dateStr = now.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
     const timeStr = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    const planName = plan.title?.trim() || 'Plano Semanal';
+    const planName = plan.title?.trim() || 'Frasco Semanal';
     const updatedAt = now.toISOString();
 
     const annotateDoc = async (collectionName: 'expenses' | 'incomes', docId: string, kindLabel: 'despesa' | 'ingresso') => {
@@ -277,7 +277,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         const snap = await getDoc(ref);
         if (!snap.exists()) return;
         const currentNotes = String(snap.data()?.notes || '').trim();
-        const deletionNote = `O plano "${planName}" deste(a) ${kindLabel} foi excluído em ${dateStr} às ${timeStr}.`;
+        const deletionNote = `O frasco "${planName}" deste(a) ${kindLabel} foi excluído em ${dateStr} às ${timeStr}.`;
         const nextNotes = currentNotes ? `${currentNotes}\n${deletionNote}` : deletionNote;
         await setDoc(ref, sanitizeForFirestore({ notes: nextNotes, updatedAt }), { merge: true });
       } catch (err) {
@@ -312,8 +312,8 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
       }
       setPlanToDelete(null);
     } catch (err) {
-      console.error('Erro ao excluir plano semanal:', err);
-      setDeletePlanError(err instanceof Error ? err.message : 'Não foi possível excluir este plano. Tente novamente.');
+      console.error('Erro ao excluir frasco semanal:', err);
+      setDeletePlanError(err instanceof Error ? err.message : 'Não foi possível excluir este frasco. Tente novamente.');
     } finally {
       setDeletingPlan(false);
     }
@@ -346,12 +346,12 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
                 <Trash2 className="h-7 w-7" />
               </div>
-              <h4 className="mt-4 text-center text-xl font-black text-slate-900">Excluir plano?</h4>
+              <h4 className="mt-4 text-center text-xl font-black text-slate-900">Excluir frasco?</h4>
               <p className="mt-2 text-center text-sm font-semibold text-slate-700">
                 "{planToDelete.title}"
               </p>
               <p className="mt-2 text-center text-xs leading-relaxed text-slate-500">
-                O saldo das suas contas, os depósitos já registrados e os resgates não serão alterados. Apenas será adicionada uma observação com data e hora informando que o plano foi excluído.
+                O saldo das suas contas, os depósitos já registrados e os resgates não serão alterados. Apenas será adicionada uma observação com data e hora informando que o frasco foi excluído.
               </p>
               {deletePlanError && (
                 <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
@@ -385,12 +385,12 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   if(creating || editingPlan)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
     <div className="flex items-center justify-between">
       <button type="button" onClick={()=>{ if(editingPlan){ setEditingPlan(false); } else { setCreating(false); onReturnToFinance?.(); } }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="w-4 h-4"/>Voltar</button>
-      {!editingPlan && challenges.length>0 && <button type="button" onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus planos</button>}
+      {!editingPlan && challenges.length>0 && <button type="button" onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus frascos</button>}
     </div>
     <div className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-xl shadow-emerald-900/5">
-      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15">{editingPlan ? <Pencil className="h-7 w-7"/> : <Target className="h-7 w-7"/>}</div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{editingPlan ? 'Editar Plano Semanal' : 'Plano Semanal'}</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">{editingPlan ? 'Ajuste o nome, valores, quantidade de semanas ou as datas do seu plano.' : 'Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada semana.'}</p></div></div></div>
+      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15">{editingPlan ? <Pencil className="h-7 w-7"/> : <Target className="h-7 w-7"/>}</div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{editingPlan ? 'Editar Frasco Semanal' : 'Frasco Semanal'}</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">{editingPlan ? 'Ajuste o nome, valores, quantidade de semanas ou as datas do seu frasco.' : 'Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada semana.'}</p></div></div></div>
       <form onSubmit={submitPlan} className="space-y-6 p-5 sm:p-8">
-        <div className="space-y-4"><div><label className="mb-2 block text-sm font-bold text-slate-700">Nome da sua meta</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Minha viagem, reserva de emergência..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Onde este dinheiro está guardado?</label><input value={storageLocation} onChange={e=>setStorageLocation(e.target.value)} placeholder="Ex.: Cofre de casa, envelope azul, outra carteira..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/><p className="mt-1 text-xs text-slate-500">Apenas uma anotação para você localizar o dinheiro; não altera suas contas.</p></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Moeda deste plano</label><select value={planCurrency} onChange={e=>setPlanCurrency(e.target.value as CurrencyCode)} className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"><option value="ARS">Peso argentino (ARS)</option><option value="BRL">Real brasileiro (BRL)</option><option value="USD">Dólar americano (USD)</option><option value="EUR">Euro (EUR)</option></select><p className="mt-1 text-xs text-slate-500">Os depósitos só poderão movimentar contas ativas nesta moeda.</p></div></div>
+        <div className="space-y-4"><div><label className="mb-2 block text-sm font-bold text-slate-700">Nome do seu frasco</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Minha viagem, reserva de emergência..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Onde este dinheiro está guardado?</label><input value={storageLocation} onChange={e=>setStorageLocation(e.target.value)} placeholder="Ex.: Cofre de casa, envelope azul, outra carteira..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/><p className="mt-1 text-xs text-slate-500">Apenas uma anotação para você localizar o dinheiro; não altera suas contas.</p></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Moeda deste frasco</label><select value={planCurrency} onChange={e=>setPlanCurrency(e.target.value as CurrencyCode)} className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"><option value="ARS">Peso argentino (ARS)</option><option value="BRL">Real brasileiro (BRL)</option><option value="USD">Dólar americano (USD)</option><option value="EUR">Euro (EUR)</option></select><p className="mt-1 text-xs text-slate-500">Os depósitos só poderão movimentar contas ativas nesta moeda.</p></div></div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-bold text-slate-700">Como deseja economizar?</label>
@@ -411,15 +411,15 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
           <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de término</label><input type="date" value={endDate} min={startDate} onChange={e=>handleEndDateChange(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div>
         </div>
         {formError && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">{formError}</p>}
-        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-5"><div className="flex items-center gap-2 text-sm font-bold text-emerald-800"><Sparkles className="h-4 w-4"/>Resumo do seu plano</div><div className="mt-4 grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold text-slate-500">Duração</p><p className="mt-1 text-2xl font-black text-slate-900">{requestedWeeks>0?requestedWeeks:0} <span className="text-sm font-bold text-slate-500">semanas</span></p><p className="mt-1 text-xs text-slate-500">Termina em {requestedWeeks>0?previewLastDate():"—"}</p></div><div><p className="text-xs font-semibold text-slate-500">Total a economizar</p><p className="mt-1 break-words text-xl font-black text-emerald-700">{formatCurrency(previewTotal,planCurrency)}</p></div></div><p className="mt-3 text-xs leading-relaxed text-slate-600">{savingMode==='progressive' ? "Os depósitos aumentam progressivamente: 1ª semana "+formatCurrency(firstDeposit,planCurrency)+", 2ª "+formatCurrency(firstDeposit*2,planCurrency)+", 3ª "+formatCurrency(firstDeposit*3,planCurrency)+"." : "Você guardará aproximadamente "+formatCurrency(fixedInstallment,planCurrency)+" por semana durante "+requestedWeeks+" semanas."}</p></div>
-        <button type="submit" disabled={saving||(savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks)} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">{saving?<Loader2 className="h-5 w-5 animate-spin"/>:editingPlan?<Check className="h-5 w-5"/>:<Plus className="h-5 w-5"/>}{editingPlan ? 'Salvar alterações' : 'Criar meu plano'}</button>
+        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-5"><div className="flex items-center gap-2 text-sm font-bold text-emerald-800"><Sparkles className="h-4 w-4"/>Resumo do seu frasco</div><div className="mt-4 grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold text-slate-500">Duração</p><p className="mt-1 text-2xl font-black text-slate-900">{requestedWeeks>0?requestedWeeks:0} <span className="text-sm font-bold text-slate-500">semanas</span></p><p className="mt-1 text-xs text-slate-500">Termina em {requestedWeeks>0?previewLastDate():"—"}</p></div><div><p className="text-xs font-semibold text-slate-500">Total a economizar</p><p className="mt-1 break-words text-xl font-black text-emerald-700">{formatCurrency(previewTotal,planCurrency)}</p></div></div><p className="mt-3 text-xs leading-relaxed text-slate-600">{savingMode==='progressive' ? "Os depósitos aumentam progressivamente: 1ª semana "+formatCurrency(firstDeposit,planCurrency)+", 2ª "+formatCurrency(firstDeposit*2,planCurrency)+", 3ª "+formatCurrency(firstDeposit*3,planCurrency)+"." : "Você guardará aproximadamente "+formatCurrency(fixedInstallment,planCurrency)+" por semana durante "+requestedWeeks+" semanas."}</p></div>
+        <button type="submit" disabled={saving||(savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks)} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">{saving?<Loader2 className="h-5 w-5 animate-spin"/>:editingPlan?<Check className="h-5 w-5"/>:<Plus className="h-5 w-5"/>}{editingPlan ? 'Salvar alterações' : 'Criar meu frasco'}</button>
       </form>
     </div>
   </div>;
 
   if(!activeChallenge || !showingSelectedPlan)return <div className="mx-auto w-full max-w-3xl min-w-0 space-y-4 overflow-x-clip px-1 pb-24 sm:px-2">
     <div className="flex min-w-0 items-center justify-between gap-3">
-      <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Meus planos</h2>
+      <h2 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">Meus frascos</h2>
     </div>
     <section className="space-y-4">
       <div className="grid grid-cols-2 gap-2 rounded-[1.25rem] border border-emerald-500/20 bg-[#D1FAEB]/60 p-1.5 backdrop-blur-md">
@@ -430,7 +430,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         >
           {planListFilter === 'active' && <motion.div layoutId="weekly-plan-filter-bg" className="absolute inset-0 rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20" />}
           <Target className="relative z-10 h-4 w-4" />
-          <span className="relative z-10">Planos ativos</span>
+          <span className="relative z-10">Frascos ativos</span>
           <span className={`relative z-10 rounded-full px-1.5 py-0.5 text-[9px] ${planListFilter === 'active' ? 'bg-white/20 text-white' : 'bg-white/70 text-slate-600'}`}>{activePlans.length}</span>
         </button>
         <button
@@ -440,7 +440,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         >
           {planListFilter === 'finalized' && <motion.div layoutId="weekly-plan-filter-bg" className="absolute inset-0 rounded-xl bg-emerald-600 shadow-lg shadow-emerald-600/20" />}
           <CheckCircle2 className="relative z-10 h-4 w-4" />
-          <span className="relative z-10">Planos finalizados</span>
+          <span className="relative z-10">Frascos finalizados</span>
           <span className={`relative z-10 rounded-full px-1.5 py-0.5 text-[9px] ${planListFilter === 'finalized' ? 'bg-white/20 text-white' : 'bg-white/70 text-slate-600'}`}>{finalizedPlans.length}</span>
         </button>
       </div>
@@ -456,8 +456,8 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
             activePlans.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-emerald-200 bg-white p-7 text-center">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Target className="h-6 w-6"/></div>
-                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum plano ativo</p>
-                <p className="mt-1 text-xs text-slate-500">Adicione um plano para começar a encher seu frasco.</p>
+                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum frasco ativo</p>
+                <p className="mt-1 text-xs text-slate-500">Adicione um frasco para começar a encher.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -557,7 +557,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                   );
                 })}
 
-                {/* Matching dashed jar shortcut to add a new plan */}
+                {/* Matching dashed jar shortcut to add a new jar */}
                 <motion.button
                   type="button"
                   whileHover={{ y: -3 }}
@@ -569,7 +569,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                     <Plus className="h-6 w-6 stroke-[2.75]" />
                   </div>
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wider text-emerald-800">Novo plano</p>
+                    <p className="text-xs font-black uppercase tracking-wider text-emerald-800">Novo frasco</p>
                     <p className="mt-0.5 text-[10px] font-medium text-emerald-700/75">Criar novo frasco</p>
                   </div>
                 </motion.button>
@@ -579,8 +579,8 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
             finalizedPlans.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-emerald-200 bg-white p-7 text-center">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Award className="h-6 w-6"/></div>
-                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum plano finalizado</p>
-                <p className="mt-1 text-xs text-slate-500">Seus planos concluídos aparecerão aqui.</p>
+                <p className="mt-3 text-sm font-bold text-slate-700">Nenhum frasco finalizado</p>
+                <p className="mt-1 text-xs text-slate-500">Seus frascos concluídos aparecerão aqui.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -622,8 +622,8 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                               setDeletePlanError('');
                               setPlanToDelete(plan);
                             }}
-                            title="Excluir plano finalizado"
-                            aria-label={`Excluir plano ${plan.title}`}
+                            title="Excluir frasco finalizado"
+                            aria-label={`Excluir frasco ${plan.title}`}
                             className="rounded-lg p-1 text-rose-500 transition-colors hover:bg-rose-50/80 hover:text-rose-600 cursor-pointer"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -665,7 +665,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
       </AnimatePresence>
     </section>
     {activePlans.length === 0 && planListFilter === 'active' && (
-      <button type="button" onClick={startCreatingPlan} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar plano</button>
+      <button type="button" onClick={startCreatingPlan} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar frasco</button>
     )}
     {renderDeletePlanModal()}
   </div>;
@@ -676,17 +676,17 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
 
   return <div className="space-y-5 pb-20">
     <div className="flex items-center justify-between gap-3">
-      <button type="button" onClick={()=>{onSelectChallenge('');setShowingSelectedPlan(false);}} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Meus planos</button>
+      <button type="button" onClick={()=>{onSelectChallenge('');setShowingSelectedPlan(false);}} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Meus frascos</button>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={startEditingPlan} title="Editar plano" aria-label="Editar plano" className="rounded-xl border border-emerald-200 bg-white p-2.5 text-emerald-700 shadow-sm hover:bg-emerald-50"><Pencil className="h-4 w-4"/></button>
-        <button type="button" onClick={removeChallenge} title="Excluir plano" aria-label="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 shadow-sm hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button>
+        <button type="button" onClick={startEditingPlan} title="Editar frasco" aria-label="Editar frasco" className="rounded-xl border border-emerald-200 bg-white p-2.5 text-emerald-700 shadow-sm hover:bg-emerald-50"><Pencil className="h-4 w-4"/></button>
+        <button type="button" onClick={removeChallenge} title="Excluir frasco" aria-label="Excluir frasco" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 shadow-sm hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button>
       </div>
     </div>
     <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-lg shadow-emerald-900/5">
-      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white sm:p-8"><div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl"/><div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Sua jornada de economia</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeChallenge.title}</h2><div className="mt-2 flex items-center gap-2 text-sm text-emerald-50"><span>{activeChallenge.storageLocation?.trim()||'Local do dinheiro não informado'}</span><button type="button" title="Editar local onde o dinheiro está guardado" onClick={()=>{setStorageDraft(activeChallenge.storageLocation||'');setStorageError('');setEditingStorage(true);}} className="rounded-lg p-1.5 text-white/90 hover:bg-white/15"><Pencil className="h-3.5 w-3.5"/></button></div><p className="mt-2 text-sm text-emerald-50">Plano de {totalWeeks} semanas • iniciado em {new Date(activeChallenge.startDate+'T00:00:00').toLocaleDateString(locale)}</p></div><div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-4"><p className="text-xs font-semibold text-emerald-50">Total da meta</p><p className="mt-1 text-2xl font-black">{formatCurrency(metrics?.target||0,activePlanCurrency)}</p></div></div><div className="relative mt-7"><div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-50"><span>Progresso geral</span><span>{(metrics?.percent||0).toFixed(1)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-black/20"><motion.div initial={{width:0}} animate={{width:(metrics?.percent||0)+'%'}} transition={{duration:0.7}} className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"/></div></div></div>
+      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white sm:p-8"><div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl"/><div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Sua jornada de economia</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeChallenge.title}</h2><div className="mt-2 flex items-center gap-2 text-sm text-emerald-50"><span>{activeChallenge.storageLocation?.trim()||'Local do dinheiro não informado'}</span><button type="button" title="Editar local onde o dinheiro está guardado" onClick={()=>{setStorageDraft(activeChallenge.storageLocation||'');setStorageError('');setEditingStorage(true);}} className="rounded-lg p-1.5 text-white/90 hover:bg-white/15"><Pencil className="h-3.5 w-3.5"/></button></div><p className="mt-2 text-sm text-emerald-50">Frasco de {totalWeeks} semanas • iniciado em {new Date(activeChallenge.startDate+'T00:00:00').toLocaleDateString(locale)}</p></div><div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-4"><p className="text-xs font-semibold text-emerald-50">Total da meta</p><p className="mt-1 text-2xl font-black">{formatCurrency(metrics?.target||0,activePlanCurrency)}</p></div></div><div className="relative mt-7"><div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-50"><span>Progresso geral</span><span>{(metrics?.percent||0).toFixed(1)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-black/20"><motion.div initial={{width:0}} animate={{width:(metrics?.percent||0)+'%'}} transition={{duration:0.7}} className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"/></div></div></div>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Já economizado</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.saved||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Falta economizar</p><p className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{formatCurrency(metrics?.remaining||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Semanas concluídas</p><p className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{metrics?.count||0}<span className="text-sm font-bold text-slate-400"> / {totalWeeks}</span></p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Próximo depósito</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.nextAmount||0,activeChallenge.currency||currency)}</p></div></div>
     </section>
-    {metrics?.next?<section className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm"><TrendingUp className="h-5 w-5"/></div><div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Próxima semana • Semana {metrics.next}</p><p className="text-sm text-slate-600">Quando guardar, marque esta semana como concluída.</p></div></div><button type="button" onClick={()=>openWeek(metrics.next,false,metrics.nextAmount)} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-md hover:bg-emerald-700">Registrar depósito<ArrowUpRight className="h-4 w-4"/></button></section>:<section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><div className="flex items-center gap-2 font-extrabold"><Award className="h-5 w-5"/>Meta concluída!</div><p className="mt-1 text-sm">Parabéns! Você completou todas as semanas do seu plano.</p>{activeChallenge.redeemedAt ? <div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm"><p className="font-bold">Valor resgatado</p><p className="mt-1">O dinheiro foi transferido para sua conta em {new Date(activeChallenge.redeemedAt).toLocaleDateString(locale)}.</p></div> : <><p className="mt-2 text-sm">Seu dinheiro está guardado e disponível para entrar no saldo das suas contas quando você quiser.</p><button type="button" onClick={()=>{setRedeemAccountId(activeAccounts.find(a=>a.currency===activePlanCurrency)?.id||'');setRedeemError('');setShowRedeemModal(true);}} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-emerald-800"><ArrowUpRight className="h-4 w-4"/>Transferir valor para uma conta</button></>}</section>}
+    {metrics?.next?<section className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm"><TrendingUp className="h-5 w-5"/></div><div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Próxima semana • Semana {metrics.next}</p><p className="text-sm text-slate-600">Quando guardar, marque esta semana como concluída.</p></div></div><button type="button" onClick={()=>openWeek(metrics.next,false,metrics.nextAmount)} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-md hover:bg-emerald-700">Registrar depósito<ArrowUpRight className="h-4 w-4"/></button></section>:<section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><div className="flex items-center gap-2 font-extrabold"><Award className="h-5 w-5"/>Meta concluída!</div><p className="mt-1 text-sm">Parabéns! Você completou todas as semanas do seu frasco.</p>{activeChallenge.redeemedAt ? <div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm"><p className="font-bold">Valor resgatado</p><p className="mt-1">O dinheiro foi transferido para sua conta em {new Date(activeChallenge.redeemedAt).toLocaleDateString(locale)}.</p></div> : <><p className="mt-2 text-sm">Seu dinheiro está guardado e disponível para entrar no saldo das suas contas quando você quiser.</p><button type="button" onClick={()=>{setRedeemAccountId(activeAccounts.find(a=>a.currency===activePlanCurrency)?.id||'');setRedeemError('');setShowRedeemModal(true);}} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-emerald-800"><ArrowUpRight className="h-4 w-4"/>Transferir valor para uma conta</button></>}</section>}
     <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -868,7 +868,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                 <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">Configuração do plano</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">Configuração do frasco</p>
                       <h3 className="mt-1 text-xl font-black">Onde o dinheiro está guardado?</h3>
                     </div>
                     <button type="button" onClick={()=>setEditingStorage(false)} disabled={storageSaving} className="rounded-xl p-2 text-white/90 hover:bg-white/15"><X className="h-5 w-5"/></button>
