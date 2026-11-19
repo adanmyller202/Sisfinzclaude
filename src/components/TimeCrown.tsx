@@ -46,6 +46,7 @@ function getMonthDiff(fromMonth: string, toMonth: string): number {
 
 /** Synthesize a crisp, subtle watch/camera-dial mechanical tick via Web Audio API */
 let sharedAudioCtx: AudioContext | null = null;
+let audioUnlocked = false;
 
 function isSoundDisabled(): boolean {
   if (typeof window === 'undefined') return true;
@@ -63,7 +64,7 @@ function isSoundDisabled(): boolean {
   return false;
 }
 
-/** Unlock AudioContext inside a direct user gesture (pointerdown/click) so iOS Safari allows ticks during drag */
+/** Unlock AudioContext inside a direct user gesture so iOS Safari/PWA plays ticks reliably */
 function unlockAudioEngine() {
   if (typeof window === 'undefined') return;
   try {
@@ -72,6 +73,14 @@ function unlockAudioEngine() {
     if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
     if (sharedAudioCtx.state === 'suspended') {
       sharedAudioCtx.resume().catch(() => {});
+    }
+    if (!audioUnlocked) {
+      const silentBuffer = sharedAudioCtx.createBuffer(1, 1, 22050);
+      const source = sharedAudioCtx.createBufferSource();
+      source.buffer = silentBuffer;
+      source.connect(sharedAudioCtx.destination);
+      source.start(0);
+      audioUnlocked = true;
     }
   } catch {
     // ignore
@@ -95,7 +104,7 @@ function playMechanicalTick(strong = false) {
     osc.frequency.setValueAtTime(strong ? 1450 : 1050, now);
     osc.frequency.exponentialRampToValueAtTime(220, now + 0.015);
 
-    gain.gain.setValueAtTime(strong ? 0.07 : 0.045, now);
+    gain.gain.setValueAtTime(strong ? 0.075 : 0.05, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
 
     osc.connect(gain);
@@ -108,8 +117,10 @@ function playMechanicalTick(strong = false) {
 }
 
 /**
- * Trigger tactile haptic feedback on both Android (navigator.vibrate)
- * and modern iOS Safari/PWA (via hidden native switch haptic trigger).
+ * Trigger tactile haptic feedback on Android (navigator.vibrate)
+ * and best-effort native switch haptic on iOS 17.4+ during direct gestures.
+ * Note: iOS WebKit does not support navigator.vibrate() and blocks continuous
+ * haptics during drag/async animations.
  */
 let iosHapticLabel: HTMLLabelElement | null = null;
 function triggerHaptic(strong = false) {
@@ -122,18 +133,14 @@ function triggerHaptic(strong = false) {
     }
   }
 
-  // iOS Safari 17.4+ native switch haptic fallback
   if (typeof document !== 'undefined') {
     try {
       if (!iosHapticLabel || !document.body.contains(iosHapticLabel)) {
         const label = document.createElement('label');
         label.setAttribute('aria-hidden', 'true');
         label.style.position = 'fixed';
-        label.style.opacity = '0';
-        label.style.pointerEvents = 'none';
-        label.style.width = '1px';
-        label.style.height = '1px';
-        label.style.overflow = 'hidden';
+        label.style.left = '-9999px';
+        label.style.top = '0';
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.setAttribute('switch', '');
@@ -232,6 +239,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
 
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
   const [tickPulse, setTickPulse] = useState(0);
 
   const pointerActiveRef = useRef(false);
@@ -241,25 +249,21 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   const accumPxRef = useRef(0);
   const didDragRef = useRef(false);
   const lastTapTimeRef = useRef(0);
-  const inertiaRafRef = useRef<number | null>(null);
-  const stepQueueTimerRef = useRef<number | null>(null);
+  const animRafRef = useRef<number | null>(null);
 
   const healthMap = useMemo(() => computeMonthHealthMap(selectedMonth), [selectedMonth]);
   const activeHealth = healthMap[selectedMonth] || 'neutral';
   const isNegativeMonth = activeHealth === 'negative';
 
-  const stopInertia = useCallback(() => {
-    if (inertiaRafRef.current !== null) {
-      cancelAnimationFrame(inertiaRafRef.current);
-      inertiaRafRef.current = null;
+  const stopAnimation = useCallback(() => {
+    if (animRafRef.current !== null) {
+      cancelAnimationFrame(animRafRef.current);
+      animRafRef.current = null;
     }
-    if (stepQueueTimerRef.current !== null) {
-      window.clearTimeout(stepQueueTimerRef.current);
-      stepQueueTimerRef.current = null;
-    }
+    setIsSpinning(false);
   }, []);
 
-  useEffect(() => () => stopInertia(), [stopInertia]);
+  useEffect(() => () => stopAnimation(), [stopAnimation]);
 
   const emitMonthStep = useCallback(
     (delta: -1 | 1, strong = false) => {
@@ -289,9 +293,81 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
     [emitMonthStep]
   );
 
+  /** Smooth 60fps rotary spin across N months (used for both Rewind to Current Month and clicking neighbor slots) */
+  const spinByMonths = useCallback(
+    (steps: number, onComplete?: () => void) => {
+      if (steps === 0) {
+        onComplete?.();
+        return;
+      }
+
+      stopAnimation();
+
+      if (reduceMotion) {
+        const dir: -1 | 1 = steps > 0 ? 1 : -1;
+        for (let i = 0; i < Math.abs(steps); i++) {
+          emitMonthStep(dir, i === Math.abs(steps) - 1);
+        }
+        accumPxRef.current = 0;
+        setDragOffsetPx(0);
+        onComplete?.();
+        return;
+      }
+
+      // If more than 12 months away, skip the excess first and spin smoothly through the final 12 months
+      const absSteps = Math.abs(steps);
+      let visualSteps = steps;
+      if (absSteps > 12) {
+        const dir: -1 | 1 = steps > 0 ? 1 : -1;
+        const skipCount = absSteps - 12;
+        for (let i = 0; i < skipCount; i++) {
+          onStepMonth(dir);
+        }
+        visualSteps = dir * 12;
+      }
+
+      // Moving forward (+steps) requires dragging left (-px); moving backward (-steps) requires dragging right (+px)
+      const totalTravelPx = -visualSteps * ITEM_WIDTH;
+      const durationMs = Math.min(820, Math.max(320, Math.abs(visualSteps) * 115));
+      const startTs = performance.now();
+      let prevTravel = 0;
+
+      accumPxRef.current = 0;
+      setDragOffsetPx(0);
+      setIsSpinning(true);
+
+      const easeInOutCubic = (t: number) =>
+        t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+      const frame = (now: number) => {
+        const elapsed = now - startTs;
+        const t = Math.min(1, elapsed / durationMs);
+        const currentTravel = easeInOutCubic(t) * totalTravelPx;
+        const dx = currentTravel - prevTravel;
+        prevTravel = currentTravel;
+
+        applyDeltaPx(dx);
+
+        if (t < 1) {
+          animRafRef.current = requestAnimationFrame(frame);
+        } else {
+          animRafRef.current = null;
+          accumPxRef.current = 0;
+          setDragOffsetPx(0);
+          setIsSpinning(false);
+          onComplete?.();
+        }
+      };
+
+      animRafRef.current = requestAnimationFrame(frame);
+    },
+    [applyDeltaPx, emitMonthStep, onStepMonth, reduceMotion, stopAnimation]
+  );
+
   const startInertiaCoast = useCallback(
     (initialVelocity: number) => {
-      stopInertia();
+      stopAnimation();
+      setIsSpinning(true);
       let velocity = initialVelocity;
       let lastTs = performance.now();
 
@@ -303,26 +379,23 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           accumPxRef.current = 0;
           setDragOffsetPx(0);
           setIsDragging(false);
-          inertiaRafRef.current = null;
+          setIsSpinning(false);
+          animRafRef.current = null;
           return;
         }
 
         applyDeltaPx(velocity * dt);
         velocity *= Math.pow(0.92, dt / 16);
-        inertiaRafRef.current = requestAnimationFrame(frame);
+        animRafRef.current = requestAnimationFrame(frame);
       };
 
-      inertiaRafRef.current = requestAnimationFrame(frame);
+      animRafRef.current = requestAnimationFrame(frame);
     },
-    [applyDeltaPx, stopInertia]
+    [applyDeltaPx, stopAnimation]
   );
 
   const handleRewindToToday = useCallback(() => {
     unlockAudioEngine();
-    stopInertia();
-    accumPxRef.current = 0;
-    setDragOffsetPx(0);
-    setIsDragging(false);
 
     if (monthDiffFromToday === 0) {
       triggerHaptic(false);
@@ -331,53 +404,20 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
       return;
     }
 
-    // Animated rewind effect when within 6 months; direct jump for larger spans
-    const steps = Math.abs(monthDiffFromToday);
-    if (!reduceMotion && steps <= 6) {
-      const dir: -1 | 1 = monthDiffFromToday > 0 ? -1 : 1;
-      let remaining = steps;
-      const rewindNext = () => {
-        if (remaining <= 0) return;
-        emitMonthStep(dir, remaining === 1);
-        remaining--;
-        if (remaining > 0) {
-          stepQueueTimerRef.current = window.setTimeout(rewindNext, 55);
-        }
-      };
-      rewindNext();
-    } else {
-      triggerHaptic(true);
-      playMechanicalTick(true);
+    triggerHaptic(true);
+    playMechanicalTick(true);
+
+    // Smoothly spin the entire ruler back to the current month
+    spinByMonths(-monthDiffFromToday, () => {
       onGoToCurrentMonth();
       setTickPulse((v) => v + 1);
-    }
-  }, [monthDiffFromToday, onGoToCurrentMonth, reduceMotion, emitMonthStep, stopInertia]);
-
-  const handleJumpBySteps = useCallback(
-    (steps: number) => {
-      if (steps === 0) return;
-      unlockAudioEngine();
-      stopInertia();
-      const dir: -1 | 1 = steps > 0 ? 1 : -1;
-      let remaining = Math.abs(steps);
-
-      const stepNext = () => {
-        if (remaining <= 0) return;
-        emitMonthStep(dir);
-        remaining--;
-        if (remaining > 0) {
-          stepQueueTimerRef.current = window.setTimeout(stepNext, 50);
-        }
-      };
-      stepNext();
-    },
-    [emitMonthStep, stopInertia]
-  );
+    });
+  }, [monthDiffFromToday, onGoToCurrentMonth, spinByMonths]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     unlockAudioEngine();
-    stopInertia();
+    stopAnimation();
     pointerActiveRef.current = true;
     didDragRef.current = false;
     lastClientXRef.current = e.clientX;
@@ -479,6 +519,8 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
     return arr;
   }, [selectedMonth, language]);
 
+  const disableCssTransition = isDragging || isSpinning;
+
   return (
     <div
       className="glass rounded-[1.75rem] border border-emerald-200/70 bg-white/90 px-3 pt-2.5 pb-2 shadow-sm ring-1 ring-white/50 select-none overflow-hidden"
@@ -504,7 +546,13 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           }
         >
           {monthDiffFromToday !== 0 ? (
-            <RotateCcw className="h-2.5 w-2.5 stroke-[2.75]" />
+            <motion.span
+              animate={isSpinning ? { rotate: -360 } : { rotate: 0 }}
+              transition={isSpinning ? { repeat: Infinity, duration: 0.6, ease: 'linear' } : { duration: 0.2 }}
+              className="inline-flex"
+            >
+              <RotateCcw className="h-2.5 w-2.5 stroke-[2.75]" />
+            </motion.span>
           ) : (
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
           )}
@@ -544,11 +592,11 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           if (e.key === 'ArrowRight') {
             e.preventDefault();
             unlockAudioEngine();
-            emitMonthStep(1);
+            spinByMonths(1);
           } else if (e.key === 'ArrowLeft') {
             e.preventDefault();
             unlockAudioEngine();
-            emitMonthStep(-1);
+            spinByMonths(-1);
           } else if (e.key === 'Home') {
             e.preventDefault();
             handleRewindToToday();
@@ -585,7 +633,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           className="absolute inset-0 flex items-center justify-center"
           style={{
             transform: `translate3d(${dragOffsetPx}px, 0, 0)`,
-            transition: isDragging ? 'none' : 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)',
+            transition: disableCssTransition ? 'none' : 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         >
           {slots.map((slot) => {
@@ -620,7 +668,8 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!didDragRef.current && slot.offset !== 0) {
-                      handleJumpBySteps(slot.offset);
+                      unlockAudioEngine();
+                      spinByMonths(slot.offset);
                     }
                   }}
                   style={{ transform: `scale(${scale})`, opacity }}
