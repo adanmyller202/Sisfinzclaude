@@ -5,7 +5,6 @@ import { getTranslations } from '../utils/i18n';
 import { SisFinzPet } from './shared/SisFinzPet';
 import {
   Menu,
-  Plus,
   Settings,
 } from 'lucide-react';
 
@@ -15,7 +14,7 @@ interface NavbarProps {
   goals: ChallengeGoal[];
   activeGoal: ChallengeGoal | null;
   language?: LanguageCode;
-  onOpenNewGoalModal: () => void;
+  onOpenNewGoalModal?: () => void;
   hasPendingNotifications?: boolean;
   onOpenProfile: () => void;
   onOpenSettings: () => void;
@@ -25,12 +24,8 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenMenu,
-  currentView,
-  goals,
   language = 'pt',
-  onOpenNewGoalModal,
   hasPendingNotifications = false,
-  onOpenProfile,
   onOpenSettings,
   onOpenCopilot,
   alertCenter,
@@ -40,15 +35,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const userName = user?.displayName || user?.email?.split('@')[0];
 
-  const userInitial =
-    user?.displayName?.charAt(0).toUpperCase() ||
-    user?.email?.charAt(0).toUpperCase() ||
-    'U';
-
   return (
     <header className="sticky top-0 z-30 glass-navigation border-b transition-colors shadow-2xs print:hidden pt-safe">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-5 lg:px-6 h-14 flex items-center justify-between gap-1.5 sm:gap-3 min-w-0 overflow-hidden">
-        {/* Left Side: 3-Bars Hamburger Button + SisFinz Logo + Brand Name + Sync Status Badge */}
+        {/* Left Side: 3-Bars Hamburger Button + SisFinz Logo + Brand Name */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 flex-1 min-w-0 overflow-hidden">
           {/* Hamburger 3-Bars Button */}
           <button
@@ -84,10 +74,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
           </div>
-
         </div>
 
-        {/* Right Side: Quick Tools (Alerts, New Goal Shortcut, Finzy Mascot) */}
+        {/* Right Side: Quick Tools (Alerts, Settings, Finzy Mascot) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {alertCenter}
           <button
@@ -99,19 +88,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Settings className="w-5 h-5" />
           </button>
-          {/* Quick Add Goal button (visible on goals view or desktop) */}
-          {currentView === 'goals' && (
-            <button
-              type="button"
-              onClick={onOpenNewGoalModal}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-xl shadow-xs transition-colors whitespace-nowrap cursor-pointer"
-              title={t.addGoalBtn}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t.addGoalBtn}</span>
-              <span className="sm:hidden">{t.addGoalBtnShort}</span>
-            </button>
-          )}
 
           {/* Finzy Virtual Pet (Independent AI Mascot) */}
           <SisFinzPet onClick={onOpenCopilot} size={38} className="shrink-0 max-w-full" />
