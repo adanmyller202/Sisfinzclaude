@@ -137,9 +137,24 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   }, [currentMonth, incomes, bills, sharedBills, expenses, locale, forecastBalance, currentBalance]);
 
   const tabs = [
-    { id: 'projections', label: 'Projeção', icon: BarChart3 },
-    { id: 'freedom', label: 'Liberdade', icon: Scale },
-    { id: 'calendar', label: 'Calendário', icon: Calendar },
+    {
+      id: 'projections',
+      label: language === 'es' ? 'Proyección' : language === 'en' ? 'Forecast' : 'Projeção',
+      sub: language === 'es' ? '12 meses' : language === 'en' ? '12 months' : '12 meses',
+      icon: BarChart3,
+    },
+    {
+      id: 'freedom',
+      label: language === 'es' ? 'Libertad' : language === 'en' ? 'Freedom' : 'Liberdade',
+      sub: language === 'es' ? 'Velocímetro' : language === 'en' ? 'Gauge' : 'Velocímetro',
+      icon: Scale,
+    },
+    {
+      id: 'calendar',
+      label: language === 'es' ? 'Calendario' : language === 'en' ? 'Calendar' : 'Calendário',
+      sub: language === 'es' ? 'Agenda' : language === 'en' ? 'Schedule' : 'Agenda',
+      icon: Calendar,
+    },
   ] as const;
 
   const containerVariants: any = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
@@ -157,32 +172,86 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
         </div>
       )}
 
-      {/* Top Tab Switcher: Projeção | Liberdade | Calendário */}
-      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-100/90 rounded-[2rem] border border-slate-200/80 shadow-inner">
+      {/* Dynamic Island Morphing Pill Tab Switcher */}
+      <motion.div
+        variants={itemVariants}
+        layout
+        className="flex items-center gap-1.5 rounded-[1.85rem] border border-emerald-200/80 bg-white/90 p-1.5 shadow-md shadow-emerald-900/5 backdrop-blur-md"
+      >
         {tabs.map((tab) => {
           const isActive = subTab === tab.id;
           const Icon = tab.icon;
           return (
-            <button
+            <motion.button
               type="button"
+              layout
               key={tab.id}
               onClick={() => handleSubTabChange(tab.id)}
-              className={`py-3.5 px-2 rounded-[1.5rem] transition-all cursor-pointer relative z-10 group overflow-hidden ${
-                isActive ? 'text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'
+              whileTap={{ scale: 0.96 }}
+              transition={{ layout: { type: 'spring', stiffness: 420, damping: 32 } }}
+              className={`relative z-10 flex items-center justify-center overflow-hidden rounded-[1.35rem] py-2.5 transition-colors cursor-pointer ${
+                isActive
+                  ? 'flex-[1.75] px-3.5 text-white'
+                  : 'flex-1 px-2 text-slate-600 hover:bg-emerald-50/70 hover:text-emerald-800'
               }`}
             >
               {isActive && (
-                <motion.div
-                  layoutId="planning-view-tab"
-                  className="absolute inset-0 bg-white shadow-xs rounded-[1.5rem]"
-                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                />
+                <>
+                  <motion.div
+                    layoutId="planning-dynamic-pill"
+                    className="absolute inset-0 -z-10 rounded-[1.35rem] bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 shadow-lg shadow-emerald-600/25"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                  <motion.span
+                    key={`shimmer-${tab.id}`}
+                    initial={{ x: '-120%', opacity: 0.7 }}
+                    animate={{ x: '220%', opacity: 0 }}
+                    transition={{ duration: 0.65, ease: 'easeOut' }}
+                    className="pointer-events-none absolute inset-y-0 left-0 -z-0 w-1/2 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  />
+                </>
               )}
-              <div className="relative z-10 flex flex-col items-center gap-1">
-                <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'group-hover:text-slate-800 transition-colors'}`} />
-                <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
-              </div>
-            </button>
+
+              <motion.div layout="position" className="relative z-10 flex items-center justify-center gap-2 min-w-0">
+                <motion.span
+                  layout="position"
+                  animate={isActive ? { scale: [0.88, 1.12, 1], rotate: [0, -8, 0] } : { scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white shadow-inner'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </motion.span>
+
+                <div className="min-w-0 text-left">
+                  <motion.span
+                    layout="position"
+                    className={`block truncate font-black uppercase tracking-wider leading-tight ${
+                      isActive ? 'text-[11px] text-white' : 'text-[9px] text-slate-700 sm:text-[10px]'
+                    }`}
+                  >
+                    {tab.label}
+                  </motion.span>
+                  <AnimatePresence initial={false}>
+                    {isActive && (
+                      <motion.span
+                        key={`sub-${tab.id}`}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="block truncate text-[9px] font-bold text-emerald-100 leading-tight mt-0.5"
+                      >
+                        {tab.sub}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            </motion.button>
           );
         })}
       </motion.div>
@@ -191,10 +260,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       <AnimatePresence mode="wait">
         <motion.div
           key={subTab}
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -30 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          exit={{ opacity: 0, y: -24 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 220 }}
           className="relative"
         >
           {subTab === 'projections' && (
