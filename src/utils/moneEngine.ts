@@ -595,14 +595,32 @@ export function calculateMonthFinancials(context: MoneContext, targetMonthStr: s
 
   const monthlySurplus = totalIncomes - totalBills - totalOneOffExpenses;
 
-  // SisFinz report rule: actual account balance + pending income - pending bills.
+  // SisFinz report rule: current month starts from the real account balance;
+  // future/past months are calculated from that month's income, bills and one-off expenses.
   // Keep currencies isolated; never add ARS, USD, BRL or EUR together.
-  const projectedBalanceByCurrency = getCurrentBalancesByCurrency(context);
-  for (const [code, amount] of pendingIncomesByCurrency) {
-    projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) + amount);
-  }
-  for (const [code, amount] of pendingBillsByCurrency) {
-    projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) - amount);
+  const currentMonthStr = getCurrentMonthStr();
+  const projectedBalanceByCurrency =
+    targetMonthStr === currentMonthStr
+      ? getCurrentBalancesByCurrency(context)
+      : new Map<CurrencyCode, number>();
+
+  if (targetMonthStr === currentMonthStr) {
+    for (const [code, amount] of pendingIncomesByCurrency) {
+      projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) + amount);
+    }
+    for (const [code, amount] of pendingBillsByCurrency) {
+      projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) - amount);
+    }
+  } else {
+    for (const item of validIncomes) {
+      projectedBalanceByCurrency.set(item.currency, (projectedBalanceByCurrency.get(item.currency) || 0) + item.amount);
+    }
+    for (const item of validBills) {
+      projectedBalanceByCurrency.set(item.currency, (projectedBalanceByCurrency.get(item.currency) || 0) - item.amount);
+    }
+    for (const [code, amount] of expensesByCurrency) {
+      projectedBalanceByCurrency.set(code, (projectedBalanceByCurrency.get(code) || 0) - amount);
+    }
   }
   const projectedBalance = projectedBalanceByCurrency.get(context.currency)
     ?? [...projectedBalanceByCurrency.values()][0]
