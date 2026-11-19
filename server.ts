@@ -592,7 +592,10 @@ app.post('/api/mone', async (req, res) => {
           }
         }
 
-        const projectedBalance = Number(currentBalance) + pendingInc - pendingBill;
+        const projectedBalance =
+          m === currentMonthStr
+            ? Number(currentBalance) + pendingInc - pendingBill
+            : totalInc - totalBill;
         computedProjections[m] = {
           receitasPrevistas: totalInc,
           receitasPendentes: pendingInc,
