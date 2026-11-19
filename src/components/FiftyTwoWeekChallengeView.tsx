@@ -239,9 +239,130 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Já economizado</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.saved||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Falta economizar</p><p className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{formatCurrency(metrics?.remaining||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Semanas concluídas</p><p className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{metrics?.count||0}<span className="text-sm font-bold text-slate-400"> / {totalWeeks}</span></p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Próximo depósito</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.nextAmount||0,activeChallenge.currency||currency)}</p></div></div>
     </section>
     {metrics?.next?<section className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm"><TrendingUp className="h-5 w-5"/></div><div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Próxima semana • Semana {metrics.next}</p><p className="text-sm text-slate-600">Quando guardar, marque esta semana como concluída.</p></div></div><button type="button" onClick={()=>openWeek(metrics.next,false,metrics.nextAmount)} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-md hover:bg-emerald-700">Registrar depósito<ArrowUpRight className="h-4 w-4"/></button></section>:<section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><div className="flex items-center gap-2 font-extrabold"><Award className="h-5 w-5"/>Meta concluída!</div><p className="mt-1 text-sm">Parabéns! Você completou todas as semanas do seu plano.</p>{activeChallenge.redeemedAt ? <div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm"><p className="font-bold">Valor resgatado</p><p className="mt-1">O dinheiro foi transferido para sua conta em {new Date(activeChallenge.redeemedAt).toLocaleDateString(locale)}.</p></div> : <><p className="mt-2 text-sm">Seu dinheiro está guardado e disponível para entrar no saldo das suas contas quando você quiser.</p><button type="button" onClick={()=>{setRedeemAccountId(activeAccounts.find(a=>a.currency===activePlanCurrency)?.id||'');setRedeemError('');setShowRedeemModal(true);}} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-emerald-800"><ArrowUpRight className="h-4 w-4"/>Transferir valor para uma conta</button></>}</section>}
-    <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-lg font-black text-slate-900">Semanas da sua jornada</h3><p className="mt-1 text-sm text-slate-500">Toque em uma semana para registrar ou desfazer o depósito.</p></div><div className="flex rounded-xl bg-slate-100 p-1">{(['all','pending','completed'] as const).map(f=><button type="button" key={f} onClick={()=>setFilter(f)} className={'rounded-lg px-3 py-2 text-xs font-bold '+(filter===f?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-800')}>{f==='all'?'Todas':f==='pending'?'Pendentes':'Concluídas'}</button>)}</div></div>
-      <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 sm:p-5 md:grid-cols-4 lg:grid-cols-6">{visibleWeeks.map(w=><motion.button type="button" key={w.number} whileHover={{y:-2}} whileTap={{scale:0.98}} onClick={()=>openWeek(w.number,w.completed,w.amount)} className={'min-h-28 rounded-2xl border p-3 text-left transition-shadow hover:shadow-md '+(w.completed?'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100':w.overdue?'border-rose-400 bg-rose-50 ring-2 ring-rose-100':'border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30')}><div className="flex items-center justify-between"><span className={'text-xs font-extrabold '+(w.completed?'text-emerald-700':w.overdue?'text-rose-700':'text-slate-500')}>Semana {w.number}</span>{w.completed?<CheckCircle2 className="h-4 w-4 text-emerald-600"/>:w.overdue?<AlertCircle className="h-4 w-4 text-rose-600"/>:<Clock3 className="h-4 w-4 text-slate-400"/>}</div><p className="mt-4 break-words text-sm font-black text-slate-900">{formatCurrency(w.amount,activeChallenge.currency||currency)}</p><p className="mt-1 text-[11px] font-medium capitalize text-slate-500">{w.date}</p><p className={'mt-2 text-[10px] font-extrabold '+(w.completed?'text-emerald-700':w.overdue?'text-rose-600':'text-slate-400')}>{w.completed?'Concluída':w.overdue?'Em atraso':'Marcar depósito'}</p></motion.button>)}</div>
-      {visibleWeeks.length===0&&<p className="p-10 text-center text-sm text-slate-500">Nenhuma semana nesta categoria.</p>}
+    <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-lg font-black text-slate-900">Trilha da sua jornada</h3>
+          <p className="mt-1 text-sm text-slate-500">Toque em uma semana para registrar ou desfazer o depósito.</p>
+        </div>
+        <div className="flex rounded-xl bg-slate-100 p-1">
+          {(['all','pending','completed'] as const).map(f=>(
+            <button type="button" key={f} onClick={()=>setFilter(f)} className={'rounded-lg px-3 py-2 text-xs font-bold '+(filter===f?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-800')}>
+              {f==='all'?'Todas':f==='pending'?'Pendentes':'Concluídas'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {visibleWeeks.length === 0 ? (
+        <p className="p-10 text-center text-sm text-slate-500">Nenhuma semana nesta categoria.</p>
+      ) : (
+        <div className="px-4 py-5 sm:px-6">
+          {visibleWeeks.map((w, idx) => {
+            const isFirst = idx === 0;
+            const isLast = idx === visibleWeeks.length - 1;
+            const prevCompleted = !isFirst && visibleWeeks[idx - 1].completed;
+            const topLineColor = prevCompleted && w.completed ? 'bg-emerald-400' : prevCompleted ? 'bg-emerald-200' : 'bg-slate-200';
+            const bottomLineColor = w.completed ? 'bg-emerald-400' : 'bg-slate-200';
+
+            return (
+              <div key={w.number} className="relative flex items-stretch gap-3 sm:gap-4">
+                {/* Connected timeline column */}
+                <div className="flex w-9 shrink-0 flex-col items-center">
+                  <div className={'w-0.5 flex-1 ' + (isFirst ? 'bg-transparent' : topLineColor)} />
+                  <div
+                    className={
+                      'z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black transition-all ' +
+                      (w.completed
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25 ring-4 ring-emerald-50'
+                        : w.overdue
+                        ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/25 ring-4 ring-rose-50'
+                        : 'border-2 border-slate-200 bg-white text-slate-600')
+                    }
+                  >
+                    {w.completed ? (
+                      <Check className="h-4 w-4 stroke-[3]" />
+                    ) : w.overdue ? (
+                      <AlertCircle className="h-4 w-4" />
+                    ) : (
+                      <span>{w.number}</span>
+                    )}
+                  </div>
+                  <div className={'w-0.5 flex-1 ' + (isLast ? 'bg-transparent' : bottomLineColor)} />
+                </div>
+
+                {/* Week card */}
+                <div className="min-w-0 flex-1 py-1.5">
+                  <motion.button
+                    type="button"
+                    whileHover={{ x: 2 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => openWeek(w.number, w.completed, w.amount)}
+                    className={
+                      'flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border p-3.5 text-left transition-all sm:p-4 ' +
+                      (w.completed
+                        ? 'border-emerald-400 bg-emerald-50/90 ring-2 ring-emerald-100 hover:bg-emerald-50'
+                        : w.overdue
+                        ? 'border-rose-400 bg-rose-50/90 ring-2 ring-rose-100 hover:bg-rose-50'
+                        : 'border-slate-200 bg-white shadow-2xs hover:border-emerald-300 hover:bg-emerald-50/30')
+                    }
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={
+                            'text-sm font-black ' +
+                            (w.completed
+                              ? 'text-emerald-900'
+                              : w.overdue
+                              ? 'text-rose-900'
+                              : 'text-slate-900')
+                          }
+                        >
+                          Semana {w.number}
+                        </span>
+                        {w.completed && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                            <CheckCircle2 className="h-3 w-3" /> Concluída
+                          </span>
+                        )}
+                        {w.overdue && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                            <AlertCircle className="h-3 w-3" /> Em atraso
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <Clock3 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="capitalize">{w.date}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className={w.completed ? 'text-emerald-700' : w.overdue ? 'text-rose-600 font-semibold' : 'text-slate-400'}>
+                          {w.completed ? 'Depósito registrado' : w.overdue ? 'Toque para regularizar' : 'Marcar depósito'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={
+                          'text-sm font-black sm:text-base ' +
+                          (w.completed
+                            ? 'text-emerald-700'
+                            : w.overdue
+                            ? 'text-rose-700'
+                            : 'text-slate-900')
+                        }
+                      >
+                        {formatCurrency(w.amount, activeChallenge.currency || currency)}
+                      </p>
+                    </div>
+                  </motion.button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
     {typeof document !== 'undefined' && createPortal(
       <>
