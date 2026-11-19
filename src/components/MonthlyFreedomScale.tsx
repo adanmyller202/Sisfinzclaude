@@ -430,11 +430,12 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
       ];
     }
 
-    const rawSegments: { key: SegmentKey; pct: number; color: string }[] = [
+    const allSegments: { key: SegmentKey; pct: number; color: string }[] = [
       { key: 'paid', pct: activeItem.paidPct, color: '#94a3b8' },
       { key: 'pending', pct: activeItem.pendingPct, color: '#f59e0b' },
       { key: 'free', pct: activeItem.freePct, color: '#059669' },
-    ].filter((s) => s.pct > 0.5);
+    ];
+    const rawSegments = allSegments.filter((s) => s.pct > 0.5);
 
     const totalPct = rawSegments.reduce((acc, s) => acc + s.pct, 0);
     if (totalPct <= 0) return [];
