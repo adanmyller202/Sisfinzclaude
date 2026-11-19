@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AccountItem, ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types';
+import { AccountItem, BillItem, ChallengeGoal, CurrencyCode, LanguageCode, SavingGoal } from '../types';
 import { useSavings } from '../hooks/useSavings';
 import { useFinanceControl } from '../hooks/useFinanceControl';
+import { useCategories } from '../hooks/useCategories';
 import { SavingsSection } from './SavingsSection';
 import { SavingGoalModal } from './SavingGoalModal';
 import { TransferModal } from './TransferModal';
 import { RecurringInvestmentSetupModal } from './RecurringInvestmentSetupModal';
+import { RecurringInvestmentManagerModal } from './RecurringInvestmentManagerModal';
+import { TransactionModal } from './TransactionModal';
 import { formatCurrency } from '../utils/currency';
+import { getCurrentMonthStr } from '../utils/finance';
+import { getLocaleForLanguage } from '../utils/i18n';
 import { FiftyTwoWeekChallengeView } from './FiftyTwoWeekChallengeView';
 import {
   Target,
   PiggyBank,
   Award,
   Plus,
-  
 } from 'lucide-react';
 
 interface GoalsCenterViewProps {
@@ -57,6 +61,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   onAddExpense,
   onDeleteExpense,
 }) => {
+  const locale = getLocaleForLanguage(language);
   const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
   const handleGoalsTabChange = (tab: typeof activeTab) => {
     const reset = () => {
@@ -66,8 +71,8 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
       if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
     };
     reset();
-    setActiveTab(tab)
-    requestAnimationFrame(reset);;
+    setActiveTab(tab);
+    requestAnimationFrame(reset);
   };
 
   const {
@@ -76,11 +81,29 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
     createSavingGoal,
     updateSavingGoal,
     deleteSavingGoal,
+    deleteSavingTransaction,
     transferToSaving,
+    reverseRecurringSavingDeposit,
     withdrawFromSaving,
   } = useSavings();
 
-  const { currentBalance, addExpense, addIncome, addIncomeAsReceived, toggleIncomeReceived, selectedMonth, addBill } = useFinanceControl();
+  const {
+    currentBalance,
+    bills,
+    statusRecords,
+    addExpense,
+    deleteExpense: deleteFinanceExpense,
+    addIncome,
+    addIncomeAsReceived,
+    toggleIncomeReceived,
+    selectedMonth,
+    addBill,
+    updateBill,
+    updateBillOccurrence,
+    deleteBill,
+  } = useFinanceControl();
+
+  const { getCategoriesFor, addCategory } = useCategories();
 
   const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
   const [savingToEdit, setSavingToEdit] = useState<SavingGoal | null>(null);
@@ -88,6 +111,8 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   const [transferDefaultSavingId, setTransferDefaultSavingId] = useState<string | undefined>(undefined);
   const [transferDefaultType, setTransferDefaultType] = useState<'deposit' | 'withdrawal'>('deposit');
   const [recurringGoalToConfigure, setRecurringGoalToConfigure] = useState<SavingGoal | null>(null);
+  const [recurringGoalToManage, setRecurringGoalToManage] = useState<SavingGoal | null>(null);
+  const [editingBillOccurrence, setEditingBillOccurrence] = useState<{ bill: BillItem; month: string } | null>(null);
 
   const handleCreateRecurringInvestment = async (params: { goal: SavingGoal; startMonth: string; accountId: string; exchangeRate: number; dueDay: number; installmentAmount: number; months: number }) => {
     const { goal, startMonth, accountId, exchangeRate, dueDay, installmentAmount, months } = params;
@@ -126,13 +151,77 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
     });
   };
 
+  const handleDeleteAllGoalRecurrences = async (goal: SavingGoal) => {
+    const linkedBills = bills.filter((bill) =>
+      bill.id === goal.recurringInvestmentBillId ||
+      bill.investmentSavingId === goal.id ||
+      Object.values(bill.exceptions || {}).some((exception: any) => exception?.investmentSavingId === goal.id)
+    );
+
+    const removeExpenseFn = onDeleteExpense || deleteFinanceExpense;
+
+    // Refund only paid installments belonging to the live month. Historical
+    // months remain isolated and must never change today's account balance.
+    for (const bill of linkedBills) {
+      const generatedMonths = new Set<string>();
+      const start = bill.startMonth.split('-').map(Number);
+      const count = Number(bill.investmentPlanMonths) || Number(bill.recurrenceMonthsCount) || 0;
+      if (start.length === 2 && count > 0) {
+        for (let index = 0; index < count; index += 1) {
+          const date = new Date(start[0], start[1] - 1 + index, 1);
+          generatedMonths.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+        }
+      }
+      statusRecords
+        .filter((record) => record.itemType === 'bill' && record.itemId === bill.id)
+        .forEach((record) => generatedMonths.add(record.month));
+
+      for (const month of generatedMonths) {
+        const status = statusRecords.find((record) => record.id === `bill_${bill.id}_${month}`);
+        if (!status?.isCompleted) continue;
+        const occurrence = bill.exceptions?.[month];
+        const savingId = occurrence?.investmentSavingId ?? bill.investmentSavingId;
+        if (savingId !== goal.id) continue;
+
+        await reverseRecurringSavingDeposit(`investment_${bill.id}_${month}`, removeExpenseFn);
+        const paidAccountId = occurrence?.accountId ?? bill.accountId;
+        if (month === getCurrentMonthStr() && paidAccountId) {
+          const paidAmount = Number(occurrence?.amount ?? bill.amount) || 0;
+          if (paidAmount > 0) await onAdjustAccountBalance(paidAccountId, paidAmount);
+        }
+      }
+
+      await deleteBill(bill.id);
+    }
+
+    const recurringTransactionIds = new Set<string>();
+    linkedBills.forEach((bill) => {
+      statusRecords
+        .filter((record) => record.itemType === 'bill' && record.itemId === bill.id)
+        .forEach((record) => recurringTransactionIds.add(`stx_investment_${bill.id}_${record.month}`));
+    });
+    for (const transactionId of recurringTransactionIds) {
+      if (savingTransactions.some((transaction) => transaction.id === transactionId)) {
+        await deleteSavingTransaction(transactionId);
+      }
+    }
+
+    await updateSavingGoal(goal.id, {
+      currentAmount: 0,
+      recurringInvestmentBillId: null as any,
+      recurringInvestmentStartMonth: null as any,
+      recurringInvestmentAccountId: null as any,
+      recurringInvestmentExchangeRate: null as any,
+    });
+    setRecurringGoalToManage(null);
+  };
+
   const tabs = [
     { id: 'savings', label: 'Cofrinhos', icon: PiggyBank, desc: 'Metas Livres' },
     { id: 'challenge52', label: 'Plano Semanal', icon: Award, desc: 'Economize no seu ritmo' },
   ] as const;
 
   const containerVariants: any = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-  const itemVariants: any = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } } };
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="w-full min-w-0 space-y-4 overflow-x-clip pb-24">
@@ -158,7 +247,6 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="relative"
         >
-
           {activeTab === 'savings' && (
             <SavingsSection
               savings={savings}
@@ -171,6 +259,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onOpenTransferModal={(id, type) => { setTransferDefaultSavingId(id); setTransferDefaultType(type || 'deposit'); setIsTransferModalOpen(true); }}
               onDeleteGoal={deleteSavingGoal}
               onCreateRecurringInvestment={(goal) => setRecurringGoalToConfigure(goal)}
+              onManageRecurringInvestment={(goal) => setRecurringGoalToManage(goal)}
             />
           )}
 
@@ -188,7 +277,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onRedeemChallenge={onRedeemChallenge}
               onAdjustAccountBalance={onAdjustAccountBalance}
               accounts={accounts}
-                    onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
+              onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
               onAddExpense={onAddExpense}
               onDeleteExpense={onDeleteExpense}
             />
@@ -217,6 +306,82 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
         baseCurrency={currency}
         onClose={() => setRecurringGoalToConfigure(null)}
         onConfirm={handleCreateRecurringInvestment}
+      />
+
+      {recurringGoalToManage && (
+        <RecurringInvestmentManagerModal
+          goal={recurringGoalToManage}
+          bills={bills}
+          statusRecords={statusRecords}
+          currency={currency}
+          locale={locale}
+          onClose={() => setRecurringGoalToManage(null)}
+          onSelectOccurrence={(bill, month) => {
+            setRecurringGoalToManage(null);
+            setEditingBillOccurrence({ bill, month });
+          }}
+          onDeleteAllRecurrences={handleDeleteAllGoalRecurrences}
+        />
+      )}
+
+      <TransactionModal
+        isOpen={!!editingBillOccurrence}
+        onClose={() => setEditingBillOccurrence(null)}
+        accounts={accounts}
+        currency={currency}
+        language={language}
+        selectedMonth={editingBillOccurrence?.month || selectedMonth}
+        initialType="bill"
+        editingTransaction={
+          editingBillOccurrence
+            ? { id: editingBillOccurrence.bill.id, type: 'bill', item: editingBillOccurrence.bill }
+            : null
+        }
+        getCategoriesFor={getCategoriesFor}
+        onAddCategory={addCategory}
+        onSaveBill={addBill}
+        onUpdateBill={async (id, partial) => {
+          const targetMonth = editingBillOccurrence?.month || selectedMonth;
+          const oldBill = bills.find((bill) => bill.id === id);
+          const isPaid = Boolean(statusRecords.find((record) => record.id === `bill_${id}_${targetMonth}`)?.isCompleted);
+          const isRecurringInvestment = Boolean(
+            oldBill?.investmentSavingId || oldBill?.exceptions?.[targetMonth]?.investmentSavingId
+          );
+          if (oldBill && isPaid && (!isRecurringInvestment || targetMonth === getCurrentMonthStr())) {
+            const oldAmount = Number(oldBill.exceptions?.[targetMonth]?.amount ?? oldBill.amount) || 0;
+            const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
+            const oldAccountId = oldBill.exceptions?.[targetMonth]?.accountId ?? oldBill.accountId;
+            const newAccountId = partial.accountId !== undefined ? partial.accountId : oldAccountId;
+            const deltas = new Map<string, number>();
+            if (oldAccountId) deltas.set(oldAccountId, (deltas.get(oldAccountId) || 0) + oldAmount);
+            if (newAccountId) deltas.set(newAccountId, (deltas.get(newAccountId) || 0) - newAmount);
+            for (const [accountId, delta] of deltas) {
+              if (delta !== 0) await onAdjustAccountBalance(accountId, delta);
+            }
+          }
+          await updateBill(id, partial);
+        }}
+        onUpdateBillOccurrence={async (id, month, partial, scope) => {
+          const oldBill = bills.find((bill) => bill.id === id);
+          const isPaid = Boolean(statusRecords.find((record) => record.id === `bill_${id}_${month}`)?.isCompleted);
+          const isRecurringInvestment = Boolean(
+            oldBill?.investmentSavingId || oldBill?.exceptions?.[month]?.investmentSavingId
+          );
+          if (oldBill && isPaid && (!isRecurringInvestment || month === getCurrentMonthStr())) {
+            const oldAmount = Number(oldBill.exceptions?.[month]?.amount ?? oldBill.amount) || 0;
+            const newAmount = partial.amount !== undefined ? Number(partial.amount) || 0 : oldAmount;
+            const oldAccountId = oldBill.exceptions?.[month]?.accountId ?? oldBill.accountId;
+            const newAccountId = partial.accountId !== undefined ? partial.accountId : oldAccountId;
+            const deltas = new Map<string, number>();
+            if (oldAccountId) deltas.set(oldAccountId, (deltas.get(oldAccountId) || 0) + oldAmount);
+            if (newAccountId) deltas.set(newAccountId, (deltas.get(newAccountId) || 0) - newAmount);
+            for (const [accountId, delta] of deltas) {
+              if (delta !== 0) await onAdjustAccountBalance(accountId, delta);
+            }
+          }
+          await updateBillOccurrence(id, month, partial, scope);
+        }}
+        onDeleteBill={deleteBill}
       />
 
       <TransferModal
