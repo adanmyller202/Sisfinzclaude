@@ -63,6 +63,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
 }) => {
   const locale = getLocaleForLanguage(language);
   const [activeTab, setActiveTab] = useState<'savings' | 'challenge52'>('savings');
+  const [weeklyPlanResetKey, setWeeklyPlanResetKey] = useState(0);
   const handleGoalsTabChange = (tab: typeof activeTab) => {
     const reset = () => {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
@@ -265,6 +266,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
 
           {activeTab === 'challenge52' && (
             <FiftyTwoWeekChallengeView
+              key={weeklyPlanResetKey}
               currency={currency}
               language={language}
               activeChallenge={fiftyTwoChallenge.activeChallenge}
@@ -280,6 +282,7 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
               onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
               onAddExpense={onAddExpense}
               onDeleteExpense={onDeleteExpense}
+              onReturnToFinance={() => setWeeklyPlanResetKey((k) => k + 1)}
             />
           )}
         </motion.div>
