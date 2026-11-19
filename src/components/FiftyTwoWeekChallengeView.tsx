@@ -6,7 +6,7 @@ import { FiftyTwoWeekChallenge, CurrencyCode, LanguageCode, ExpenseItem, Account
 import { formatCurrency } from '../utils/currency';
 import { useAuth } from '../context/AuthContext';
 import { db, sanitizeForFirestore } from '../firebase/config';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface Props {
   currency: CurrencyCode; language?: LanguageCode; activeChallenge: FiftyTwoWeekChallenge | null; challenges: FiftyTwoWeekChallenge[];
@@ -37,7 +37,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const { user } = useAuth();
   const [showingSelectedPlan,setShowingSelectedPlan]=useState(false);
   const [planListFilter,setPlanListFilter]=useState<'active'|'finalized'>('active');
-  const [creating,setCreating]=useState(false), [editingPlan,setEditingPlan]=useState(false), [formError,setFormError]=useState(''), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [planCurrency,setPlanCurrency]=useState<CurrencyCode>(defaultPlanCurrency), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [endDate,setEndDate]=useState(addDaysISO(todayISO(), 12 * 7 - 1)), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [weekCurrency,setWeekCurrency]=useState<CurrencyCode>(currency), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState(''), [showRedeemModal,setShowRedeemModal]=useState(false), [redeemAccountId,setRedeemAccountId]=useState(''), [redeemBusy,setRedeemBusy]=useState(false), [redeemError,setRedeemError]=useState('');
+  const [creating,setCreating]=useState(false), [editingPlan,setEditingPlan]=useState(false), [formError,setFormError]=useState(''), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [planCurrency,setPlanCurrency]=useState<CurrencyCode>(defaultPlanCurrency), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [endDate,setEndDate]=useState(addDaysISO(todayISO(), 12 * 7 - 1)), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [weekCurrency,setWeekCurrency]=useState<CurrencyCode>(currency), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState(''), [showRedeemModal,setShowRedeemModal]=useState(false), [redeemAccountId,setRedeemAccountId]=useState(''), [redeemBusy,setRedeemBusy]=useState(false), [redeemError,setRedeemError]=useState(''), [planToDelete,setPlanToDelete]=useState<FiftyTwoWeekChallenge|null>(null), [deletingPlan,setDeletingPlan]=useState(false), [deletePlanError,setDeletePlanError]=useState('');
   const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
   const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
   const previewTotal=savingMode==='fixed'?totalGoal:firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
@@ -260,12 +260,127 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
       setStorageError(err instanceof Error?err.message:'Não foi possível salvar. Tente novamente.');
     }finally{setStorageSaving(false);}
   };
-  const removeChallenge=async()=>{
-    if(!activeChallenge)return;
-    if(!window.confirm('Deseja excluir este plano? Os depósitos já registrados como despesas não serão apagados automaticamente.'))return;
-    await onDeleteChallenge(activeChallenge.id);onSelectChallenge('');setShowingSelectedPlan(false);setCreating(false);setEditingPlan(false);
-  };
+
   const locale=language==='es'?'es-ES':language==='en'?'en-US':'pt-BR';
+
+  const appendDeletionNoteToLinkedRecords = async (plan: FiftyTwoWeekChallenge) => {
+    if (!user?.uid) return;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    const planName = plan.title?.trim() || 'Plano Semanal';
+    const updatedAt = now.toISOString();
+
+    const annotateDoc = async (collectionName: 'expenses' | 'incomes', docId: string, kindLabel: 'despesa' | 'ingresso') => {
+      try {
+        const ref = doc(db, 'users', user.uid, collectionName, docId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const currentNotes = String(snap.data()?.notes || '').trim();
+        const deletionNote = `O plano "${planName}" deste(a) ${kindLabel} foi excluído em ${dateStr} às ${timeStr}.`;
+        const nextNotes = currentNotes ? `${currentNotes}\n${deletionNote}` : deletionNote;
+        await setDoc(ref, sanitizeForFirestore({ notes: nextNotes, updatedAt }), { merge: true });
+      } catch (err) {
+        console.warn(`Não foi possível anotar observação em ${collectionName}/${docId}:`, err);
+      }
+    };
+
+    const expenseIds = Array.from(
+      new Set(
+        Object.values(plan.weekExpenses || {}).filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      )
+    );
+    const tasks: Promise<void>[] = expenseIds.map((expId) => annotateDoc('expenses', expId, 'despesa'));
+    if (plan.redemptionIncomeId) {
+      tasks.push(annotateDoc('incomes', plan.redemptionIncomeId, 'ingresso'));
+    }
+    await Promise.all(tasks);
+  };
+
+  const confirmDeletePlan = async () => {
+    if (!planToDelete) return;
+    try {
+      setDeletingPlan(true);
+      setDeletePlanError('');
+      await appendDeletionNoteToLinkedRecords(planToDelete);
+      await onDeleteChallenge(planToDelete.id);
+      if (activeChallenge?.id === planToDelete.id) {
+        onSelectChallenge('');
+        setShowingSelectedPlan(false);
+        setCreating(false);
+        setEditingPlan(false);
+      }
+      setPlanToDelete(null);
+    } catch (err) {
+      console.error('Erro ao excluir plano semanal:', err);
+      setDeletePlanError(err instanceof Error ? err.message : 'Não foi possível excluir este plano. Tente novamente.');
+    } finally {
+      setDeletingPlan(false);
+    }
+  };
+
+  const removeChallenge = () => {
+    if (!activeChallenge) return;
+    setDeletePlanError('');
+    setPlanToDelete(activeChallenge);
+  };
+
+  const renderDeletePlanModal = () =>
+    typeof document !== 'undefined' && createPortal(
+      <AnimatePresence>
+        {planToDelete && (
+          <motion.div
+            className="fixed inset-0 z-[230] flex items-center justify-center bg-slate-950/55 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !deletingPlan && setPlanToDelete(null)}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl"
+              initial={{ opacity: 0, y: 18, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+                <Trash2 className="h-7 w-7" />
+              </div>
+              <h4 className="mt-4 text-center text-xl font-black text-slate-900">Excluir plano?</h4>
+              <p className="mt-2 text-center text-sm font-semibold text-slate-700">
+                "{planToDelete.title}"
+              </p>
+              <p className="mt-2 text-center text-xs leading-relaxed text-slate-500">
+                O saldo das suas contas, os depósitos já registrados e os resgates não serão alterados. Apenas será adicionada uma observação com data e hora informando que o plano foi excluído.
+              </p>
+              {deletePlanError && (
+                <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {deletePlanError}
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={deletingPlan}
+                onClick={() => void confirmDeletePlan()}
+                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-rose-600 text-sm font-extrabold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deletingPlan ? 'Excluindo...' : 'Confirmar exclusão'}
+              </button>
+              <button
+                type="button"
+                disabled={deletingPlan}
+                onClick={() => setPlanToDelete(null)}
+                className="mt-2 h-11 w-full rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
+    );
 
   if(creating || editingPlan)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
     <div className="flex items-center justify-between">
@@ -472,25 +587,48 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                 {finalizedPlans.map(({ plan, count, completedCount, saved }) => {
                   const planCur = plan.currency || currency;
                   return (
-                    <motion.button
-                      type="button"
+                    <motion.div
+                      role="button"
+                      tabIndex={0}
                       key={plan.id}
                       whileHover={{ y: -3 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => { onSelectChallenge(plan.id); setShowingSelectedPlan(true); }}
-                      className="group relative flex min-h-[215px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[1.75rem] border-2 border-emerald-400 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md sm:min-h-[235px] sm:p-5"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectChallenge(plan.id);
+                          setShowingSelectedPlan(true);
+                        }
+                      }}
+                      className="group relative flex min-h-[215px] w-full min-w-0 cursor-pointer flex-col justify-between overflow-hidden rounded-[1.75rem] border-2 border-emerald-400 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md sm:min-h-[235px] sm:p-5"
                     >
                       {/* Full 100% emerald liquid fill */}
                       <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-t from-emerald-500/30 via-emerald-400/20 to-teal-200/20" />
                       <div className="pointer-events-none absolute inset-y-4 left-2 z-10 w-1 rounded-full bg-white/60" />
 
-                      <div className="relative z-10 flex items-start justify-between gap-2">
+                      <div className="relative z-10 flex items-center justify-between gap-2">
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
                           <Award className="h-3 w-3" /> 100%
                         </span>
-                        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
-                          {planCur}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                            {planCur}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletePlanError('');
+                              setPlanToDelete(plan);
+                            }}
+                            title="Excluir plano finalizado"
+                            aria-label={`Excluir plano ${plan.title}`}
+                            className="rounded-lg p-1 text-rose-500 transition-colors hover:bg-rose-50/80 hover:text-rose-600 cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="relative z-10 my-3 min-w-0">
@@ -517,7 +655,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
                           {plan.redeemedAt ? 'Resgatado' : 'Aguardando resgate'}
                         </span>
                       </div>
-                    </motion.button>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -529,6 +667,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
     {activePlans.length === 0 && planListFilter === 'active' && (
       <button type="button" onClick={startCreatingPlan} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar plano</button>
     )}
+    {renderDeletePlanModal()}
   </div>;
 
   const selectedAccount = safeAccounts.find(a => a.id === selectedAccountId);
@@ -673,6 +812,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         </div>
       )}
     </section>
+    {renderDeletePlanModal()}
     {typeof document !== 'undefined' && createPortal(
       <>
         <AnimatePresence>
