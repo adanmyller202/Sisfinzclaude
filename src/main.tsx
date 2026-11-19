@@ -5,11 +5,13 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { registerSW } from 'virtual:pwa-register';
 import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
 import { initColorTheme } from './utils/colorTheme.ts';
+import { initTimeCrown } from './utils/timeCrownMount.tsx';
 import './index.css';
 import './styles/ui-fixes.css';
 
 initColorTheme();
 initTabBarAutoScroll();
+initTimeCrown();
 
 // Register PWA service worker with automatic update detection
 if (import.meta.env.PROD) {
