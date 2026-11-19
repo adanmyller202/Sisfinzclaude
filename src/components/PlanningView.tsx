@@ -172,11 +172,11 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
         </div>
       )}
 
-      {/* Dynamic Island Morphing Pill Tab Switcher */}
+      {/* Dynamic Island Morphing Pill Tab Switcher (always showing full tab names) */}
       <motion.div
         variants={itemVariants}
         layout
-        className="flex items-center gap-1.5 rounded-[1.85rem] border border-emerald-200/80 bg-white/90 p-1.5 shadow-md shadow-emerald-900/5 backdrop-blur-md"
+        className="flex items-stretch gap-1 rounded-[1.85rem] border border-emerald-200/80 bg-white/90 p-1.5 shadow-md shadow-emerald-900/5 backdrop-blur-md"
       >
         {tabs.map((tab) => {
           const isActive = subTab === tab.id;
@@ -189,10 +189,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
               onClick={() => handleSubTabChange(tab.id)}
               whileTap={{ scale: 0.96 }}
               transition={{ layout: { type: 'spring', stiffness: 420, damping: 32 } }}
-              className={`relative z-10 flex items-center justify-center overflow-hidden rounded-[1.35rem] py-2.5 transition-colors cursor-pointer ${
+              className={`relative z-10 flex min-h-[54px] items-center justify-center overflow-hidden rounded-[1.35rem] transition-colors cursor-pointer ${
                 isActive
-                  ? 'flex-[1.75] px-3.5 text-white'
-                  : 'flex-1 px-2 text-slate-600 hover:bg-emerald-50/70 hover:text-emerald-800'
+                  ? 'flex-[1.38] px-2.5 py-2 text-white sm:px-3.5'
+                  : 'flex-1 px-1 py-1.5 text-slate-600 hover:bg-emerald-50/70 hover:text-emerald-800 sm:px-2'
               }`}
             >
               {isActive && (
@@ -212,25 +212,32 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                 </>
               )}
 
-              <motion.div layout="position" className="relative z-10 flex items-center justify-center gap-2 min-w-0">
+              <motion.div
+                layout="position"
+                className={`relative z-10 flex items-center justify-center ${
+                  isActive ? 'flex-row gap-2' : 'flex-col gap-1'
+                }`}
+              >
                 <motion.span
                   layout="position"
                   animate={isActive ? { scale: [0.88, 1.12, 1], rotate: [0, -8, 0] } : { scale: 1, rotate: 0 }}
                   transition={{ duration: 0.35, ease: 'easeOut' }}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                  className={`flex shrink-0 items-center justify-center transition-colors ${
                     isActive
-                      ? 'bg-white/20 text-white shadow-inner'
-                      : 'bg-emerald-50 text-emerald-700'
+                      ? 'h-8 w-8 rounded-xl bg-white/20 text-white shadow-inner'
+                      : 'h-6 w-6 rounded-lg bg-emerald-50 text-emerald-700'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className={isActive ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
                 </motion.span>
 
-                <div className="min-w-0 text-left">
+                <div className={isActive ? 'text-left' : 'text-center'}>
                   <motion.span
                     layout="position"
-                    className={`block truncate font-black uppercase tracking-wider leading-tight ${
-                      isActive ? 'text-[11px] text-white' : 'text-[9px] text-slate-700 sm:text-[10px]'
+                    className={`block whitespace-nowrap font-black uppercase leading-tight ${
+                      isActive
+                        ? 'text-[11px] tracking-wide text-white'
+                        : 'text-[9.5px] tracking-tight text-slate-700 sm:text-[10px]'
                     }`}
                   >
                     {tab.label}
@@ -243,7 +250,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="block truncate text-[9px] font-bold text-emerald-100 leading-tight mt-0.5"
+                        className="mt-0.5 block whitespace-nowrap text-[9px] font-bold leading-tight text-emerald-100"
                       >
                         {tab.sub}
                       </motion.span>
