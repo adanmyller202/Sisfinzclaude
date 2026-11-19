@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
 import { initColorTheme } from './utils/colorTheme.ts';
 import './index.css';
+import './styles/ui-fixes.css';
 
 initColorTheme();
 initTabBarAutoScroll();

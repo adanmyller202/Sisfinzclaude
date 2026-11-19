@@ -1,0 +1,16 @@
+/* Hide the legacy mobile floating Mone shortcut button that sits behind the right side of BottomNav */
+button.fixed.md\:hidden.bottom-4.right-4.z-40.bg-gradient-to-tr.from-emerald-600.to-teal-500.rounded-full {
+  display: none !important;
+}
+
+/* Override legacy installed-PWA bottom nav height so the dock stays compact and proportional */
+@media (display-mode: standalone) {
+  .sisfinz-bottom-nav-height {
+    height: calc(78px + min(env(safe-area-inset-bottom, 0px), 12px)) !important;
+  }
+
+  .sisfinz-bottom-nav-shell > div > .sisfinz-bottom-nav-height > div:first-child,
+  .sisfinz-bottom-nav-shell > div > .sisfinz-bottom-nav-height > div:nth-child(2) {
+    top: 18px !important;
+  }
+}

@@ -72,11 +72,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
       <div className="mx-auto max-w-xl px-3 pb-0">
-        <div className="sisfinz-bottom-nav-height relative h-[calc(90px+env(safe-area-inset-bottom,0px))] overflow-visible">
-          {/* Dock surface reaches the physical screen edge; controls stay above the iPhone home-indicator safe area. */}
-          <div className="absolute inset-x-0 bottom-0 top-[22px] rounded-[32px] border border-emerald-100 bg-white shadow-[0_12px_34px_rgba(5,150,105,0.13),0_3px_10px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.98)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_12px_34px_rgba(0,0,0,0.35)]" />
+        <div className="sisfinz-bottom-nav-height relative h-[calc(78px+min(env(safe-area-inset-bottom,0px),12px))] overflow-visible">
+          {/* Compact dock surface with balanced bottom clearance on iOS/PWA */}
+          <div className="absolute inset-x-0 bottom-0 top-[18px] rounded-t-[28px] rounded-b-[20px] border border-emerald-100 bg-white shadow-[0_12px_34px_rgba(5,150,105,0.13),0_3px_10px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.98)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_12px_34px_rgba(0,0,0,0.35)]" />
 
-          <div className="absolute inset-x-1 top-[22px] bottom-[env(safe-area-inset-bottom,0px)] grid grid-cols-5">
+          <div className="absolute inset-x-1 top-[18px] bottom-[min(env(safe-area-inset-bottom,0px),10px)] grid grid-cols-5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentArea === item.id;
@@ -89,7 +89,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   onClick={() => handleTabClick(item.id)}
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={label}
-                  className={`relative flex h-full min-w-0 flex-col items-center justify-end rounded-full pb-[10px] pt-0 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-inset ${
+                  className={`relative flex h-full min-w-0 flex-col items-center justify-end rounded-full pb-[8px] pt-0 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-inset cursor-pointer ${
                     isActive ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500 hover:text-emerald-700 dark:text-slate-400 dark:hover:text-emerald-300'
                   }`}
                 >
@@ -97,22 +97,22 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                     <>
                       <motion.span
                         layoutId="sisfinz-nav-notch"
-                        className="pointer-events-none absolute left-1/2 top-[-27px] z-0 h-[74px] w-[74px] -translate-x-1/2 rounded-full bg-[#F4F8F6] dark:bg-[#020617]"
+                        className="pointer-events-none absolute left-1/2 top-[-24px] z-0 h-[68px] w-[68px] -translate-x-1/2 rounded-full bg-[#F4F8F6] dark:bg-[#020617]"
                         transition={spring}
                       />
                       <motion.span
                         layoutId="sisfinz-nav-floating-orb"
-                        className="absolute left-1/2 top-[-20px] z-20 flex h-[58px] w-[58px] -translate-x-1/2 items-center justify-center rounded-full border-[4px] border-[#F4F8F6] bg-gradient-to-br from-white via-[#E6F4EA] to-[#B9F2D5] text-emerald-700 shadow-[0_7px_17px_rgba(5,150,105,0.24),inset_0_2px_3px_rgba(255,255,255,0.98)] dark:border-[#020617] dark:from-emerald-100 dark:via-emerald-200 dark:to-emerald-400 dark:text-emerald-950"
+                        className="absolute left-1/2 top-[-18px] z-20 flex h-[54px] w-[54px] -translate-x-1/2 items-center justify-center rounded-full border-[4px] border-[#F4F8F6] bg-gradient-to-br from-white via-[#E6F4EA] to-[#B9F2D5] text-emerald-700 shadow-[0_7px_17px_rgba(5,150,105,0.24),inset_0_2px_3px_rgba(255,255,255,0.98)] dark:border-[#020617] dark:from-emerald-100 dark:via-emerald-200 dark:to-emerald-400 dark:text-emerald-950"
                         transition={spring}
                       >
-                        <Icon className="h-[23px] w-[23px] stroke-[2.55]" />
+                        <Icon className="h-[22px] w-[22px] stroke-[2.55]" />
                       </motion.span>
                     </>
                   )}
 
                   {!isActive && (
-                    <span className="relative mb-[5px] flex h-7 w-8 items-center justify-center">
-                      <Icon className="h-[21px] w-[21px] stroke-[2.05] opacity-85" />
+                    <span className="relative mb-[4px] flex h-6 w-8 items-center justify-center">
+                      <Icon className="h-[20px] w-[20px] stroke-[2.05] opacity-85" />
                     </span>
                   )}
 
@@ -132,7 +132,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
                   <motion.span
                     className={`relative z-10 max-w-full truncate text-[9px] font-extrabold uppercase leading-none tracking-[0.09em] ${
-                      isActive ? 'mt-[34px]' : ''
+                      isActive ? 'mt-[30px]' : ''
                     }`}
                     animate={{ opacity: isActive ? 1 : 0.76, scale: isActive ? 1 : 0.96 }}
                     transition={{ duration: reduceMotion ? 0.01 : 0.18 }}
