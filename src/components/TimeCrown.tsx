@@ -13,7 +13,7 @@ interface TimeCrownProps {
 
 type MonthHealth = 'positive' | 'negative' | 'neutral';
 
-const ITEM_WIDTH = 76; // px per month slot on the precision dial
+const ITEM_WIDTH = 78; // px per month slot on the precision dial
 const VISIBLE_RANGE = 4; // render ±4 months around the active center
 
 const MONTH_SHORT: Record<LanguageCode, string[]> = {
@@ -46,18 +46,41 @@ function getMonthDiff(fromMonth: string, toMonth: string): number {
 
 /** Synthesize a crisp, subtle watch/camera-dial mechanical tick via Web Audio API */
 let sharedAudioCtx: AudioContext | null = null;
-function playMechanicalTick(strong = false) {
-  if (typeof window === 'undefined') return;
+
+function isSoundDisabled(): boolean {
+  if (typeof window === 'undefined') return true;
   try {
-    // Respect user sound preference if stored
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && (key.includes('settings') || key.includes('Settings'))) {
         const raw = localStorage.getItem(key);
-        if (raw && raw.includes('"soundEnabled":false')) return;
+        if (raw && raw.includes('"soundEnabled":false')) return true;
       }
     }
+  } catch {
+    // ignore
+  }
+  return false;
+}
 
+/** Unlock AudioContext inside a direct user gesture (pointerdown/click) so iOS Safari allows ticks during drag */
+function unlockAudioEngine() {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function playMechanicalTick(strong = false) {
+  if (typeof window === 'undefined' || isSoundDisabled()) return;
+  try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     if (!sharedAudioCtx) sharedAudioCtx = new AudioCtx();
@@ -70,31 +93,63 @@ function playMechanicalTick(strong = false) {
     const gain = sharedAudioCtx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(strong ? 1450 : 1050, now);
-    osc.frequency.exponentialRampToValueAtTime(220, now + 0.014);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.015);
 
-    gain.gain.setValueAtTime(strong ? 0.065 : 0.04, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.016);
+    gain.gain.setValueAtTime(strong ? 0.07 : 0.045, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
 
     osc.connect(gain);
     gain.connect(sharedAudioCtx.destination);
     osc.start(now);
-    osc.stop(now + 0.018);
+    osc.stop(now + 0.02);
   } catch {
     // ignore audio errors
   }
 }
 
+/**
+ * Trigger tactile haptic feedback on both Android (navigator.vibrate)
+ * and modern iOS Safari/PWA (via hidden native switch haptic trigger).
+ */
+let iosHapticLabel: HTMLLabelElement | null = null;
 function triggerHaptic(strong = false) {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
     try {
-      navigator.vibrate(strong ? 12 : 6);
+      navigator.vibrate(strong ? 14 : 8);
+      return;
+    } catch {
+      // ignore
+    }
+  }
+
+  // iOS Safari 17.4+ native switch haptic fallback
+  if (typeof document !== 'undefined') {
+    try {
+      if (!iosHapticLabel || !document.body.contains(iosHapticLabel)) {
+        const label = document.createElement('label');
+        label.setAttribute('aria-hidden', 'true');
+        label.style.position = 'fixed';
+        label.style.opacity = '0';
+        label.style.pointerEvents = 'none';
+        label.style.width = '1px';
+        label.style.height = '1px';
+        label.style.overflow = 'hidden';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.setAttribute('switch', '');
+        input.tabIndex = -1;
+        label.appendChild(input);
+        document.body.appendChild(label);
+        iosHapticLabel = label;
+      }
+      iosHapticLabel.click();
     } catch {
       // ignore
     }
   }
 }
 
-/** Best-effort read of cached bills/incomes/expenses from localStorage for month health radar dots */
+/** Compute net health (positive / negative / neutral) for visible months from local cache */
 function computeMonthHealthMap(centerMonth: string): Record<string, MonthHealth> {
   const result: Record<string, MonthHealth> = {};
   if (typeof window === 'undefined') return result;
@@ -175,7 +230,6 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   const currentMonth = getCurrentMonthStr();
   const monthDiffFromToday = getMonthDiff(currentMonth, selectedMonth);
 
-  // Sub-slot fractional drag offset in pixels (between -ITEM_WIDTH and +ITEM_WIDTH)
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [tickPulse, setTickPulse] = useState(0);
@@ -191,6 +245,8 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   const stepQueueTimerRef = useRef<number | null>(null);
 
   const healthMap = useMemo(() => computeMonthHealthMap(selectedMonth), [selectedMonth]);
+  const activeHealth = healthMap[selectedMonth] || 'neutral';
+  const isNegativeMonth = activeHealth === 'negative';
 
   const stopInertia = useCallback(() => {
     if (inertiaRafRef.current !== null) {
@@ -215,11 +271,8 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
     [onStepMonth]
   );
 
-  // Consume accumulated pixel drag and fire month steps whenever crossing a slot boundary
   const applyDeltaPx = useCallback(
     (dx: number) => {
-      // Dragging finger LEFT (dx < 0) moves the dial forward into the FUTURE (+1 month)
-      // Dragging finger RIGHT (dx > 0) moves the dial backward into the PAST (-1 month)
       accumPxRef.current += dx;
 
       while (accumPxRef.current <= -ITEM_WIDTH * 0.52) {
@@ -239,7 +292,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   const startInertiaCoast = useCallback(
     (initialVelocity: number) => {
       stopInertia();
-      let velocity = initialVelocity; // px per ms
+      let velocity = initialVelocity;
       let lastTs = performance.now();
 
       const frame = (now: number) => {
@@ -247,7 +300,6 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
         lastTs = now;
 
         if (Math.abs(velocity) < 0.06) {
-          // Snap back smoothly to center (0)
           accumPxRef.current = 0;
           setDragOffsetPx(0);
           setIsDragging(false);
@@ -266,21 +318,45 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   );
 
   const handleRewindToToday = useCallback(() => {
+    unlockAudioEngine();
     stopInertia();
     accumPxRef.current = 0;
     setDragOffsetPx(0);
     setIsDragging(false);
-    if (monthDiffFromToday === 0) return;
 
-    triggerHaptic(true);
-    playMechanicalTick(true);
-    onGoToCurrentMonth();
-    setTickPulse((v) => v + 1);
-  }, [monthDiffFromToday, onGoToCurrentMonth, stopInertia]);
+    if (monthDiffFromToday === 0) {
+      triggerHaptic(false);
+      playMechanicalTick(false);
+      setTickPulse((v) => v + 1);
+      return;
+    }
+
+    // Animated rewind effect when within 6 months; direct jump for larger spans
+    const steps = Math.abs(monthDiffFromToday);
+    if (!reduceMotion && steps <= 6) {
+      const dir: -1 | 1 = monthDiffFromToday > 0 ? -1 : 1;
+      let remaining = steps;
+      const rewindNext = () => {
+        if (remaining <= 0) return;
+        emitMonthStep(dir, remaining === 1);
+        remaining--;
+        if (remaining > 0) {
+          stepQueueTimerRef.current = window.setTimeout(rewindNext, 55);
+        }
+      };
+      rewindNext();
+    } else {
+      triggerHaptic(true);
+      playMechanicalTick(true);
+      onGoToCurrentMonth();
+      setTickPulse((v) => v + 1);
+    }
+  }, [monthDiffFromToday, onGoToCurrentMonth, reduceMotion, emitMonthStep, stopInertia]);
 
   const handleJumpBySteps = useCallback(
     (steps: number) => {
       if (steps === 0) return;
+      unlockAudioEngine();
       stopInertia();
       const dir: -1 | 1 = steps > 0 ? 1 : -1;
       let remaining = Math.abs(steps);
@@ -290,7 +366,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
         emitMonthStep(dir);
         remaining--;
         if (remaining > 0) {
-          stepQueueTimerRef.current = window.setTimeout(stepNext, 45);
+          stepQueueTimerRef.current = window.setTimeout(stepNext, 50);
         }
       };
       stepNext();
@@ -300,6 +376,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    unlockAudioEngine();
     stopInertia();
     pointerActiveRef.current = true;
     didDragRef.current = false;
@@ -342,7 +419,6 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
     }
 
     if (!didDragRef.current) {
-      // Check for double-tap to rewind to current month
       const now = Date.now();
       if (now - lastTapTimeRef.current < 300) {
         lastTapTimeRef.current = 0;
@@ -366,7 +442,6 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
     }
   };
 
-  // Support trackpad/mouse wheel horizontal scrolling on desktop
   const wheelAccumRef = useRef(0);
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
@@ -385,38 +460,11 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
   const selMonthIdx = Math.max(0, Math.min(11, (Number(selMonthNumStr) || 1) - 1));
   const activeFullLabel = `${MONTH_LONG[language][selMonthIdx]} ${selYearStr}`;
 
-  const statusBadge = useMemo(() => {
-    if (monthDiffFromToday === 0) {
-      return {
-        text: language === 'es' ? 'Mes actual' : language === 'en' ? 'Current' : 'Mês atual',
-        tone: 'current' as const,
-      };
-    }
-    if (monthDiffFromToday > 0) {
-      return {
-        text:
-          language === 'es'
-            ? `En +${monthDiffFromToday} ${monthDiffFromToday === 1 ? 'mes' : 'meses'}`
-            : language === 'en'
-            ? `In +${monthDiffFromToday}m`
-            : `Em +${monthDiffFromToday} ${monthDiffFromToday === 1 ? 'mês' : 'meses'}`,
-        tone: 'future' as const,
-      };
-    }
-    const abs = Math.abs(monthDiffFromToday);
-    return {
-      text:
-        language === 'es'
-          ? `Hace ${abs} ${abs === 1 ? 'mes' : 'meses'}`
-          : language === 'en'
-          ? `${abs}m ago`
-          : `Há ${abs} ${abs === 1 ? 'mês' : 'meses'}`,
-      tone: 'past' as const,
-    };
-  }, [monthDiffFromToday, language]);
+  const currentMonthBtnLabel =
+    language === 'es' ? 'Mes actual' : language === 'en' ? 'Current' : 'Mês atual';
 
   const slots = useMemo(() => {
-    const arr: { offset: number; monthStr: string; shortLabel: string; yearShort: string; isToday: boolean }[] = [];
+    const arr: { offset: number; monthStr: string; shortLabel: string; yearShort: string }[] = [];
     for (let offset = -VISIBLE_RANGE; offset <= VISIBLE_RANGE; offset++) {
       const mStr = shiftMonthStr(selectedMonth, offset);
       const [y, m] = mStr.split('-').map(Number);
@@ -426,39 +474,42 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
         monthStr: mStr,
         shortLabel: MONTH_SHORT[language][idx],
         yearShort: String(y || '').slice(-2),
-        isToday: mStr === currentMonth,
       });
     }
     return arr;
-  }, [selectedMonth, language, currentMonth]);
+  }, [selectedMonth, language]);
 
   return (
     <div
       className="glass rounded-[1.75rem] border border-emerald-200/70 bg-white/90 px-3 pt-2.5 pb-2 shadow-sm ring-1 ring-white/50 select-none overflow-hidden"
       style={{ WebkitUserSelect: 'none', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
     >
-      {/* Top Status Row */}
+      {/* Top Row: Always-clickable "Mês atual" button on the left + Active Month Title */}
       <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider transition-colors ${
-            statusBadge.tone === 'current'
-              ? 'bg-emerald-100 text-emerald-800'
-              : statusBadge.tone === 'future'
-              ? 'bg-emerald-600 text-white shadow-2xs'
-              : 'bg-slate-200/90 text-slate-700'
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.93 }}
+          onClick={handleRewindToToday}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+            monthDiffFromToday === 0
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/70'
+              : 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700'
           }`}
+          title={
+            language === 'es'
+              ? 'Volver al mes actual'
+              : language === 'en'
+              ? 'Back to current month'
+              : 'Voltar para o mês atual'
+          }
         >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              statusBadge.tone === 'current'
-                ? 'bg-emerald-600 animate-pulse'
-                : statusBadge.tone === 'future'
-                ? 'bg-emerald-200'
-                : 'bg-slate-500'
-            }`}
-          />
-          {statusBadge.text}
-        </span>
+          {monthDiffFromToday !== 0 ? (
+            <RotateCcw className="h-2.5 w-2.5 stroke-[2.75]" />
+          ) : (
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+          )}
+          <span>{currentMonthBtnLabel}</span>
+        </motion.button>
 
         <AnimatePresence mode="wait">
           <motion.span
@@ -473,38 +524,30 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           </motion.span>
         </AnimatePresence>
 
-        {monthDiffFromToday !== 0 ? (
-          <motion.button
-            type="button"
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            whileTap={{ scale: 0.92 }}
-            onClick={handleRewindToToday}
-            className="inline-flex items-center gap-1 rounded-full border border-emerald-300/80 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-emerald-800 transition-colors hover:bg-emerald-100 cursor-pointer"
-          >
-            <RotateCcw className="h-2.5 w-2.5 stroke-[2.75]" />
-            <span>{language === 'es' ? 'Hoy' : language === 'en' ? 'Today' : 'Hoje'}</span>
-          </motion.button>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
-            <Sparkles className="h-2.5 w-2.5 text-emerald-500" />
-            {language === 'es' ? 'Gira ⇄' : language === 'en' ? 'Slide ⇄' : 'Gire ⇄'}
-          </span>
-        )}
+        <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
+          <Sparkles className="h-2.5 w-2.5 text-emerald-500" />
+          {language === 'es' ? 'Gira ⇄' : language === 'en' ? 'Slide ⇄' : 'Gire ⇄'}
+        </span>
       </div>
 
-      {/* Rotary Precision Dial Track */}
+      {/* Rotary Dial Track */}
       <div
         role="slider"
-        aria-label={language === 'es' ? 'Corona del tiempo: desliza para cambiar de mes' : 'Coroa do Tempo: deslize para mudar de mês'}
+        aria-label={
+          language === 'es'
+            ? 'Corona del tiempo: desliza para cambiar de mes'
+            : 'Coroa do Tempo: deslize para mudar de mês'
+        }
         aria-valuetext={activeFullLabel}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight') {
             e.preventDefault();
+            unlockAudioEngine();
             emitMonthStep(1);
           } else if (e.key === 'ArrowLeft') {
             e.preventDefault();
+            unlockAudioEngine();
             emitMonthStep(-1);
           } else if (e.key === 'Home') {
             e.preventDefault();
@@ -516,7 +559,7 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
-        className={`relative h-[50px] w-full overflow-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white/80 to-emerald-50/40 border border-emerald-100/80 touch-none ${
+        className={`relative h-[48px] w-full overflow-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white/80 to-emerald-50/40 border border-emerald-100/80 touch-none ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         style={{
@@ -524,23 +567,20 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
           maskImage: 'linear-gradient(to right, transparent 0%, black 16%, black 84%, transparent 100%)',
         }}
       >
-        {/* Center Illuminated Precision Needle */}
+        {/* Center Highlight Rounded Capsule (Emerald for positive/zero, Rose for negative) */}
         <motion.div
-          key={`needle-${tickPulse}`}
-          initial={reduceMotion ? false : { scaleY: 1.18, opacity: 1 }}
-          animate={{ scaleY: 1, opacity: 0.9 }}
-          transition={{ duration: 0.18 }}
-          className="pointer-events-none absolute inset-y-1 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center justify-between"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shadow-[0_0_8px_rgba(5,150,105,0.8)]" />
-          <span className="w-[2px] flex-1 bg-gradient-to-b from-emerald-600/80 via-emerald-500/20 to-emerald-600/80" />
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shadow-[0_0_8px_rgba(5,150,105,0.8)]" />
-        </motion.div>
+          key={`capsule-${tickPulse}`}
+          initial={reduceMotion ? false : { scale: 0.94 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 520, damping: 24 }}
+          className={`pointer-events-none absolute left-1/2 top-1/2 z-0 h-[36px] w-[72px] -translate-x-1/2 -translate-y-1/2 rounded-xl border transition-colors duration-200 ${
+            isNegativeMonth
+              ? 'border-rose-400/85 bg-rose-500/15 shadow-[0_0_12px_rgba(244,63,94,0.16)]'
+              : 'border-emerald-300/80 bg-emerald-500/12 shadow-inner'
+          }`}
+        />
 
-        {/* Center Highlight Capsule */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[38px] w-[72px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-emerald-300/70 bg-emerald-500/10 shadow-inner" />
-
-        {/* Sliding Month Slots + Precision Sub-Ticks */}
+        {/* Sliding Month Slots with Single Clean Vertical Divider Between Months */}
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{
@@ -552,9 +592,10 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
             const xPos = slot.offset * ITEM_WIDTH;
             const visualDist = Math.abs(xPos + dragOffsetPx) / ITEM_WIDTH;
             const isCenter = visualDist < 0.45;
-            const scale = Math.max(0.76, 1.06 - visualDist * 0.12);
-            const opacity = Math.max(0.22, 1 - visualDist * 0.28);
-            const health = healthMap[slot.monthStr] || 'neutral';
+            const scale = Math.max(0.78, 1.06 - visualDist * 0.12);
+            const opacity = Math.max(0.24, 1 - visualDist * 0.28);
+            const slotHealth = healthMap[slot.monthStr] || 'neutral';
+            const slotIsNegative = slotHealth === 'negative';
 
             return (
               <div
@@ -565,16 +606,15 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
                   width: ITEM_WIDTH,
                   transform: `translate3d(calc(-50% + ${xPos}px), 0, 0)`,
                 }}
-                className="flex h-full flex-col items-center justify-center"
+                className="flex h-full items-center justify-center"
               >
-                {/* Fine Camera-Dial Sub-Ticks on the right half of each slot */}
-                <div className="pointer-events-none absolute right-[-24px] top-1/2 flex -translate-y-1/2 items-center gap-[9px] opacity-35">
-                  <span className="h-2 w-[1px] rounded-full bg-slate-400" />
-                  <span className="h-3 w-[1px] rounded-full bg-slate-400" />
-                  <span className="h-2 w-[1px] rounded-full bg-slate-400" />
-                </div>
+                {/* Single Vertical Divider Line Separating Each Month */}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-0 top-1/2 h-4 w-[1px] -translate-y-1/2 rounded-full bg-slate-300/65"
+                />
 
-                {/* Clickable Month Label + Health Radar Dot */}
+                {/* Clickable Month Label */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -584,40 +624,30 @@ export const TimeCrown: React.FC<TimeCrownProps> = ({
                     }
                   }}
                   style={{ transform: `scale(${scale})`, opacity }}
-                  className="relative z-10 flex flex-col items-center justify-center rounded-lg px-2 py-1 transition-colors cursor-pointer"
+                  className="relative z-10 flex items-baseline justify-center gap-0.5 rounded-lg px-2 py-1.5 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-baseline gap-0.5">
-                    <span
-                      className={`text-[11px] font-black tracking-wider leading-none ${
-                        isCenter ? 'text-emerald-800' : 'text-slate-600'
-                      }`}
-                    >
-                      {slot.shortLabel}
-                    </span>
-                    <span
-                      className={`text-[8.5px] font-bold leading-none ${
-                        isCenter ? 'text-emerald-600' : 'text-slate-400'
-                      }`}
-                    >
-                      {slot.yearShort}
-                    </span>
-                  </div>
-
-                  {/* Health Radar Indicator Dot */}
-                  <div className="mt-1 flex items-center gap-1">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full transition-transform ${
-                        health === 'positive'
-                          ? 'bg-emerald-500'
-                          : health === 'negative'
-                          ? 'bg-rose-500'
-                          : 'bg-slate-300'
-                      } ${isCenter ? 'scale-110' : 'scale-90 opacity-75'}`}
-                    />
-                    {slot.isToday && (
-                      <span className="h-1 w-1 rounded-full bg-emerald-700 ring-2 ring-emerald-200" />
-                    )}
-                  </div>
+                  <span
+                    className={`text-[11px] font-black tracking-wider leading-none ${
+                      isCenter
+                        ? slotIsNegative
+                          ? 'text-rose-700'
+                          : 'text-emerald-800'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {slot.shortLabel}
+                  </span>
+                  <span
+                    className={`text-[8.5px] font-bold leading-none ${
+                      isCenter
+                        ? slotIsNegative
+                          ? 'text-rose-500'
+                          : 'text-emerald-600'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {slot.yearShort}
+                  </span>
                 </button>
               </div>
             );
