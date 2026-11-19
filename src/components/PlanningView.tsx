@@ -15,19 +15,12 @@ import {
   shiftMonthStr,
   doesItemOccurInMonth,
 } from '../utils/finance';
-import { getTranslations, getLocaleForLanguage } from '../utils/i18n';
+import { getLocaleForLanguage } from '../utils/i18n';
 import { MonthlyFreedomScale } from './MonthlyFreedomScale';
 import { FinancialCalendarView } from './FinancialCalendarView';
 import {
   Calendar,
   Sparkles,
-  TrendingUp,
-  Receipt,
-  Wallet,
-  Plus,
-  ArrowRight,
-  TrendingDown,
-  LayoutGrid,
   BarChart3,
   Scale,
 } from 'lucide-react';
@@ -66,11 +59,9 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   currentBalance = 0,
   forecastBalance = currentBalance,
   onOpenMoneChat,
-  onOpenNewTransaction,
   overdueBillsCount = 0,
   onNavigateToFinance,
 }) => {
-  const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
   const [subTab, setSubTab] = useState<'projections' | 'calendar' | 'freedom'>('projections');
   const currentMonth = getCurrentMonthStr();
@@ -83,8 +74,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
     };
     reset();
-    setSubTab(nextTab)
-    requestAnimationFrame(reset);;
+    setSubTab(nextTab);
+    requestAnimationFrame(reset);
   };
 
   const monthlyProjections = useMemo(() => {
@@ -135,10 +126,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   ] as const;
 
   const containerVariants: any = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
-  const itemVariants: any = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } } };
+  const itemVariants: any = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } } };
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-6 pb-24">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-5 pb-24">
       {overdueBillsCount > 0 && (
         <div
           role="button"
@@ -148,58 +139,35 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           {overdueBillsCount} {overdueBillsCount === 1 ? (language === 'pt' ? 'nova fatura atrasada' : language === 'es' ? 'nueva factura vencida' : 'new overdue bill') : (language === 'pt' ? 'novas faturas atrasadas' : language === 'es' ? 'nuevas facturas vencidas' : 'new overdue bills')}
         </div>
       )}
-      {/* Premium Cinematic Header */}
-      <motion.div variants={itemVariants} className="glass-panel rounded-[3rem] p-8 sm:p-10 shadow-md relative overflow-hidden group">
-        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-blue-500/10 transition-colors duration-1000" />
-        
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-600/20 border border-white/80">
-                <LayoutGrid className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Planejamento</h1>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mt-2">Visão Estratégica e Futuro</p>
-              </div>
-            </div>
-            <p className="text-sm font-medium text-slate-600 max-w-xl leading-relaxed">Simule seu fluxo de caixa para os próximos meses, visualize sua escala de liberdade financeira e acompanhe seus compromissos no tempo.</p>
-          </div>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onOpenNewTransaction?.('bill')}
-            className="h-16 px-10 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-[0.2em] shadow-md transition-all cursor-pointer shrink-0"
-          >
-            <span className="flex items-center gap-2"><Plus className="w-5 h-5 stroke-[4]" /> Lançar Fatura</span>
-          </motion.button>
-        </div>
-
-        {/* Tab Switcher Interface */}
-        <div className="flex items-center justify-center gap-2 p-2 mt-12 bg-slate-100/80 rounded-[2rem] border border-slate-200/80 relative shadow-inner">
-          {tabs.map((tab) => {
-            const isActive = subTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleSubTabChange(tab.id)}
-                className={`flex-none w-[120px] py-4 rounded-[1.5rem] transition-all cursor-pointer relative z-10 group overflow-hidden ${
-                  isActive ? 'bg-white text-slate-900 font-bold shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {isActive && (
-                  <motion.div layoutId="planning-view-tab" className="absolute inset-0 bg-white shadow-xs rounded-[1.5rem]" transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }} />
-                )}
-                <div className="relative z-10 flex flex-col items-center gap-1">
-                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'group-hover:text-slate-800 transition-colors'}`} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      {/* Top Tab Switcher: Projeção | Liberdade | Calendário */}
+      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-100/90 rounded-[2rem] border border-slate-200/80 shadow-inner">
+        {tabs.map((tab) => {
+          const isActive = subTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              type="button"
+              key={tab.id}
+              onClick={() => handleSubTabChange(tab.id)}
+              className={`py-3.5 px-2 rounded-[1.5rem] transition-all cursor-pointer relative z-10 group overflow-hidden ${
+                isActive ? 'text-slate-900 font-bold' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="planning-view-tab"
+                  className="absolute inset-0 bg-white shadow-xs rounded-[1.5rem]"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              <div className="relative z-10 flex flex-col items-center gap-1">
+                <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'group-hover:text-slate-800 transition-colors'}`} />
+                <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
+              </div>
+            </button>
+          );
+        })}
       </motion.div>
 
       {/* Feature Content */}
