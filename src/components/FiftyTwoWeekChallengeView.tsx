@@ -23,6 +23,11 @@ interface Props {
   onDeleteExpense: (expenseId: string) => Promise<void>; onReturnToFinance?: () => void;
 }
 const todayISO = () => { const d = new Date(); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); };
+const addDaysISO = (iso: string, days: number) => {
+  const d = new Date((iso || todayISO()) + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+};
 
 export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onUpdateStorageLocation, accounts = [], onAdjustAccountBalance, onDeleteChallenge, onRedeemChallenge, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
   // Guard against accounts being temporarily undefined while Firebase data loads.
@@ -32,7 +37,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const { user } = useAuth();
   const [showingSelectedPlan,setShowingSelectedPlan]=useState(false);
   const [planListFilter,setPlanListFilter]=useState<'active'|'finalized'>('active');
-  const [creating,setCreating]=useState(false), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [planCurrency,setPlanCurrency]=useState<CurrencyCode>(defaultPlanCurrency), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [weekCurrency,setWeekCurrency]=useState<CurrencyCode>(currency), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState(''), [showRedeemModal,setShowRedeemModal]=useState(false), [redeemAccountId,setRedeemAccountId]=useState(''), [redeemBusy,setRedeemBusy]=useState(false), [redeemError,setRedeemError]=useState('');
+  const [creating,setCreating]=useState(false), [editingPlan,setEditingPlan]=useState(false), [formError,setFormError]=useState(''), [title,setTitle]=useState(''), [storageLocation,setStorageLocation]=useState(''), [planCurrency,setPlanCurrency]=useState<CurrencyCode>(defaultPlanCurrency), [selectedAccountId,setSelectedAccountId]=useState(''), [savingMode,setSavingMode]=useState<'progressive'|'fixed'>('progressive'), [initialAmount,setInitialAmount]=useState('1000'), [totalTargetInput,setTotalTargetInput]=useState('12000'), [totalWeeksInput,setTotalWeeksInput]=useState('12'), [startDate,setStartDate]=useState(todayISO()), [endDate,setEndDate]=useState(addDaysISO(todayISO(), 12 * 7 - 1)), [saving,setSaving]=useState(false), [selectedWeek,setSelectedWeek]=useState<{number:number;undo:boolean}|null>(null), [weekCurrency,setWeekCurrency]=useState<CurrencyCode>(currency), [filter,setFilter]=useState<'all'|'pending'|'completed'>('all'), [busy,setBusy]=useState(false), [editingStorage,setEditingStorage]=useState(false), [storageDraft,setStorageDraft]=useState(''), [storageSaving,setStorageSaving]=useState(false), [storageError,setStorageError]=useState(''), [weekError,setWeekError]=useState(''), [showRedeemModal,setShowRedeemModal]=useState(false), [redeemAccountId,setRedeemAccountId]=useState(''), [redeemBusy,setRedeemBusy]=useState(false), [redeemError,setRedeemError]=useState('');
   const firstDeposit=Math.max(0,Number(initialAmount.replace(',','.'))||0), totalGoal=Math.max(0,Number(totalTargetInput.replace(',','.'))||0), requestedWeeks=Math.floor(Number(totalWeeksInput)||0);
   const fixedInstallment=requestedWeeks>0?Math.round(totalGoal/requestedWeeks*100)/100:0;
   const previewTotal=savingMode==='fixed'?totalGoal:firstDeposit*requestedWeeks*(requestedWeeks+1)/2;
@@ -73,10 +78,110 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const activePlans = planSummaries.filter(item => !item.finalized);
   const finalizedPlans = planSummaries.filter(item => item.finalized);
 
-  const create=async(e:React.FormEvent)=>{
-    e.preventDefault(); if((savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks))return;
-    try{setSaving(true);await onCreateChallenge({initialAmount:savingMode==='fixed'?fixedInstallment:firstDeposit,startDate,title:title.trim()||undefined,totalWeeks:requestedWeeks,savingMode,totalTarget:savingMode==='fixed'?totalGoal:undefined,storageLocation:storageLocation.trim(),currency:planCurrency});setCreating(false);}
-    catch(err){console.error('Erro ao criar plano semanal:',err);}finally{setSaving(false);}
+  const handleWeeksInputChange = (value: string) => {
+    setTotalWeeksInput(value);
+    const parsed = Math.floor(Number(value) || 0);
+    if (parsed >= 1) {
+      setEndDate(addDaysISO(startDate, parsed * 7 - 1));
+    }
+  };
+
+  const handleStartDateChange = (newStart: string) => {
+    setStartDate(newStart);
+    if (newStart && requestedWeeks >= 1) {
+      setEndDate(addDaysISO(newStart, requestedWeeks * 7 - 1));
+    }
+  };
+
+  const handleEndDateChange = (newEnd: string) => {
+    setEndDate(newEnd);
+    if (newEnd && startDate) {
+      const startMs = new Date(startDate + 'T00:00:00').getTime();
+      const endMs = new Date(newEnd + 'T00:00:00').getTime();
+      const diffDays = Math.floor((endMs - startMs) / 86400000);
+      if (Number.isFinite(diffDays) && diffDays >= 0) {
+        const calcWeeks = Math.max(1, Math.ceil((diffDays + 1) / 7));
+        setTotalWeeksInput(String(calcWeeks));
+      }
+    }
+  };
+
+  const startCreatingPlan = () => {
+    const sDate = todayISO();
+    setTitle('');
+    setStorageLocation('');
+    setPlanCurrency(defaultPlanCurrency);
+    setSavingMode('progressive');
+    setInitialAmount('1000');
+    setTotalTargetInput('12000');
+    setTotalWeeksInput('12');
+    setStartDate(sDate);
+    setEndDate(addDaysISO(sDate, 12 * 7 - 1));
+    setFormError('');
+    setEditingPlan(false);
+    setCreating(true);
+  };
+
+  const startEditingPlan = () => {
+    if (!activeChallenge) return;
+    const sDate = activeChallenge.startDate || todayISO();
+    const wCount = Math.max(1, Math.floor(activeChallenge.totalWeeks || 52));
+    const mode = activeChallenge.savingMode || 'progressive';
+    setTitle(activeChallenge.title || '');
+    setStorageLocation(activeChallenge.storageLocation || '');
+    setPlanCurrency(activeChallenge.currency || activePlanCurrency);
+    setSavingMode(mode);
+    setInitialAmount(String(activeChallenge.initialAmount || 1000));
+    setTotalTargetInput(String(activeChallenge.totalTarget || 12000));
+    setTotalWeeksInput(String(wCount));
+    setStartDate(sDate);
+    setEndDate(addDaysISO(sDate, wCount * 7 - 1));
+    setFormError('');
+    setCreating(false);
+    setEditingPlan(true);
+  };
+
+  const submitPlan=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    setFormError('');
+    if((savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks))return;
+    try{
+      setSaving(true);
+      if(editingPlan && activeChallenge){
+        if (!user?.uid) throw new Error('Sua sessão expirou. Entre novamente e tente salvar.');
+        const nextInitialAmount = savingMode==='fixed' ? fixedInstallment : firstDeposit;
+        const nextTotalTarget = savingMode==='fixed'
+          ? Math.round(totalGoal * 100) / 100
+          : Math.round(firstDeposit * requestedWeeks * (requestedWeeks + 1) / 2 * 100) / 100;
+        const nextCompletedWeeks = (activeChallenge.completedWeeks || []).filter((w) => w <= requestedWeeks);
+        const nextStatus = nextCompletedWeeks.length >= requestedWeeks ? 'completed' : 'active';
+        const challengeRef = doc(db, 'users', user.uid, 'fifty_two_week_challenges', activeChallenge.id);
+        await setDoc(
+          challengeRef,
+          sanitizeForFirestore({
+            title: title.trim() || 'Plano Semanal',
+            storageLocation: storageLocation.trim(),
+            currency: planCurrency,
+            savingMode,
+            initialAmount: nextInitialAmount,
+            totalWeeks: requestedWeeks,
+            totalTarget: nextTotalTarget,
+            startDate,
+            completedWeeks: nextCompletedWeeks,
+            status: nextStatus,
+            updatedAt: new Date().toISOString(),
+          }),
+          { merge: true }
+        );
+        setEditingPlan(false);
+      } else {
+        await onCreateChallenge({initialAmount:savingMode==='fixed'?fixedInstallment:firstDeposit,startDate,title:title.trim()||undefined,totalWeeks:requestedWeeks,savingMode,totalTarget:savingMode==='fixed'?totalGoal:undefined,storageLocation:storageLocation.trim(),currency:planCurrency});
+        setCreating(false);
+      }
+    }catch(err){
+      console.error('Erro ao salvar plano semanal:',err);
+      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar o plano. Tente novamente.');
+    }finally{setSaving(false);}
   };
   const activeAccounts = safeAccounts.filter(a => a.isActive !== false);
   const confirmWeek=async()=>{
@@ -134,15 +239,18 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const removeChallenge=async()=>{
     if(!activeChallenge)return;
     if(!window.confirm('Deseja excluir este plano? Os depósitos já registrados como despesas não serão apagados automaticamente.'))return;
-    await onDeleteChallenge(activeChallenge.id);onSelectChallenge('');setShowingSelectedPlan(false);setCreating(false);
+    await onDeleteChallenge(activeChallenge.id);onSelectChallenge('');setShowingSelectedPlan(false);setCreating(false);setEditingPlan(false);
   };
   const locale=language==='es'?'es-ES':language==='en'?'en-US':'pt-BR';
 
-  if(creating)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
-    <div className="flex items-center justify-between"><button type="button" onClick={()=>{setCreating(false);onReturnToFinance?.();}} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="w-4 h-4"/>Voltar</button>{challenges.length>0&&<button type="button" onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus planos</button>}</div>
+  if(creating || editingPlan)return <div className="max-w-3xl mx-auto space-y-5 pb-16">
+    <div className="flex items-center justify-between">
+      <button type="button" onClick={()=>{ if(editingPlan){ setEditingPlan(false); } else { setCreating(false); onReturnToFinance?.(); } }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="w-4 h-4"/>Voltar</button>
+      {!editingPlan && challenges.length>0 && <button type="button" onClick={()=>setCreating(false)} className="text-sm font-bold text-emerald-700 hover:underline">Ver meus planos</button>}
+    </div>
     <div className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-xl shadow-emerald-900/5">
-      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15"><Target className="h-7 w-7"/></div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">Plano Semanal</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada semana.</p></div></div></div>
-      <form onSubmit={create} className="space-y-6 p-5 sm:p-8">
+      <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-6 py-8 text-white sm:px-9 sm:py-10"><div className="absolute -right-10 -top-12 h-56 w-56 rounded-full bg-white/10 blur-2xl"/><div className="relative flex items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15">{editingPlan ? <Pencil className="h-7 w-7"/> : <Target className="h-7 w-7"/>}</div><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">SisFinz • metas</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{editingPlan ? 'Editar Plano Semanal' : 'Plano Semanal'}</h2><p className="mt-1 max-w-lg text-sm text-emerald-50">{editingPlan ? 'Ajuste o nome, valores, quantidade de semanas ou as datas do seu plano.' : 'Crie seu próprio ritmo de economia. Você escolhe a duração e o valor de cada semana.'}</p></div></div></div>
+      <form onSubmit={submitPlan} className="space-y-6 p-5 sm:p-8">
         <div className="space-y-4"><div><label className="mb-2 block text-sm font-bold text-slate-700">Nome da sua meta</label><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Minha viagem, reserva de emergência..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Onde este dinheiro está guardado?</label><input value={storageLocation} onChange={e=>setStorageLocation(e.target.value)} placeholder="Ex.: Cofre de casa, envelope azul, outra carteira..." className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 placeholder:text-slate-400"/><p className="mt-1 text-xs text-slate-500">Apenas uma anotação para você localizar o dinheiro; não altera suas contas.</p></div><div><label className="mb-2 block text-sm font-bold text-slate-700">Moeda deste plano</label><select value={planCurrency} onChange={e=>setPlanCurrency(e.target.value as CurrencyCode)} className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"><option value="ARS">Peso argentino (ARS)</option><option value="BRL">Real brasileiro (BRL)</option><option value="USD">Dólar americano (USD)</option><option value="EUR">Euro (EUR)</option></select><p className="mt-1 text-xs text-slate-500">Os depósitos só poderão movimentar contas ativas nesta moeda.</p></div></div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="sm:col-span-2">
@@ -157,11 +265,15 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
             <div className="relative"><Coins className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="0.01" step="0.01" required value={savingMode==='progressive'?initialAmount:totalTargetInput} onChange={e=>savingMode==='progressive'?setInitialAmount(e.target.value):setTotalTargetInput(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div>
             <p className="mt-2 text-xs text-slate-500">{savingMode==='progressive'?"Digite qualquer valor. Não há opções fixas.":"O total será dividido igualmente entre as semanas; o último depósito ajusta os centavos para fechar exatamente a meta."}</p>
           </div>
-          <div><label className="mb-2 block text-sm font-bold text-slate-700">Por quantas semanas?</label><div className="relative"><CalendarDays className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="1" step="1" required value={totalWeeksInput} onChange={e=>setTotalWeeksInput(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div><p className="mt-2 text-xs text-slate-500">Escolha a duração que fizer sentido para sua meta.</p></div>
+          <div><label className="mb-2 block text-sm font-bold text-slate-700">Por quantas semanas?</label><div className="relative"><CalendarDays className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-600"/><input type="number" min="1" step="1" required value={totalWeeksInput} onChange={e=>handleWeeksInputChange(e.target.value)} className="h-14 w-full rounded-xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-xl font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div><p className="mt-2 text-xs text-slate-500">Altere o número de semanas ou ajuste diretamente a data de término abaixo.</p></div>
         </div>
-        <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de início</label><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 sm:max-w-xs"/></div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de início</label><input type="date" value={startDate} onChange={e=>handleStartDateChange(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div>
+          <div><label className="mb-2 block text-sm font-bold text-slate-700">Data de término</label><input type="date" value={endDate} min={startDate} onChange={e=>handleEndDateChange(e.target.value)} required className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"/></div>
+        </div>
+        {formError && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">{formError}</p>}
         <div className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-white p-5"><div className="flex items-center gap-2 text-sm font-bold text-emerald-800"><Sparkles className="h-4 w-4"/>Resumo do seu plano</div><div className="mt-4 grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold text-slate-500">Duração</p><p className="mt-1 text-2xl font-black text-slate-900">{requestedWeeks>0?requestedWeeks:0} <span className="text-sm font-bold text-slate-500">semanas</span></p><p className="mt-1 text-xs text-slate-500">Termina em {requestedWeeks>0?previewLastDate():"—"}</p></div><div><p className="text-xs font-semibold text-slate-500">Total a economizar</p><p className="mt-1 break-words text-xl font-black text-emerald-700">{formatCurrency(previewTotal,planCurrency)}</p></div></div><p className="mt-3 text-xs leading-relaxed text-slate-600">{savingMode==='progressive' ? "Os depósitos aumentam progressivamente: 1ª semana "+formatCurrency(firstDeposit,planCurrency)+", 2ª "+formatCurrency(firstDeposit*2,planCurrency)+", 3ª "+formatCurrency(firstDeposit*3,planCurrency)+"." : "Você guardará aproximadamente "+formatCurrency(fixedInstallment,planCurrency)+" por semana durante "+requestedWeeks+" semanas."}</p></div>
-        <button type="submit" disabled={saving||(savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks)} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">{saving?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}Criar meu plano</button>
+        <button type="submit" disabled={saving||(savingMode==='progressive'?firstDeposit<=0:totalGoal<=0)||requestedWeeks<1||!Number.isInteger(requestedWeeks)} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-extrabold text-white shadow-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">{saving?<Loader2 className="h-5 w-5 animate-spin"/>:editingPlan?<Check className="h-5 w-5"/>:<Plus className="h-5 w-5"/>}{editingPlan ? 'Salvar alterações' : 'Criar meu plano'}</button>
       </form>
     </div>
   </div>;
@@ -225,7 +337,7 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
         </motion.div>
       </AnimatePresence>
     </section>
-    <button type="button" onClick={()=>{setTitle('');setStorageLocation('');setPlanCurrency(defaultPlanCurrency);setSavingMode('progressive');setInitialAmount('1000');setTotalTargetInput('12000');setTotalWeeksInput('12');setStartDate(todayISO());setCreating(true);}} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar plano</button>
+    <button type="button" onClick={startCreatingPlan} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-700"><Plus className="h-4 w-4"/>Adicionar plano</button>
   </div>;
 
   const selectedAccount = safeAccounts.find(a => a.id === selectedAccountId);
@@ -233,7 +345,13 @@ export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language=
   const selectedWeekAmount = selectedWeek ? amountForWeek(selectedWeek.number, activeChallenge) : 0;
 
   return <div className="space-y-5 pb-20">
-    <div className="flex items-center justify-between gap-3"><button type="button" onClick={()=>{onSelectChallenge('');setShowingSelectedPlan(false);}} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Meus planos</button><button type="button" onClick={removeChallenge} title="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button></div>
+    <div className="flex items-center justify-between gap-3">
+      <button type="button" onClick={()=>{onSelectChallenge('');setShowingSelectedPlan(false);}} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"><ArrowLeft className="h-4 w-4"/>Meus planos</button>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={startEditingPlan} title="Editar plano" aria-label="Editar plano" className="rounded-xl border border-emerald-200 bg-white p-2.5 text-emerald-700 shadow-sm hover:bg-emerald-50"><Pencil className="h-4 w-4"/></button>
+        <button type="button" onClick={removeChallenge} title="Excluir plano" aria-label="Excluir plano" className="rounded-xl border border-rose-100 bg-white p-2.5 text-rose-500 shadow-sm hover:bg-rose-50"><Trash2 className="h-4 w-4"/></button>
+      </div>
+    </div>
     <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-lg shadow-emerald-900/5">
       <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white sm:p-8"><div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl"/><div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-100">Sua jornada de economia</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeChallenge.title}</h2><div className="mt-2 flex items-center gap-2 text-sm text-emerald-50"><span>{activeChallenge.storageLocation?.trim()||'Local do dinheiro não informado'}</span><button type="button" title="Editar local onde o dinheiro está guardado" onClick={()=>{setStorageDraft(activeChallenge.storageLocation||'');setStorageError('');setEditingStorage(true);}} className="rounded-lg p-1.5 text-white/90 hover:bg-white/15"><Pencil className="h-3.5 w-3.5"/></button></div><p className="mt-2 text-sm text-emerald-50">Plano de {totalWeeks} semanas • iniciado em {new Date(activeChallenge.startDate+'T00:00:00').toLocaleDateString(locale)}</p></div><div className="rounded-2xl border border-white/20 bg-white/15 px-5 py-4"><p className="text-xs font-semibold text-emerald-50">Total da meta</p><p className="mt-1 text-2xl font-black">{formatCurrency(metrics?.target||0,activePlanCurrency)}</p></div></div><div className="relative mt-7"><div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-50"><span>Progresso geral</span><span>{(metrics?.percent||0).toFixed(1)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-black/20"><motion.div initial={{width:0}} animate={{width:(metrics?.percent||0)+'%'}} transition={{duration:0.7}} className="h-full rounded-full bg-gradient-to-r from-lime-300 to-white"/></div></div></div>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Já economizado</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.saved||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Falta economizar</p><p className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">{formatCurrency(metrics?.remaining||0,activeChallenge.currency||currency)}</p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Semanas concluídas</p><p className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{metrics?.count||0}<span className="text-sm font-bold text-slate-400"> / {totalWeeks}</span></p></div><div className="bg-white p-4 sm:p-5"><p className="text-xs font-semibold text-slate-500">Próximo depósito</p><p className="mt-1 break-words text-lg font-black text-emerald-700 sm:text-xl">{formatCurrency(metrics?.nextAmount||0,activeChallenge.currency||currency)}</p></div></div>
