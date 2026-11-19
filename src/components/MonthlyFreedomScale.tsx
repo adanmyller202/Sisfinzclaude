@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BillItem,
   IncomeItem,
@@ -19,21 +19,17 @@ import {
   doesItemOccurInMonth,
   getCurrentMonthStr,
 } from '../utils/finance';
-import { getTranslations, getLocaleForLanguage } from '../utils/i18n';
+import { getLocaleForLanguage } from '../utils/i18n';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
-  Calendar,
   Zap,
-  Clock,
   ArrowUpRight,
-  Info,
+  ArrowDownLeft,
+  Wallet,
 } from 'lucide-react';
 
 interface MonthlyFreedomScaleProps {
@@ -54,7 +50,8 @@ interface MonthlyFreedomScaleProps {
 
 interface MonthFreedomData {
   month: string; // YYYY-MM
-  monthTitle: string; // e.g. "NOVIEMBRE"
+  monthTitle: string; // e.g. "NOVEMBRO"
+  monthShort: string; // e.g. "NOV"
   year: number;
   totalIncomes: number;
   gastosPagados: number;
@@ -63,6 +60,7 @@ interface MonthFreedomData {
   freeMoney: number;
   deficit: number;
   isDeficit: boolean;
+  hasAnyRecords: boolean;
   prevMonthStr: string;
   prevMonthFreeMoney: number | null;
   hasPrevData: boolean;
@@ -75,85 +73,81 @@ interface MonthFreedomData {
   insightText: string;
 }
 
+type SegmentKey = 'paid' | 'pending' | 'free';
+
 function getScaleLabels(lang: LanguageCode) {
   if (lang === 'es') {
     return {
       title: 'Escala de Libertad',
-      subtitle: 'Distribución inteligente de tus ingresos previstos y dinero libre',
+      subtitle: 'Toca un mes o segmento para explorar tu saldo libre',
       proyeccion: 'Proyección',
       dineroLibreSub: 'Dinero que todavía tienes libre',
-      deficitSub: 'Déficit acumulado para este mes',
-      distribucionHeader: 'Distribución de tus ingresos previstos:',
+      deficitSub: 'Déficit previsto para este mes',
       yaPagado: 'Ya pagado',
       yaPagadoSub: 'Dinero que ya salió de tu cuenta',
-      pendientePago: 'Pendiente de pago',
+      pendientePago: 'Pendiente',
       pendientePagoSub: 'Compromisos que todavía debes pagar',
-      dineroLibre: 'Dinero libre',
+      dineroLibre: 'Libre',
       dineroLibreLegendSub: 'Lo que todavía puedes utilizar',
-      totalIngresos: 'Total de ingresos',
-      totalGastos: 'Total de gastos (pagados + pendientes)',
+      totalIngresos: 'Ingresos previstos',
+      totalGastos: 'Total de salidas',
       insightTitle: 'Insight del mes',
       sobraMayor: 'Sobra mayor',
       sobraMenor: 'Sobra menor',
       mismoResultado: 'Sin cambios',
       deficitLabel: 'Déficit',
-      prevMonthMore: 'a más que',
-      prevMonthLess: 'a menos que',
-      months: 'meses',
       today: 'Hoy',
+      freedomPctLabel: 'libre',
+      tapHint: 'Toca una tarjeta para resaltar en el arco',
     };
   }
   if (lang === 'en') {
     return {
       title: 'Freedom Scale',
-      subtitle: 'Smart distribution of your expected income and free money',
+      subtitle: 'Tap a month or segment to explore your free balance',
       proyeccion: 'Projection',
       dineroLibreSub: 'Money you still have free',
-      deficitSub: 'Accumulated deficit for this month',
-      distribucionHeader: 'Distribution of expected income:',
-      yaPagado: 'Already paid',
+      deficitSub: 'Projected deficit for this month',
+      yaPagado: 'Paid',
       yaPagadoSub: 'Money that already left your account',
-      pendientePago: 'Pending payment',
+      pendientePago: 'Pending',
       pendientePagoSub: 'Commitments you still need to pay',
-      dineroLibre: 'Free money',
+      dineroLibre: 'Free',
       dineroLibreLegendSub: 'What you can still use',
-      totalIngresos: 'Total income',
-      totalGastos: 'Total expenses (paid + pending)',
+      totalIngresos: 'Expected income',
+      totalGastos: 'Total outflows',
       insightTitle: 'Monthly insight',
       sobraMayor: 'Higher surplus',
       sobraMenor: 'Lower surplus',
       mismoResultado: 'No change',
       deficitLabel: 'Deficit',
-      prevMonthMore: 'more than',
-      prevMonthLess: 'less than',
-      months: 'months',
       today: 'Today',
+      freedomPctLabel: 'free',
+      tapHint: 'Tap a card to highlight on the arc',
     };
   }
   return {
     title: 'Escala de Liberdade',
-    subtitle: 'Distribuição inteligente do seu dinheiro previsto e saldo livre',
+    subtitle: 'Toque em um mês ou bloco para explorar seu saldo livre',
     proyeccion: 'Projeção',
     dineroLibreSub: 'Dinheiro que você ainda tem livre',
-    deficitSub: 'Déficit acumulado para este mês',
-    distribucionHeader: 'Distribuição da sua renda prevista:',
+    deficitSub: 'Déficit previsto para este mês',
     yaPagado: 'Já pago',
     yaPagadoSub: 'Dinheiro que já saiu da sua conta',
-    pendientePago: 'Pendente de pagamento',
+    pendientePago: 'Pendente',
     pendientePagoSub: 'Compromissos que você ainda deve pagar',
-    dineroLibre: 'Dinheiro livre',
+    dineroLibre: 'Livre',
     dineroLibreLegendSub: 'O que você ainda pode utilizar',
-    totalIngresos: 'Total de receitas',
-    totalGastos: 'Total de gastos (pagos + pendentes)',
+    totalIngresos: 'Entradas previstas',
+    totalGastos: 'Previsão de saídas',
     insightTitle: 'Insight do mês',
     sobraMayor: 'Sobra maior',
     sobraMenor: 'Sobra menor',
     mismoResultado: 'Sem alterações',
     deficitLabel: 'Déficit',
-    prevMonthMore: 'a mais que',
-    prevMonthLess: 'a menos que',
-    months: 'meses',
     today: 'Hoje',
+    freedomPctLabel: 'livre',
+    tapHint: 'Toque em um bloco para destacar no arco',
   };
 }
 
@@ -200,7 +194,6 @@ function generateMonthlyInsight(
     return `You have already spent ${formattedPagados} of your income. Additionally, you have ${formattedPendientes} committed in pending payments. If you maintain this plan, you will still have ${formattedFree} available.`;
   }
 
-  // Default pt
   if (isDeficit) {
     return `Atenção! Seus gastos previstos (${totalExpensesFormatted}) superam suas receitas previstas (${formattedIncome}). Você terá um déficit de ${formattedDeficit} este mês.`;
   }
@@ -212,6 +205,21 @@ function generateMonthlyInsight(
   }
   return `Você já utilizou ${formattedPagados} da sua renda. Além disso, tem ${formattedPendientes} comprometidos em pagamentos pendentes. Se mantiver esse planejamento, ainda terá ${formattedFree} disponíveis.`;
 }
+
+const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy - r * Math.sin(rad),
+  };
+};
+
+const describeArc = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
+  const start = polarToCartesian(cx, cy, r, startAngle);
+  const end = polarToCartesian(cx, cy, r, endAngle);
+  const largeArcFlag = startAngle - endAngle <= 180 ? '0' : '1';
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+};
 
 export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
   bills = [],
@@ -226,16 +234,21 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
   currentBalance = 0,
   forecastBalance,
   className = '',
-  onReturnToFinance,
 }) => {
-  const t = getTranslations(language);
   const locale = getLocaleForLanguage(language);
   const labels = getScaleLabels(language);
 
-  // Month navigation window state
   const baseMonth = startMonth || getCurrentMonthStr();
   const [windowOffset, setWindowOffset] = useState<number>(0);
-  const [monthsCount, setMonthsCount] = useState<6 | 12>(6);
+  const [monthsCount, setMonthsCount] = useState<6 | 12>(12);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [activeSegment, setActiveSegment] = useState<SegmentKey | null>(null);
+
+  useEffect(() => {
+    if (selectedIndex >= monthsCount) {
+      setSelectedIndex(0);
+    }
+  }, [monthsCount, selectedIndex]);
 
   const activeStartMonth = useMemo(() => {
     return shiftMonthStr(baseMonth, windowOffset);
@@ -291,7 +304,7 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
         if (doesItemOccurInMonth(inc.startMonth, targetMonth, inc.recurrence, inc.recurrenceMonthsCount)) {
           const exc = inc.exceptions?.[targetMonth];
           if (!exc?.isDeleted && !inc.excludedMonths?.includes(targetMonth) && !inc.isRefund && !inc.isRefunded) {
-             sumIncomes += exc?.amount ?? inc.amount;
+            sumIncomes += exc?.amount ?? inc.amount;
           }
         }
       }
@@ -337,21 +350,24 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
         ? forecastBalance
         : sumIncomes - (gastosPagados + gastosPendientes);
       const isDeficit = netMoney < 0;
-      const baseScale = Math.max(sumIncomes, gastosPagados + gastosPendientes, 1);
+      const totalExpenses = gastosPagados + gastosPendientes;
+      const freeVal = isDeficit ? 0 : Math.max(0, netMoney);
+      const baseScale = Math.max(gastosPagados + gastosPendientes + freeVal, sumIncomes, 1);
 
       return {
         totalIncomes: sumIncomes,
         gastosPagados,
         gastosPendientes,
-        freeMoney: isDeficit ? 0 : netMoney,
+        totalExpenses,
+        freeMoney: freeVal,
         deficit: isDeficit ? Math.abs(netMoney) : 0,
         isDeficit,
-        hasAnyRecords: sumIncomes > 0 || (gastosPagados + gastosPendientes) > 0,
+        hasAnyRecords: sumIncomes > 0 || totalExpenses > 0 || (isCurrentMonth && netMoney !== 0),
         paidPct: (gastosPagados / baseScale) * 100,
         pendingPct: (gastosPendientes / baseScale) * 100,
-        freePct: isDeficit ? 0 : (Math.max(0, netMoney) / baseScale) * 100,
-        deficitPct: isDeficit ? (Math.abs(netMoney) / baseScale) * 100 : 0,
-        insightText: generateMonthlyInsight(gastosPagados, gastosPendientes, isDeficit ? 0 : netMoney, sumIncomes, isDeficit, isDeficit ? Math.abs(netMoney) : 0, currency, language),
+        freePct: isDeficit ? 0 : (freeVal / baseScale) * 100,
+        deficitPct: isDeficit ? Math.min(100, (Math.abs(netMoney) / Math.max(totalExpenses, 1)) * 100) : 0,
+        insightText: generateMonthlyInsight(gastosPagados, gastosPendientes, freeVal, sumIncomes, isDeficit, isDeficit ? Math.abs(netMoney) : 0, currency, language),
       };
     };
   }, [incomes, bills, sharedBills, expenses, checkIsBillPaid, checkIsSharedBillPaid, userId, currency, language, forecastBalance, currentBalance]);
@@ -364,153 +380,504 @@ export const MonthlyFreedomScale: React.FC<MonthlyFreedomScaleProps> = ({
       const mStr = shiftMonthStr(activeStartMonth, i);
       const figures = computeMonthFigures(mStr);
       const d = new Date(parseInt(mStr.split('-')[0]), parseInt(mStr.split('-')[1]) - 1, 1);
-      const monthTitle = d.toLocaleDateString(locale, { month: 'long' }).toUpperCase();
+      const monthTitle = d.toLocaleDateString(locale, { month: 'long' });
+      const monthShort = d
+        .toLocaleDateString(locale, { month: 'short' })
+        .replace('.', '')
+        .slice(0, 3)
+        .toUpperCase();
 
       const prevFigures = i === 0 ? preFirstFigures : list[i - 1];
       let comparisonType: 'higher' | 'lower' | 'equal' | 'none' = 'none';
-      if (prevFigures && (prevFigures as any).hasAnyRecords) {
-        const diff = figures.freeMoney - (prevFigures as any).freeMoney;
+      if (prevFigures && prevFigures.hasAnyRecords) {
+        const diff = figures.freeMoney - prevFigures.freeMoney;
         comparisonType = diff > 0.01 ? 'higher' : diff < -0.01 ? 'lower' : 'equal';
       }
 
       list.push({
-        month: mStr, monthTitle, year: d.getFullYear(),
+        month: mStr,
+        monthTitle,
+        monthShort,
+        year: d.getFullYear(),
         ...figures,
         prevMonthStr: shiftMonthStr(mStr, -1),
-        prevMonthFreeMoney: prevFigures ? (prevFigures as any).freeMoney : null,
-        hasPrevData: prevFigures ? (prevFigures as any).hasAnyRecords : false,
-        diffFromPrev: prevFigures ? figures.freeMoney - (prevFigures as any).freeMoney : null,
-        comparisonType
-      } as any);
+        prevMonthFreeMoney: prevFigures ? prevFigures.freeMoney : null,
+        hasPrevData: prevFigures ? prevFigures.hasAnyRecords : false,
+        diffFromPrev: prevFigures ? figures.freeMoney - prevFigures.freeMoney : null,
+        comparisonType,
+      });
     }
     return list;
   }, [activeStartMonth, monthsCount, computeMonthFigures, locale]);
 
+  const activeItem = monthsData[selectedIndex] || monthsData[0];
+
+  // Build semicircular gauge segments (180° left to 0° right)
+  const gaugeSegments = useMemo(() => {
+    if (!activeItem) return [];
+    const cx = 140;
+    const cy = 138;
+    const r = 104;
+
+    if (activeItem.isDeficit) {
+      return [
+        {
+          key: 'free' as SegmentKey,
+          path: describeArc(cx, cy, r, 180, 0),
+          color: '#e11d48',
+          pct: 100,
+        },
+      ];
+    }
+
+    const rawSegments: { key: SegmentKey; pct: number; color: string }[] = [
+      { key: 'paid', pct: activeItem.paidPct, color: '#94a3b8' },
+      { key: 'pending', pct: activeItem.pendingPct, color: '#f59e0b' },
+      { key: 'free', pct: activeItem.freePct, color: '#059669' },
+    ].filter((s) => s.pct > 0.5);
+
+    const totalPct = rawSegments.reduce((acc, s) => acc + s.pct, 0);
+    if (totalPct <= 0) return [];
+
+    const gapDeg = rawSegments.length > 1 ? 3 : 0;
+    const availableDeg = 180 - gapDeg * (rawSegments.length - 1);
+    let cursor = 180;
+
+    return rawSegments.map((seg, idx) => {
+      const sweep = Math.max(2, (seg.pct / totalPct) * availableDeg);
+      const startAngle = cursor;
+      const endAngle = idx === rawSegments.length - 1 ? 0 : Math.max(0, cursor - sweep);
+      cursor = endAngle - gapDeg;
+      return {
+        key: seg.key,
+        path: describeArc(cx, cy, r, startAngle, endAngle),
+        color: seg.color,
+        pct: Math.round(seg.pct),
+      };
+    });
+  }, [activeItem]);
+
+  const centerReadout = useMemo(() => {
+    if (!activeItem) {
+      return { value: formatCurrency(0, currency), subtitle: '', badge: '0%', colorClass: 'text-slate-900', badgeClass: 'bg-slate-100 text-slate-600' };
+    }
+    if (activeSegment === 'paid') {
+      return {
+        value: formatCurrency(activeItem.gastosPagados, currency),
+        subtitle: labels.yaPagadoSub,
+        badge: `${Math.round(activeItem.paidPct)}% ${labels.yaPagado.toLowerCase()}`,
+        colorClass: 'text-slate-800',
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+      };
+    }
+    if (activeSegment === 'pending') {
+      return {
+        value: formatCurrency(activeItem.gastosPendientes, currency),
+        subtitle: labels.pendientePagoSub,
+        badge: `${Math.round(activeItem.pendingPct)}% ${labels.pendientePago.toLowerCase()}`,
+        colorClass: 'text-amber-600',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+      };
+    }
+    if (activeItem.isDeficit) {
+      return {
+        value: `-${formatCurrency(activeItem.deficit, currency)}`,
+        subtitle: labels.deficitSub,
+        badge: labels.deficitLabel,
+        colorClass: 'text-rose-600',
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+      };
+    }
+    return {
+      value: formatCurrency(activeItem.freeMoney, currency),
+      subtitle: labels.dineroLibreSub,
+      badge: `${Math.round(activeItem.freePct)}% ${labels.freedomPctLabel}`,
+      colorClass: 'text-emerald-600',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    };
+  }, [activeItem, activeSegment, currency, labels]);
+
+  const toggleSegment = (key: SegmentKey) => {
+    setActiveSegment((prev) => (prev === key ? null : key));
+  };
+
+  if (!activeItem) return null;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`glass-panel rounded-[2.5rem] p-8 sm:p-10 space-y-10 relative overflow-hidden shadow-md ${className}`}
+      className={`space-y-4 ${className}`}
     >
-      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 shadow-inner border border-emerald-500/20">
-            <Zap className="w-8 h-8" />
+      {/* Compact Header & Period Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/20">
+            <Zap className="h-4 w-4" />
           </div>
-          <div className="space-y-1">
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase flex items-center gap-3">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">
               {labels.title}
-              <span className="text-[10px] font-black px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200">
-                PROJEÇÃO {monthsCount}M
-              </span>
             </h3>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
+            <p className="text-[10px] font-semibold text-slate-500">
               {labels.subtitle}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 self-end md:self-auto">
-          <div className="p-1 rounded-2xl bg-white/60 border border-emerald-500/20 backdrop-blur-sm flex">
-            {[6, 12].map(n => (
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-xl border border-emerald-200/80 bg-white p-0.5 shadow-2xs">
+            {([6, 12] as const).map((n) => (
               <button
+                type="button"
                 key={n}
-                onClick={() => setMonthsCount(n as any)}
-                className={`px-5 py-2.5 rounded-xl text-[10px] font-black transition-all cursor-pointer ${monthsCount === n ? 'bg-white text-slate-900 shadow-sm border border-emerald-500/20' : 'text-slate-500'}`}
+                onClick={() => setMonthsCount(n)}
+                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-black transition-all cursor-pointer ${
+                  monthsCount === n
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
               >
-                {n} MESES
+                {n}M
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-2 p-1 rounded-2xl bg-white/60 border border-emerald-500/20 backdrop-blur-sm">
-             <button onClick={() => setWindowOffset(v => v - 1)} className="p-2.5 rounded-xl hover:bg-white text-slate-500 hover:text-slate-900 transition-all cursor-pointer"><ChevronLeft className="w-4 h-4" /></button>
-             {windowOffset !== 0 && <button onClick={() => setWindowOffset(0)} className="px-3 text-[10px] font-black text-emerald-600 uppercase tracking-widest">{labels.today}</button>}
-             <button onClick={() => setWindowOffset(v => v + 1)} className="p-2.5 rounded-xl hover:bg-white text-slate-500 hover:text-slate-900 transition-all cursor-pointer"><ChevronRight className="w-4 h-4" /></button>
+          <div className="flex items-center gap-0.5 rounded-xl border border-emerald-200/80 bg-white p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => { setWindowOffset((v) => v - 1); setActiveSegment(null); }}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors cursor-pointer"
+              aria-label="Mês anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {windowOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => { setWindowOffset(0); setSelectedIndex(0); setActiveSegment(null); }}
+                className="px-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:underline cursor-pointer"
+              >
+                {labels.today}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setWindowOffset((v) => v + 1); setActiveSegment(null); }}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors cursor-pointer"
+              aria-label="Próximo mês"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Grid of months */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <AnimatePresence mode="popLayout">
-          {monthsData.map((item, idx) => (
-            <motion.div
-              layout
-              key={item.month}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: idx * 0.05, type: "spring", damping: 25 }}
-              className="p-8 rounded-[2.5rem] glass-panel border border-emerald-500/20 space-y-8 relative overflow-hidden group shadow-xs"
+      {/* Horizontal Interactive Month Selector */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
+        {monthsData.map((m, idx) => {
+          const isSelected = idx === selectedIndex;
+          const dotColor = m.isDeficit
+            ? 'bg-rose-500'
+            : m.freeMoney > 0
+            ? 'bg-emerald-500'
+            : 'bg-slate-300';
+
+          return (
+            <button
+              type="button"
+              key={m.month}
+              onClick={() => {
+                setSelectedIndex(idx);
+                setActiveSegment(null);
+              }}
+              className={`relative shrink-0 rounded-2xl border px-3.5 py-2.5 text-center transition-all cursor-pointer ${
+                isSelected
+                  ? m.isDeficit
+                    ? 'border-rose-500 bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                    : 'border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'border-slate-200/90 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/40'
+              }`}
             >
-              <div className="flex items-center justify-between relative z-10">
-                <div className="space-y-1">
-                  <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                    {item.monthTitle} <span className="text-slate-400 font-mono-numbers">{item.year}</span>
-                  </h4>
-                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                     <Clock className="w-3 h-3" />
-                     <span>DISPONIBILIDADE REAL</span>
-                  </div>
-                </div>
-
-                <div className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border flex items-center gap-2 ${
-                  item.isDeficit ? 'bg-rose-500/10 text-rose-600 border-rose-500/20' : 
-                  item.comparisonType === 'higher' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                  item.comparisonType === 'lower' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                  'bg-emerald-50 text-emerald-700 border-emerald-200'
-                }`}>
-                  {item.isDeficit ? <AlertTriangle className="w-3 h-3" /> : <ArrowUpRight className={`w-3 h-3 ${item.comparisonType === 'lower' ? 'rotate-90' : ''}`} />}
-                  {item.isDeficit ? labels.deficitLabel : item.comparisonType === 'higher' ? labels.sobraMayor : item.comparisonType === 'lower' ? labels.sobraMenor : labels.proyeccion}
-                </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isSelected ? 'bg-white' : dotColor
+                  }`}
+                />
+                <span className="text-[11px] font-black tracking-wider">
+                  {m.monthShort}
+                </span>
               </div>
-
-              <div className="space-y-2 relative z-10">
-                 <div className={`text-4xl font-black font-mono-numbers tracking-tighter ${item.isDeficit ? 'text-rose-600' : 'text-emerald-500'}`}>
-                    {item.isDeficit ? `-${formatCurrency(item.deficit, currency)}` : formatCurrency(item.freeMoney, currency)}
-                 </div>
-                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                    {item.isDeficit ? labels.deficitSub : labels.dineroLibreSub}
-                 </p>
+              <div
+                className={`mt-0.5 text-[9px] font-bold ${
+                  isSelected ? 'text-white/80' : 'text-slate-400'
+                }`}
+              >
+                {String(m.year).slice(-2)}
               </div>
-
-              {/* Progress Scale */}
-              <div className="space-y-4 relative z-10">
-                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    <span>FLUXO DE CAIXA</span>
-                    <span className="font-mono-numbers text-slate-900">IN {formatCurrency(item.totalIncomes, currency)}</span>
-                 </div>
-                 <div className="h-6 w-full bg-emerald-50/50 rounded-[1.25rem] overflow-hidden flex shadow-inner p-1 border border-emerald-100">
-                    {item.paidPct > 0 && <motion.div initial={{ width: 0 }} animate={{ width: `${item.paidPct}%` }} className="h-full bg-slate-400 rounded-lg mr-0.5" />}
-                    {item.pendingPct > 0 && <motion.div initial={{ width: 0 }} animate={{ width: `${item.pendingPct}%` }} className="h-full bg-amber-500 rounded-lg mr-0.5 shadow-lg shadow-amber-500/20" />}
-                    {item.freePct > 0 && <motion.div initial={{ width: 0 }} animate={{ width: `${item.freePct}%` }} className="h-full bg-emerald-500 rounded-lg shadow-lg shadow-emerald-500/20" />}
-                    {item.isDeficit && <motion.div initial={{ width: 0 }} animate={{ width: `${item.deficitPct}%` }} className="h-full bg-rose-500 rounded-lg shadow-lg shadow-rose-500/20" />}
-                 </div>
-              </div>
-
-              {/* Legend Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
-                 {[
-                   { label: labels.yaPagado, val: item.gastosPagados, color: 'bg-slate-400', sub: labels.yaPagadoSub },
-                   { label: labels.pendientePago, val: item.gastosPendientes, color: 'bg-amber-500', sub: labels.pendientePagoSub },
-                 ].map(l => (
-                   <div key={l.label} className="p-4 rounded-2xl bg-white/80 border border-emerald-500/10 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${l.color}`} />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{l.label}</span>
-                      </div>
-                      <div className="text-sm font-black font-mono-numbers text-slate-900 tracking-tight">{formatCurrency(l.val, currency)}</div>
-                   </div>
-                 ))}
-              </div>
-
-            </motion.div>
-          ))}
-        </AnimatePresence>
+            </button>
+          );
+        })}
       </div>
+
+      {/* Main Animated Gauge Card */}
+      <motion.section
+        layout
+        className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-900/5 sm:p-7"
+      >
+        {/* Month Title & Trend Badge */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-600">
+              {activeItem.month === getCurrentMonthStr() ? 'Mês atual' : labels.proyeccion}
+            </p>
+            <h4 className="mt-0.5 text-xl font-black capitalize tracking-tight text-slate-900 sm:text-2xl">
+              {activeItem.monthTitle}{' '}
+              <span className="font-mono text-slate-400">{activeItem.year}</span>
+            </h4>
+          </div>
+
+          <div
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+              activeItem.isDeficit
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : activeItem.comparisonType === 'higher'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : activeItem.comparisonType === 'lower'
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : 'border-emerald-100 bg-emerald-50/60 text-emerald-700'
+            }`}
+          >
+            {activeItem.isDeficit ? (
+              <AlertTriangle className="h-3 w-3" />
+            ) : (
+              <ArrowUpRight
+                className={`h-3 w-3 ${
+                  activeItem.comparisonType === 'lower' ? 'rotate-90' : ''
+                }`}
+              />
+            )}
+            <span>
+              {activeItem.isDeficit
+                ? labels.deficitLabel
+                : activeItem.comparisonType === 'higher'
+                ? labels.sobraMayor
+                : activeItem.comparisonType === 'lower'
+                ? labels.sobraMenor
+                : labels.proyeccion}
+            </span>
+          </div>
+        </div>
+
+        {/* Interactive Semicircular Freedom Gauge */}
+        <div className="relative mx-auto mt-4 flex max-w-[320px] flex-col items-center">
+          <svg
+            viewBox="0 0 280 156"
+            className="w-full overflow-visible"
+            role="img"
+            aria-label={`${labels.title} - ${activeItem.monthTitle}`}
+          >
+            {/* Background Track */}
+            <path
+              d={describeArc(140, 138, 104, 180, 0)}
+              fill="none"
+              stroke="#eef2f6"
+              strokeWidth="18"
+              strokeLinecap="round"
+            />
+
+            {/* Animated Arc Segments */}
+            {gaugeSegments.map((seg) => {
+              const isHighlighted = activeSegment === seg.key;
+              const isDimmed = activeSegment !== null && activeSegment !== seg.key;
+
+              return (
+                <motion.path
+                  key={`${activeItem.month}-${seg.key}`}
+                  d={seg.path}
+                  fill="none"
+                  stroke={seg.color}
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0, opacity: 0.4 }}
+                  animate={{
+                    pathLength: 1,
+                    opacity: isDimmed ? 0.25 : 1,
+                    strokeWidth: isHighlighted ? 22 : 18,
+                  }}
+                  transition={{ duration: 0.65, ease: 'easeOut' }}
+                  onClick={() => !activeItem.isDeficit && toggleSegment(seg.key)}
+                  className={!activeItem.isDeficit ? 'cursor-pointer' : ''}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Center Readout Inside the Arc */}
+          <div className="pointer-events-none -mt-20 flex flex-col items-center text-center sm:-mt-22">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${activeItem.month}-${activeSegment || 'default'}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col items-center"
+              >
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${centerReadout.badgeClass}`}
+                >
+                  {centerReadout.badge}
+                </span>
+                <div
+                  className={`mt-1.5 font-mono text-2xl font-black tracking-tight sm:text-3xl ${centerReadout.colorClass}`}
+                >
+                  {centerReadout.value}
+                </div>
+                <p className="mt-1 max-w-[210px] text-[11px] font-semibold leading-snug text-slate-500">
+                  {centerReadout.subtitle}
+                </p>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Interactive Clickable Breakdown Pills */}
+        <div className="mt-6">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {[
+              {
+                key: 'paid' as SegmentKey,
+                label: labels.yaPagado,
+                val: activeItem.gastosPagados,
+                pct: Math.round(activeItem.paidPct),
+                dot: 'bg-slate-400',
+                activeStyle: 'border-slate-400 bg-slate-50 ring-2 ring-slate-200/80',
+                valClass: 'text-slate-800',
+              },
+              {
+                key: 'pending' as SegmentKey,
+                label: labels.pendientePago,
+                val: activeItem.gastosPendientes,
+                pct: Math.round(activeItem.pendingPct),
+                dot: 'bg-amber-500',
+                activeStyle: 'border-amber-400 bg-amber-50/80 ring-2 ring-amber-100',
+                valClass: 'text-amber-700',
+              },
+              {
+                key: 'free' as SegmentKey,
+                label: activeItem.isDeficit ? labels.deficitLabel : labels.dineroLibre,
+                val: activeItem.isDeficit ? activeItem.deficit : activeItem.freeMoney,
+                pct: activeItem.isDeficit ? Math.round(activeItem.deficitPct) : Math.round(activeItem.freePct),
+                dot: activeItem.isDeficit ? 'bg-rose-500' : 'bg-emerald-600',
+                activeStyle: activeItem.isDeficit
+                  ? 'border-rose-400 bg-rose-50 ring-2 ring-rose-100'
+                  : 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100',
+                valClass: activeItem.isDeficit ? 'text-rose-700' : 'text-emerald-700',
+              },
+            ].map((pill) => {
+              const isSelected = activeSegment === pill.key;
+              return (
+                <motion.button
+                  type="button"
+                  key={pill.key}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => toggleSegment(pill.key)}
+                  className={`rounded-2xl border p-3 text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? pill.activeStyle
+                      : 'border-slate-200/80 bg-slate-50/60 hover:border-emerald-200 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${pill.dot}`} />
+                      <span className="truncate text-[9px] font-black uppercase tracking-wider text-slate-500">
+                        {pill.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`mt-1.5 truncate font-mono text-xs font-black sm:text-sm ${pill.valClass}`}>
+                    {activeItem.isDeficit && pill.key === 'free' ? '-' : ''}
+                    {formatCurrency(pill.val, currency)}
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-bold text-slate-400">
+                    {pill.pct}%
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-center text-[10px] font-semibold text-slate-400">
+            {labels.tapHint}
+          </p>
+        </div>
+
+        {/* Income vs Outflow Summary Strip */}
+        <div className="mt-4 grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider text-emerald-800/80">
+                <Wallet className="h-3 w-3 shrink-0 text-emerald-600" />
+                <span className="truncate">{labels.totalIngresos}</span>
+              </div>
+              <div className="mt-0.5 truncate font-mono text-xs font-black text-emerald-700 sm:text-sm">
+                +{formatCurrency(activeItem.totalIncomes, currency)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50/50 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider text-rose-800/80">
+                <ArrowDownLeft className="h-3 w-3 shrink-0 text-rose-500" />
+                <span className="truncate">{labels.totalGastos}</span>
+              </div>
+              <div className="mt-0.5 truncate font-mono text-xs font-black text-rose-600 sm:text-sm">
+                -{formatCurrency(activeItem.totalExpenses, currency)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Monthly Smart Insight */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`insight-${activeItem.month}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className={`mt-4 flex items-start gap-3 rounded-2xl border p-3.5 ${
+              activeItem.isDeficit
+                ? 'border-rose-200/80 bg-rose-50/70 text-rose-900'
+                : 'border-emerald-200/80 bg-emerald-50/60 text-emerald-950'
+            }`}
+          >
+            <div
+              className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${
+                activeItem.isDeficit
+                  ? 'bg-rose-100 text-rose-600'
+                  : 'bg-emerald-600 text-white'
+              }`}
+            >
+              {activeItem.isDeficit ? (
+                <AlertTriangle className="h-3.5 w-3.5" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-wider opacity-75">
+                {labels.insightTitle}
+              </p>
+              <p className="mt-0.5 text-xs font-medium leading-relaxed opacity-90">
+                {activeItem.insightText}
+              </p>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </motion.section>
     </motion.div>
   );
 };
