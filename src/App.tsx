@@ -1144,14 +1144,6 @@ export default function App() {
         onUndoChallengeWeek={(challengeId, weekNumber, returnAccountId) =>
           fiftyTwoChallenge.undoWeek(challengeId, weekNumber, returnAccountId, adjustAccountBalanceForFinancialItem, deleteExpense)
         }
-        onNavigateToSection={(section) => {
-          setCurrentView(section);
-          setIsMoneChatOpen(false);
-        }}
-        onViewForecastMonth={(month) => {
-          setSelectedMonth(month);
-          setCurrentView('planejar');
-        }}
         onAddCategory={(name, scope) => addCategory(name, scope)}
         onUpdateCategory={(categoryId, updates) => updateCategory(categoryId, updates)}
         onDeleteCategory={(categoryId) => deleteCategory(categoryId)}
