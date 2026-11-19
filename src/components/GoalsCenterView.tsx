@@ -18,7 +18,6 @@ import {
   Target,
   PiggyBank,
   Award,
-  Plus,
 } from 'lucide-react';
 
 interface GoalsCenterViewProps {
@@ -231,7 +230,6 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm"><Target className="h-5 w-5"/></div>
           <div className="min-w-0 flex-1"><h1 className="truncate text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">Centro de Metas</h1><p className="mt-0.5 text-xs text-slate-500 sm:text-sm">Organize seus cofrinhos e planos de economia.</p></div>
-          {activeTab === 'savings' && <button type="button" onClick={() => (setSavingToEdit(null), setIsSavingModalOpen(true))} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"><Plus className="h-4 w-4"/> <span className="hidden sm:inline">Cofrinho</span></button>}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
           {tabs.map((tab) => { const isActive = activeTab === tab.id; const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => handleGoalsTabChange(tab.id)} className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-3 text-xs font-extrabold transition-colors sm:text-sm ${isActive ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}><Icon className="h-4 w-4 shrink-0"/><span className="truncate">{tab.label}</span></button>; })}
