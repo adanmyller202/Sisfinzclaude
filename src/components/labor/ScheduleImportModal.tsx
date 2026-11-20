@@ -70,14 +70,14 @@ function normalizeImportedSchedule(raw: any, fallback: WeeklySchedule): WeeklySc
       startTime,
       endTime,
       isSplitShift,
-      splitStartTime: isSplitShift ? normalizeTime(entry.splitStartTime, '19:00') : undefined,
+      splitStartTime: isSplitShift ? normalizeTime(entry.splitStartTime, '20:30') : undefined,
       splitEndTime: isSplitShift ? normalizeTime(entry.splitEndTime, '01:30') : undefined,
     };
   }
   return result;
 }
 
-/** Local deterministic parser for pasted WhatsApp weekly schedule text */
+/** Local deterministic parser for pasted WhatsApp weekly schedule text (supports split shifts on any day) */
 function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { schedule: WeeklySchedule; matchedDays: number } {
   const next: WeeklySchedule = JSON.parse(JSON.stringify(fallback));
   const lines = text
@@ -93,7 +93,7 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
     if (!dayMatch) continue;
 
     matchedDays++;
-    if (/\b(franco|folga|libre|off|descanso|feriado)\b/i.test(normalizedLine)) {
+    if (/\b(franco|folga|libre|off|descanso|feriado|vacaciones|licencia)\b/i.test(normalizedLine)) {
       next[dayMatch.key] = {
         ...next[dayMatch.key],
         isOff: true,
@@ -131,8 +131,8 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
 }
 
 /**
- * Compress image in memory only (max 1600px, JPEG 0.85) so wide multi-row spreadsheets
- * remain sharp and readable for Gemini Vision while never being stored anywhere.
+ * Compress image in memory only (max 1800px, JPEG 0.88) so wide multi-row spreadsheets
+ * remain crisp and readable for Gemini Vision while never being stored anywhere.
  */
 async function compressImageInMemory(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
@@ -140,7 +140,7 @@ async function compressImageInMemory(file: File): Promise<{ base64: string; mime
     const img = new Image();
     img.onload = () => {
       try {
-        const maxSide = 1600;
+        const maxSide = 1800;
         let { width, height } = img;
         if (width > maxSide || height > maxSide) {
           const ratio = Math.min(maxSide / width, maxSide / height);
@@ -153,7 +153,7 @@ async function compressImageInMemory(file: File): Promise<{ base64: string; mime
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas unavailable');
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
         const base64 = dataUrl.split(',')[1] || '';
         resolve({ base64, mimeType: 'image/jpeg' });
       } catch (err) {
