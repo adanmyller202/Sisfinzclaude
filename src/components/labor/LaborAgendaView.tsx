@@ -209,7 +209,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                             Organize sua rotina de trabalho
                           </h3>
                           <p className="mx-auto mt-1 max-w-xs text-xs font-medium text-slate-500">
-                            Cadastre sua empresa e posto (ex.: Pizzero) para ter ponto animado, conferência de horas do RH, projeção salarial com Aguinaldo e propinas direto no seu saldo.
+                            Cadastre sua empresa e posto (ex.: Pizzero) para controlar seu ponto, conferência de horas do RH, projeção salarial e propinas direto no seu saldo.
                           </p>
                         </div>
                         <button
@@ -251,7 +251,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                                       </span>
                                       <span className="text-slate-300">•</span>
                                       <span className="font-mono text-xs font-black text-slate-700">
-                                        {formatCurrency(monthCalc.totalWithAguinaldo, job.currency)}
+                                        {formatCurrency(monthCalc.netTotal, job.currency)}
                                       </span>
                                     </div>
                                   </div>
@@ -263,7 +263,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                                 {isRunning ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-black uppercase text-white">
                                     <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                                    Em turno desde {job.activeShift?.startTime}
+                                    Entrada marcada às {job.activeShift?.startTime}
                                   </span>
                                 ) : todaySched.isUnset ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500">

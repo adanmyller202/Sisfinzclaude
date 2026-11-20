@@ -15,7 +15,6 @@ import {
   Trash2,
   Check,
   Upload,
-  Award,
   Wallet,
   X,
   CheckCircle2,
@@ -847,8 +846,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     {
       id: 'salary',
       title: 'Salário, Benefícios & Projeção 12M',
-      subtitle: 'Básico + adicionais + Aguinaldo automático',
-      badge: formatCurrency(currentMonthSalary.totalWithAguinaldo, job.currency),
+      subtitle: 'Básico + benefícios e projeção mensal',
+      badge: formatCurrency(currentMonthSalary.netTotal, job.currency),
       icon: DollarSign,
     },
     {
@@ -1009,7 +1008,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
             Mês Previsto
           </div>
           <div className="mt-1 truncate font-mono text-sm font-black text-emerald-700">
-            {formatCurrency(currentMonthSalary.totalWithAguinaldo, job.currency)}
+            {formatCurrency(currentMonthSalary.netTotal, job.currency)}
           </div>
           <div className="text-[9.5px] font-bold text-slate-500">
             ~{formatCurrency(Math.round(currentMonthSalary.hourlyRateRef), job.currency)}/h
@@ -1845,7 +1844,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         </>
                       )}
 
-                      {/* 3. SALÁRIO BÁSICO, BENEFÍCIOS & PROJEÇÃO 12 MESES + AGUINALDO */}
+                      {/* 3. SALÁRIO BÁSICO, BENEFÍCIOS & PROJEÇÃO 12 MESES */}
                       {item.id === 'salary' && (
                         <>
                           {salarySavedToast && (
@@ -1928,22 +1927,10 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               </div>
                             )}
 
-                            {currentMonthSalary.aguinaldoAmount > 0 && (
-                              <div className="flex items-center justify-between rounded-xl bg-amber-100/80 px-2.5 py-1.5 text-xs font-black text-amber-900">
-                                <span className="inline-flex items-center gap-1">
-                                  <Award className="h-3.5 w-3.5 text-amber-600" />
-                                  Aguinaldo (SAC 50%)
-                                </span>
-                                <span className="font-mono">
-                                  +{formatCurrency(currentMonthSalary.aguinaldoAmount, job.currency)}
-                                </span>
-                              </div>
-                            )}
-
                             <div className="flex items-center justify-between border-t border-emerald-200 pt-2 text-sm font-black text-emerald-900">
                               <span>Total a Receber</span>
                               <span className="font-mono">
-                                {formatCurrency(currentMonthSalary.totalWithAguinaldo, job.currency)}
+                                {formatCurrency(currentMonthSalary.netTotal, job.currency)}
                               </span>
                             </div>
                           </div>
@@ -1951,14 +1938,13 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                Previsão Salarial 12 Meses + Aguinaldo
+                                Previsão Salarial 12 Meses
                               </span>
                             </div>
 
                             <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
                               {twelveMonthProjection.map((m) => {
                                 const isSel = m.month === selectedSalaryMonth;
-                                const hasAguinaldo = m.aguinaldoAmount > 0;
                                 return (
                                   <button
                                     key={m.month}
@@ -1967,31 +1953,14 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
                                       isSel
                                         ? 'border-emerald-400 bg-emerald-50/80'
-                                        : hasAguinaldo
-                                        ? 'border-amber-200 bg-amber-50/40 hover:border-amber-300'
                                         : 'border-slate-200/70 bg-white hover:border-emerald-200'
                                     }`}
                                   >
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-xs font-black capitalize text-slate-800">
-                                          {formatMonthTitle(m.month)}
-                                        </span>
-                                        {hasAguinaldo && (
-                                          <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-white">
-                                            +Aguinaldo
-                                          </span>
-                                        )}
-                                      </div>
-                                      {hasAguinaldo && (
-                                        <div className="text-[10px] font-bold text-amber-700">
-                                          Salário {formatCurrency(m.netTotal, job.currency)} + SAC{' '}
-                                          {formatCurrency(m.aguinaldoAmount, job.currency)}
-                                        </div>
-                                      )}
-                                    </div>
+                                    <span className="text-xs font-black capitalize text-slate-800">
+                                      {formatMonthTitle(m.month)}
+                                    </span>
                                     <span className="font-mono text-xs font-black text-emerald-700 shrink-0">
-                                      {formatCurrency(m.totalWithAguinaldo, job.currency)}
+                                      {formatCurrency(m.netTotal, job.currency)}
                                     </span>
                                   </button>
                                 );
@@ -2751,7 +2720,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             type="text"
                             value={newBenefitName}
                             onChange={(e) => setNewBenefitName(e.target.value)}
-                            placeholder="Ex: Antiguidade"
+                            placeholder="Ex: Aguinaldo / Antiguidade"
                             className="col-span-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold"
                           />
                           <select
@@ -2813,7 +2782,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                       <p className="mt-1 text-xs font-medium text-slate-500">
                         Escolha se o reajuste vale só para{' '}
                         <strong className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</strong>{' '}
-                        ou para todos os próximos meses (incluindo o Aguinaldo).
+                        ou para todos os próximos meses.
                       </p>
                     </div>
 
@@ -2837,7 +2806,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Atualizar deste mês em diante
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-emerald-50">
-                          Atualiza os próximos 12 meses e recalcula o Aguinaldo automaticamente (meses passados ficam intactos).
+                          Atualiza os próximos 12 meses automaticamente (meses passados ficam intactos).
                         </div>
                       </button>
 

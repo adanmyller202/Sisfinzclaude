@@ -504,7 +504,7 @@ export function getEffectiveSalarySnapshot(job: LaborJob, targetMonth: string): 
   return active;
 }
 
-/** Calculate monthly salary without Aguinaldo (used internally to compute semester max for SAC) */
+/** Calculate monthly salary from Base + Benefits + optional month extras */
 function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<MonthlySalaryCalculation, 'aguinaldoAmount' | 'totalWithAguinaldo'> {
   const snap = getEffectiveSalarySnapshot(job, targetMonth);
   const override = job.monthOverrides?.[targetMonth];
@@ -557,29 +557,13 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
   };
 }
 
-/** Calculate full monthly salary INCLUDING automatic Aguinaldo (SAC) in June (06) and December (12) */
+/** Calculate full monthly salary (no automatic SAC/Aguinaldo; user adds any bonus manually as a benefit) */
 export function calculateMonthSalary(job: LaborJob, targetMonth: string): MonthlySalaryCalculation {
   const base = calculateRawMonthSalary(job, targetMonth);
-  const [yearStr, monthNumStr] = targetMonth.split('-');
-  const monthNum = Number(monthNumStr);
-
-  let aguinaldoAmount = 0;
-  if (monthNum === 6 || monthNum === 12) {
-    const startMonth = monthNum === 6 ? 1 : 7;
-    const endMonth = monthNum;
-    let maxNet = 0;
-    for (let m = startMonth; m <= endMonth; m++) {
-      const mStr = `${yearStr}-${String(m).padStart(2, '0')}`;
-      const calc = calculateRawMonthSalary(job, mStr);
-      if (calc.netTotal > maxNet) maxNet = calc.netTotal;
-    }
-    aguinaldoAmount = Math.round(maxNet * 0.5);
-  }
-
   return {
     ...base,
-    aguinaldoAmount,
-    totalWithAguinaldo: base.netTotal + aguinaldoAmount,
+    aguinaldoAmount: 0,
+    totalWithAguinaldo: base.netTotal,
   };
 }
 
