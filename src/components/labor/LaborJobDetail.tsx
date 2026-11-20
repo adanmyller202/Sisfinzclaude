@@ -14,11 +14,12 @@ import {
   Plus,
   Trash2,
   Check,
-  Briefcase,
   Upload,
   Award,
   Wallet,
   X,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../../types';
 import {
@@ -39,9 +40,12 @@ import {
   calculateMonthSalary,
   calculateShiftMinutes,
   calculateWeeklyAudit,
+  evaluatePunchPunctuality,
+  formatDurationCompact,
   formatLocalDateYYYYMMDD,
   formatLocalTimeHHMM,
   formatMinutesAsHours,
+  getDayAttendanceEntries,
   getEffectiveSalarySnapshot,
   getScheduleForDate,
   getScheduleForWeek,
@@ -381,7 +385,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         benefitValueOverrides[b.id] = b.value;
       });
 
-      // Also ensure any brand-new benefits exist in the active snapshot (disabled by default if only for this month, or added cleanly)
       const activeSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
       const existingIds = new Set((activeSnap.benefits || []).map((b) => b.id));
       const newOnes = draftBenefits.filter((b) => !existingIds.has(b.id));
@@ -407,7 +410,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         },
       };
     } else {
-      // Update from selectedSalaryMonth forward (preserving past months < selectedSalaryMonth)
       const pastSnapshots = (job.salaryHistory || []).filter(
         (s) => s.effectiveFromMonth < selectedSalaryMonth
       );
@@ -745,13 +747,21 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               const sched = weekSchedule[dayKey];
                               const isToday = dayDate === todayStr;
                               const mins = calculateDayScheduleMinutes(sched);
+                              const attendanceEntries = getDayAttendanceEntries(job, dayDate, sched);
+                              const hasLateEntry = attendanceEntries.some((a) => a.status === 'late');
+                              const hasOnTimeEntry =
+                                attendanceEntries.length > 0 && !hasLateEntry;
 
                               return (
                                 <div
                                   key={dayKey}
                                   className={`rounded-2xl border p-3 transition-colors ${
-                                    isToday
+                                    hasLateEntry
+                                      ? 'border-rose-300 bg-rose-50/35 ring-1 ring-rose-100'
+                                      : isToday
                                       ? 'border-emerald-400 bg-emerald-50/40 ring-1 ring-emerald-200'
+                                      : hasOnTimeEntry
+                                      ? 'border-emerald-300/90 bg-emerald-50/25'
                                       : sched.isOff
                                       ? 'border-amber-200/80 bg-amber-50/35'
                                       : 'border-slate-200/80 bg-slate-50/40'
@@ -864,6 +874,76 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       )}
                                     </div>
                                   )}
+
+                                  {/* Punctuality / Punch Status Strip for this day */}
+                                  {attendanceEntries.length > 0 && (
+                                    <div className="mt-2.5 space-y-1.5 border-t border-slate-200/70 pt-2">
+                                      {attendanceEntries.map((att) => {
+                                        const isLate = att.status === 'late';
+                                        const isExtra = att.status === 'extra_day';
+                                        const partLabel = att.shiftPart ? ` (${att.shiftPart}º turno)` : '';
+                                        const timeRange = att.endTime
+                                          ? `${att.startTime} → ${att.endTime}`
+                                          : `Entrada ${att.startTime}`;
+
+                                        return (
+                                          <div
+                                            key={att.id}
+                                            className={`flex flex-wrap items-center justify-between gap-1.5 rounded-xl px-2.5 py-1.5 text-[10.5px] font-black ${
+                                              isLate
+                                                ? 'bg-rose-100/90 text-rose-800 border border-rose-200'
+                                                : isExtra
+                                                ? 'bg-indigo-100/80 text-indigo-800 border border-indigo-200'
+                                                : 'bg-emerald-100/85 text-emerald-900 border border-emerald-200'
+                                            }`}
+                                          >
+                                            <span className="inline-flex items-center gap-1.5">
+                                              {isLate ? (
+                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                                              ) : isExtra ? (
+                                                <Clock className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                                              ) : (
+                                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                              )}
+                                              <span>
+                                                {isLate
+                                                  ? `${
+                                                      language === 'es' ? 'Atraso de' : 'Atraso de'
+                                                    } ${formatDurationCompact(att.diffMinutes)}${partLabel}`
+                                                  : isExtra
+                                                  ? language === 'es'
+                                                    ? 'Turno en día de franco'
+                                                    : 'Turno em dia de franco'
+                                                  : att.status === 'early'
+                                                  ? `${
+                                                      language === 'es'
+                                                        ? 'Llegó a horario'
+                                                        : 'Chegou no horário'
+                                                    } (${formatDurationCompact(att.diffMinutes)} ${
+                                                      language === 'es' ? 'antes' : 'antes'
+                                                    })${partLabel}`
+                                                  : `${
+                                                      language === 'es'
+                                                        ? 'Llegó a horario'
+                                                        : 'Chegou no horário'
+                                                    }${partLabel}`}
+                                              </span>
+                                            </span>
+
+                                            <span className="inline-flex items-center gap-1.5 font-mono text-[10px]">
+                                              <span>{timeRange}</span>
+                                              {att.isActive && (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-white">
+                                                  <span className="h-1 w-1 rounded-full bg-white animate-pulse" />
+                                                  Em turno
+                                                </span>
+                                              )}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -926,51 +1006,73 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              {weeklyAudit.weekShifts.map((s) => (
-                                <div
-                                  key={s.id}
-                                  className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white p-3"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-black text-slate-900">
-                                        {formatShortDate(s.date)}
-                                      </span>
-                                      <span className="font-mono text-xs font-bold text-slate-600">
-                                        {s.startTime} → {s.endTime}
-                                      </span>
-                                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-700">
-                                        {formatMinutesAsHours(s.durationMinutes)}
-                                      </span>
-                                    </div>
-                                    {(s.tags.length > 0 || s.note) && (
-                                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        {s.tags.map((tag) => (
+                              {weeklyAudit.weekShifts.map((s) => {
+                                const daySched = getScheduleForDate(job, s.date);
+                                const punctuality = evaluatePunchPunctuality(s.startTime, daySched);
+                                const isLate = punctuality.status === 'late';
+                                return (
+                                  <div
+                                    key={s.id}
+                                    className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${
+                                      isLate
+                                        ? 'border-rose-200 bg-rose-50/35'
+                                        : 'border-slate-200/80 bg-white'
+                                    }`}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-xs font-black text-slate-900">
+                                          {formatShortDate(s.date)}
+                                        </span>
+                                        <span className="font-mono text-xs font-bold text-slate-600">
+                                          {s.startTime} → {s.endTime}
+                                        </span>
+                                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-700">
+                                          {formatMinutesAsHours(s.durationMinutes)}
+                                        </span>
+                                        {punctuality.status !== 'extra_day' && (
                                           <span
-                                            key={tag}
-                                            className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-600"
+                                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
+                                              isLate
+                                                ? 'bg-rose-100 text-rose-700'
+                                                : 'bg-emerald-100 text-emerald-800'
+                                            }`}
                                           >
-                                            {SHIFT_TAGS.find((t) => t.id === tag)?.labelPt || tag}
-                                          </span>
-                                        ))}
-                                        {s.note && (
-                                          <span className="text-[10px] font-medium text-slate-500">
-                                            • {s.note}
+                                            {isLate
+                                              ? `Atraso ${formatDurationCompact(punctuality.diffMinutes)}`
+                                              : 'No horário'}
                                           </span>
                                         )}
                                       </div>
-                                    )}
+                                      {(s.tags.length > 0 || s.note) && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                          {s.tags.map((tag) => (
+                                            <span
+                                              key={tag}
+                                              className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-600"
+                                            >
+                                              {SHIFT_TAGS.find((t) => t.id === tag)?.labelPt || tag}
+                                            </span>
+                                          ))}
+                                          {s.note && (
+                                            <span className="text-[10px] font-medium text-slate-500">
+                                              • {s.note}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteShift(s.id)}
+                                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                                      aria-label="Excluir turno"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteShift(s.id)}
-                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                                    aria-label="Excluir turno"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </>
@@ -1704,7 +1806,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           <select
                             value={newBenefitType}
                             onChange={(e) => setNewBenefitType(e.target.value as BenefitCalcType)}
-                            className="col-span-4 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold"
+                            className="col-span-4 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold"
                           >
                             <option value="percent">% Básico</option>
                             <option value="fixed">Valor Fixo</option>

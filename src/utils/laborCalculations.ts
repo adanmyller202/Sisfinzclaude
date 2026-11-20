@@ -117,6 +117,123 @@ export function formatMinutesAsHours(totalMinutes: number, showSign = false): st
   return `${sign}${h}h ${String(m).padStart(2, '0')}m`;
 }
 
+/** Human-friendly duration for delays/early arrival (e.g. "15 min", "1h 10m") */
+export function formatDurationCompact(totalMinutes: number): string {
+  const abs = Math.abs(Math.round(totalMinutes));
+  if (abs < 60) return `${abs} min`;
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+export type PunctualityStatus = 'on_time' | 'early' | 'late' | 'extra_day';
+
+export interface DayAttendanceEntry {
+  id: string;
+  isActive: boolean;
+  startTime: string;
+  endTime?: string;
+  scheduledStartTime?: string;
+  shiftPart?: 1 | 2;
+  status: PunctualityStatus;
+  /** Positive = minutes late, Negative = minutes early, 0 = exact */
+  diffMinutes: number;
+}
+
+function getCircularMinuteDiff(actualTime: string, scheduledTime: string): number {
+  const actual = parseTimeToMinutes(actualTime);
+  const sched = parseTimeToMinutes(scheduledTime);
+  let diff = actual - sched;
+  if (diff > 720) diff -= 1440;
+  if (diff < -720) diff += 1440;
+  return diff;
+}
+
+/** Evaluate whether a punch-in time matches the day's scheduled shift(s) or is late */
+export function evaluatePunchPunctuality(
+  actualStartTime: string,
+  schedule: DaySchedule
+): {
+  status: PunctualityStatus;
+  diffMinutes: number;
+  scheduledStartTime?: string;
+  shiftPart?: 1 | 2;
+} {
+  if (schedule.isOff) {
+    return { status: 'extra_day', diffMinutes: 0 };
+  }
+
+  let bestScheduled = schedule.startTime;
+  let bestDiff = getCircularMinuteDiff(actualStartTime, schedule.startTime);
+  let shiftPart: 1 | 2 | undefined = schedule.isSplitShift ? 1 : undefined;
+
+  if (schedule.isSplitShift && schedule.splitStartTime) {
+    const splitDiff = getCircularMinuteDiff(actualStartTime, schedule.splitStartTime);
+    if (Math.abs(splitDiff) < Math.abs(bestDiff)) {
+      bestScheduled = schedule.splitStartTime;
+      bestDiff = splitDiff;
+      shiftPart = 2;
+    }
+  }
+
+  if (bestDiff > 0) {
+    return {
+      status: 'late',
+      diffMinutes: bestDiff,
+      scheduledStartTime: bestScheduled,
+      shiftPart,
+    };
+  }
+  if (bestDiff < 0) {
+    return {
+      status: 'early',
+      diffMinutes: bestDiff,
+      scheduledStartTime: bestScheduled,
+      shiftPart,
+    };
+  }
+  return {
+    status: 'on_time',
+    diffMinutes: 0,
+    scheduledStartTime: bestScheduled,
+    shiftPart,
+  };
+}
+
+/** Return all attendance entries (active shift + recorded shifts) for a given calendar date */
+export function getDayAttendanceEntries(
+  job: LaborJob,
+  dateStr: string,
+  schedule: DaySchedule
+): DayAttendanceEntry[] {
+  const entries: DayAttendanceEntry[] = [];
+
+  if (job.activeShift && job.activeShift.startDate === dateStr) {
+    const evalRes = evaluatePunchPunctuality(job.activeShift.startTime, schedule);
+    entries.push({
+      id: 'active_shift',
+      isActive: true,
+      startTime: job.activeShift.startTime,
+      ...evalRes,
+    });
+  }
+
+  const dayShifts = (job.shifts || []).filter((s) => s.date === dateStr);
+  for (const s of dayShifts) {
+    const evalRes = evaluatePunchPunctuality(s.startTime, schedule);
+    entries.push({
+      id: s.id,
+      isActive: false,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      ...evalRes,
+    });
+  }
+
+  return entries;
+}
+
 export function getDayOfWeekKey(dateStr: string): DayOfWeekKey {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, (m || 1) - 1, d || 1);
