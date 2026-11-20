@@ -302,7 +302,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     if (quickReplaceShiftId) {
       nextShifts = currentShifts.map((s) => (s.id === quickReplaceShiftId ? newEntry : s));
     } else if (existingShifts.length > 0 && !isSplitShiftDay) {
-      // Replace the single existing shift on that day rather than duplicating
       const firstId = existingShifts[0].id;
       nextShifts = currentShifts.map((s) => (s.id === firstId ? { ...newEntry, id: firstId } : s));
     } else {
@@ -631,18 +630,22 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const openSalaryEditor = () => {
     const snap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
     const calc = calculateMonthSalary(job, selectedSalaryMonth);
+    const override = job.monthOverrides?.[selectedSalaryMonth];
+    const snapBenefitIds = new Set((snap.benefits || []).map((b) => b.id));
+
+    // Only include benefits that were in the snapshot OR explicitly added for this month
+    const mergedDraft: LaborBenefit[] = calc.benefits
+      .filter((cb) => snapBenefitIds.has(cb.id) || ((override as any)?.extraBenefits || []).some((eb: LaborBenefit) => eb.id === cb.id))
+      .map((cb) => ({
+        id: cb.id,
+        name: cb.name,
+        type: cb.type,
+        value: cb.rawValue,
+        enabled: cb.enabled,
+      }));
+
     setDraftBaseSalary(String(calc.baseSalary || 0));
-    setDraftBenefits(
-      (snap.benefits || []).map((b) => {
-        const calcItem = calc.benefits.find((cb) => cb.id === b.id);
-        return {
-          ...b,
-          type: calcItem ? calcItem.type : b.type,
-          value: calcItem ? calcItem.rawValue : b.value,
-          enabled: calcItem ? calcItem.enabled : b.enabled,
-        };
-      })
-    );
+    setDraftBenefits(mergedDraft);
     setDraftExtraAmount(String(calc.extraAmount || 0));
     setSalaryEditorOpen(true);
   };
@@ -664,7 +667,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setDraftBenefits((prev) => [
       ...prev,
       {
-        id: 'ben_antiguidade',
+        id: `ben_antiguidade_${Date.now()}`,
         name: 'Antiguidade',
         type: 'percent',
         value: 0,
@@ -697,40 +700,46 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     let updatedJob: LaborJob;
 
     if (scope === 'single') {
+      // Single-month scope ("Manter valor original nos próximos meses"):
+      // Keep the baseline snapshot untouched so future months do NOT get new benefits,
+      // and store any newly created benefit inside monthOverrides[selectedSalaryMonth].extraBenefits.
+      const baseSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
+      const baseSnapIds = new Set((baseSnap.benefits || []).map((b) => b.id));
+
       const disabledBenefitIds = draftBenefits.filter((b) => !b.enabled).map((b) => b.id);
       const benefitValueOverrides: Record<string, number> = {};
       const benefitTypeOverrides: Record<string, BenefitCalcType> = {};
+      const singleMonthOnlyBenefits: LaborBenefit[] = [];
+
       draftBenefits.forEach((b) => {
         benefitValueOverrides[b.id] = b.value;
         benefitTypeOverrides[b.id] = b.type;
+        if (!baseSnapIds.has(b.id)) {
+          singleMonthOnlyBenefits.push(b);
+        }
       });
 
-      const activeSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
-      const existingIds = new Set((activeSnap.benefits || []).map((b) => b.id));
-      const newOnes = draftBenefits.filter((b) => !existingIds.has(b.id));
-      const nextHistory = newOnes.length
-        ? (job.salaryHistory || []).map((s) =>
-            s.effectiveFromMonth === activeSnap.effectiveFromMonth
-              ? { ...s, benefits: [...s.benefits, ...newOnes] }
-              : s
-          )
-        : job.salaryHistory;
+      const prevMonthOverride = job.monthOverrides?.[selectedSalaryMonth] || {};
 
       updatedJob = {
         ...job,
-        salaryHistory: nextHistory,
         monthOverrides: {
           ...(job.monthOverrides || {}),
           [selectedSalaryMonth]: {
+            ...prevMonthOverride,
             baseSalary: newBase,
             disabledBenefitIds,
             benefitValueOverrides,
             benefitTypeOverrides,
+            extraBenefits: singleMonthOnlyBenefits,
             extraAmount: newExtra,
-          },
+          } as any,
         },
       };
     } else {
+      // Future scope ("Atualizar deste mês em diante"):
+      // Apply the full draft (including any newly created benefit) from selectedSalaryMonth onward,
+      // while keeping past months (< selectedSalaryMonth) intact.
       const pastSnapshots = (job.salaryHistory || []).filter(
         (s) => s.effectiveFromMonth < selectedSalaryMonth
       );
@@ -770,8 +779,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setSalaryEditorOpen(false);
     setSalarySavedToast(
       scope === 'future'
-        ? 'Salário e projeção de 12 meses atualizados!'
-        : 'Valor atualizado somente para este mês!'
+        ? 'Salário, benefícios e projeção atualizados deste mês em diante!'
+        : 'Benefício/valor aplicado somente neste mês — próximos meses mantidos!'
     );
     window.setTimeout(() => setSalarySavedToast(null), 3200);
   };
@@ -2420,7 +2429,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                 </div>
               )}
 
-              {/* Option 1: Ponto marcado no horário */}
               <button
                 type="button"
                 onClick={() => applyQuickPunch('on_time')}
@@ -2441,7 +2449,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                 </div>
               </button>
 
-              {/* Option 2: Ponto marcado com atraso */}
               <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -3029,7 +3036,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Atualizar deste mês em diante
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-emerald-50">
-                          Atualiza os próximos 12 meses automaticamente (meses passados ficam intactos).
+                          Aplica o benefício e o reajuste neste mês e nos próximos 12 meses (meses passados ficam intactos).
                         </div>
                       </button>
 
@@ -3042,8 +3049,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Manter valor original nos próximos meses
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-slate-500">
-                          Aplica essa alteração somente em{' '}
-                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span>.
+                          Aplica o benefício criado somente em{' '}
+                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — os próximos meses mantêm o valor anterior sem esse benefício.
                         </div>
                       </button>
                     </div>

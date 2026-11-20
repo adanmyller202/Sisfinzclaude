@@ -514,7 +514,10 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     override?.deductionPercent !== undefined ? override.deductionPercent : snap.deductionPercent || 0;
   const disabledIds = new Set(override?.disabledBenefitIds || []);
 
-  const benefits = (snap.benefits || []).map((b) => {
+  // Build effective benefit list for this month:
+  // - Start with snapshot benefits (respecting per-month enable/disable, type, and value overrides)
+  // - Include any extra benefits added specifically for this month (from override.extraBenefits)
+  const baseBenefits = (snap.benefits || []).map((b) => {
     const enabled = b.enabled && !disabledIds.has(b.id);
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
     const rawValue =
@@ -535,6 +538,30 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       enabled,
     };
   });
+
+  const singleMonthExtraBenefits = ((override as any)?.extraBenefits || []).map((b: LaborBenefit) => {
+    const enabled = b.enabled !== false && !disabledIds.has(b.id);
+    const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
+    const rawValue =
+      override?.benefitValueOverrides?.[b.id] !== undefined
+        ? override.benefitValueOverrides[b.id]
+        : b.value;
+    const calculatedAmount = !enabled
+      ? 0
+      : effectiveType === 'percent'
+      ? Math.round((baseSalary * rawValue) / 100)
+      : rawValue;
+    return {
+      id: b.id,
+      name: b.name,
+      type: effectiveType,
+      rawValue,
+      calculatedAmount,
+      enabled,
+    };
+  });
+
+  const benefits = [...baseBenefits, ...singleMonthExtraBenefits];
 
   const extraAmount = override?.extraAmount || 0;
   const benefitsTotal = benefits.reduce((acc, item) => acc + item.calculatedAmount, 0);
