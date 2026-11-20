@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LogIn, LogOut, Edit3, CheckCircle2, Sparkles, Clock } from 'lucide-react';
 import { LanguageCode } from '../../types';
-import { ActiveShiftState, DaySchedule } from '../../types/labor';
+import { ActiveShiftState, DaySchedule, ShiftPartKey } from '../../types/labor';
 import {
+  calculateShiftPartMinutes,
   formatLocalTimeHHMM,
   formatMinutesAsHours,
 } from '../../utils/laborCalculations';
@@ -11,8 +12,11 @@ import {
 interface HoldToPunchButtonProps {
   activeShift: ActiveShiftState | null;
   todaySchedule: DaySchedule;
+  todayShiftsCount?: number;
+  hasPart1Shift?: boolean;
+  hasPart2Shift?: boolean;
   language: LanguageCode;
-  onStartShift: () => void;
+  onStartShift: (part?: ShiftPartKey) => void;
   onEndShift: () => void;
   onOpenManualEntry: () => void;
 }
@@ -50,6 +54,8 @@ function playPunchTone(type: 'start' | 'end') {
 export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   activeShift,
   todaySchedule,
+  hasPart1Shift = false,
+  hasPart2Shift = false,
   language,
   onStartShift,
   onEndShift,
@@ -59,27 +65,36 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   const [rippleKey, setRippleKey] = useState(0);
   const [confirmPrompt, setConfirmPrompt] = useState<{
     action: 'start' | 'end';
+    part?: ShiftPartKey;
     timeLabel: string;
   } | null>(null);
 
   const isRunning = Boolean(activeShift);
+  const isSplitToday = Boolean(
+    !todaySchedule.isUnset &&
+      !todaySchedule.isOff &&
+      todaySchedule.isSplitShift &&
+      todaySchedule.splitStartTime &&
+      todaySchedule.splitEndTime
+  );
 
-  const handleCircleClick = () => {
+  const openConfirmFor = (action: 'start' | 'end', part?: ShiftPartKey) => {
     const nowTime = formatLocalTimeHHMM(new Date());
     setConfirmPrompt({
-      action: isRunning ? 'end' : 'start',
+      action,
+      part,
       timeLabel: nowTime,
     });
   };
 
   const handleConfirmAction = () => {
     if (!confirmPrompt) return;
-    const action = confirmPrompt.action;
+    const { action, part } = confirmPrompt;
     setConfirmPrompt(null);
     setRippleKey((k) => k + 1);
     playPunchTone(action);
     if (action === 'start') {
-      onStartShift();
+      onStartShift(part);
     } else {
       onEndShift();
     }
@@ -97,9 +112,19 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
       : language === 'en'
       ? 'Day off today'
       : 'Hoje é seu franco'
-    : todaySchedule.isSplitShift && todaySchedule.splitStartTime && todaySchedule.splitEndTime
+    : isSplitToday
     ? `${todaySchedule.startTime}–${todaySchedule.endTime} • ${todaySchedule.splitStartTime}–${todaySchedule.splitEndTime}`
     : `${todaySchedule.startTime} → ${todaySchedule.endTime}`;
+
+  const activePartLabel =
+    activeShift?.shiftPart === 1
+      ? ' (1º turno)'
+      : activeShift?.shiftPart === 2
+      ? ' (2º turno)'
+      : '';
+
+  const part1Mins = calculateShiftPartMinutes(todaySchedule, 1);
+  const part2Mins = calculateShiftPartMinutes(todaySchedule, 2);
 
   return (
     <div
@@ -128,74 +153,145 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         />
         <span className="text-[11px] font-black tracking-wide text-slate-700">
           {isRunning
-            ? `${language === 'es' ? 'Entrada marcada:' : 'Entrada marcada às'} ${activeShift?.startTime}`
+            ? `${language === 'es' ? 'Entrada marcada' : 'Entrada marcada'}${activePartLabel} às ${activeShift?.startTime}`
             : todaySchedule.isUnset
             ? scheduleSummary
             : `${language === 'es' ? 'Turno hoy' : 'Turno hoje'}: ${scheduleSummary}`}
         </span>
       </div>
 
-      {/* Circular Click-to-Confirm Button (No Timer) */}
-      <div className="relative flex h-[164px] w-[164px] items-center justify-center">
-        <AnimatePresence>
-          {rippleKey > 0 && !reduceMotion && (
-            <motion.span
-              key={rippleKey}
-              initial={{ scale: 0.78, opacity: 0.7 }}
-              animate={{ scale: 1.45, opacity: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.65, ease: 'easeOut' }}
-              className={`pointer-events-none absolute inset-2 rounded-full border-4 ${
-                isRunning ? 'border-emerald-400' : 'border-rose-400'
+      {/* Circular Button(s) */}
+      {isRunning ? (
+        <div className="relative flex h-[164px] w-[164px] items-center justify-center">
+          <AnimatePresence>
+            {rippleKey > 0 && !reduceMotion && (
+              <motion.span
+                key={rippleKey}
+                initial={{ scale: 0.78, opacity: 0.7 }}
+                animate={{ scale: 1.45, opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.65, ease: 'easeOut' }}
+                className="pointer-events-none absolute inset-2 rounded-full border-4 border-emerald-400"
+              />
+            )}
+          </AnimatePresence>
+
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={() => openConfirmFor('end', activeShift?.shiftPart)}
+            className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-rose-600 to-red-600 text-white shadow-xl shadow-rose-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-rose-300 px-2 text-center"
+          >
+            <LogOut className="mb-1 h-6 w-6" />
+            <span className="text-[11px] font-black uppercase tracking-wider leading-tight">
+              {activeShift?.shiftPart === 1
+                ? 'Marcar Saída 1º Turno'
+                : activeShift?.shiftPart === 2
+                ? 'Marcar Saída 2º Turno'
+                : language === 'es'
+                ? 'Marcar Salida'
+                : 'Marcar Saída'}
+            </span>
+            <span className="mt-1 text-[9.5px] font-bold text-rose-100">
+              {language === 'es' ? 'Toque para finalizar' : 'Toque para encerrar'}
+            </span>
+          </motion.button>
+        </div>
+      ) : isSplitToday ? (
+        <div className="relative z-10 flex flex-wrap items-center justify-center gap-4">
+          {/* Button 1: Marcar Entrada 1º Turno */}
+          <div className="flex flex-col items-center gap-1.5">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={() => openConfirmFor('start', 1)}
+              className={`flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 px-2 text-center ${
+                hasPart1Shift
+                  ? 'bg-gradient-to-br from-teal-600 to-emerald-700 shadow-emerald-700/25 ring-2 ring-emerald-300'
+                  : 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-600/30'
               }`}
+            >
+              <LogIn className="mb-1 h-6 w-6" />
+              <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
+                Marcar Entrada 1º Turno
+              </span>
+              <span className="mt-1 font-mono text-[9.5px] font-bold text-emerald-100">
+                {todaySchedule.startTime}–{todaySchedule.endTime}
+              </span>
+            </motion.button>
+            <span className="text-[9.5px] font-black text-emerald-800">
+              {hasPart1Shift ? '✓ 1º turno batido' : `${formatMinutesAsHours(part1Mins)} • 1º turno`}
+            </span>
+          </div>
+
+          {/* Button 2: Marcar Entrada 2º Turno */}
+          <div className="flex flex-col items-center gap-1.5">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={() => openConfirmFor('start', 2)}
+              className={`flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 px-2 text-center ${
+                hasPart2Shift
+                  ? 'bg-gradient-to-br from-teal-600 to-emerald-700 shadow-emerald-700/25 ring-2 ring-emerald-300'
+                  : 'bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 shadow-teal-600/30'
+              }`}
+            >
+              <LogIn className="mb-1 h-6 w-6" />
+              <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
+                Marcar Entrada 2º Turno
+              </span>
+              <span className="mt-1 font-mono text-[9.5px] font-bold text-emerald-100">
+                {todaySchedule.splitStartTime}–{todaySchedule.splitEndTime}
+              </span>
+            </motion.button>
+            <span className="text-[9.5px] font-black text-teal-800">
+              {hasPart2Shift ? '✓ 2º turno batido' : `${formatMinutesAsHours(part2Mins)} • 2º turno`}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="relative flex h-[164px] w-[164px] items-center justify-center">
+          <AnimatePresence>
+            {rippleKey > 0 && !reduceMotion && (
+              <motion.span
+                key={rippleKey}
+                initial={{ scale: 0.78, opacity: 0.7 }}
+                animate={{ scale: 1.45, opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.65, ease: 'easeOut' }}
+                className="pointer-events-none absolute inset-2 rounded-full border-4 border-rose-400"
+              />
+            )}
+          </AnimatePresence>
+
+          {!reduceMotion && (
+            <motion.span
+              animate={{ scale: [1, 1.06, 1], opacity: [0.25, 0.45, 0.25] }}
+              transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut' }}
+              className="pointer-events-none absolute inset-1 rounded-full bg-emerald-500/15"
             />
           )}
-        </AnimatePresence>
 
-        {!reduceMotion && (
-          <motion.span
-            animate={{ scale: [1, 1.06, 1], opacity: [0.25, 0.45, 0.25] }}
-            transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut' }}
-            className={`pointer-events-none absolute inset-1 rounded-full ${
-              isRunning ? 'bg-rose-500/15' : 'bg-emerald-500/15'
-            }`}
-          />
-        )}
-
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.94 }}
-          onClick={handleCircleClick}
-          className={`relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 ${
-            isRunning
-              ? 'bg-gradient-to-br from-rose-500 via-rose-600 to-red-600 shadow-rose-600/30'
-              : 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-600/30'
-          }`}
-        >
-          {isRunning ? (
-            <>
-              <LogOut className="mb-1.5 h-7 w-7" />
-              <span className="text-xs font-black uppercase tracking-widest leading-none">
-                {language === 'es' ? 'Marcar Salida' : 'Marcar Saída'}
-              </span>
-              <span className="mt-1.5 text-[10px] font-bold text-rose-100">
-                {language === 'es' ? 'Toque para finalizar' : 'Toque para encerrar'}
-              </span>
-            </>
-          ) : (
-            <>
-              <LogIn className="mb-1.5 h-7 w-7" />
-              <span className="text-xs font-black uppercase tracking-widest leading-none">
-                {language === 'es' ? 'Marcar Entrada' : 'Marcar Entrada'}
-              </span>
-              <span className="mt-1.5 text-[10px] font-bold text-emerald-100">
-                {language === 'es' ? 'Toque para ingresar' : 'Toque para ingressar'}
-              </span>
-            </>
-          )}
-        </motion.button>
-      </div>
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={() => openConfirmFor('start')}
+            className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-xl shadow-emerald-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400"
+          >
+            <LogIn className="mb-1.5 h-7 w-7" />
+            <span className="text-xs font-black uppercase tracking-widest leading-none">
+              {language === 'es' ? 'Marcar Entrada' : 'Marcar Entrada'}
+            </span>
+            <span className="mt-1.5 text-[10px] font-bold text-emerald-100">
+              {language === 'es' ? 'Toque para ingresar' : 'Toque para ingressar'}
+            </span>
+          </motion.button>
+        </div>
+      )}
 
       {/* Bottom Helper Row */}
       <div className="relative z-10 mt-4 flex flex-wrap items-center justify-center gap-3">
@@ -209,7 +305,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         </button>
       </div>
 
-      {/* Confirmation Popup ("Certeza que quer ingressar/sair agora (HH:mm)?") */}
+      {/* Confirmation Popup */}
       <AnimatePresence>
         {confirmPrompt && (
           <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
@@ -240,17 +336,31 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               <div>
                 <h3 className="text-base font-black text-slate-900">
                   {confirmPrompt.action === 'start'
-                    ? language === 'es'
+                    ? confirmPrompt.part === 1
+                      ? `Certeza que quer ingressar no 1º turno agora (${confirmPrompt.timeLabel})?`
+                      : confirmPrompt.part === 2
+                      ? `Certeza que quer ingressar no 2º turno agora (${confirmPrompt.timeLabel})?`
+                      : language === 'es'
                       ? `¿Seguro que quieres ingresar ahora (${confirmPrompt.timeLabel})?`
                       : `Certeza que quer ingressar agora (${confirmPrompt.timeLabel})?`
+                    : confirmPrompt.part === 1
+                    ? `Certeza que quer marcar a saída do 1º turno agora (${confirmPrompt.timeLabel})?`
+                    : confirmPrompt.part === 2
+                    ? `Certeza que quer marcar a saída do 2º turno agora (${confirmPrompt.timeLabel})?`
                     : language === 'es'
                     ? `¿Seguro que quieres marcar la salida ahora (${confirmPrompt.timeLabel})?`
                     : `Certeza que quer marcar a saída agora (${confirmPrompt.timeLabel})?`}
                 </h3>
                 <p className="mt-1 text-xs font-medium text-slate-500">
                   {confirmPrompt.action === 'start'
-                    ? 'Será registrado somente o horário de entrada do seu turno.'
-                    : `Finaliza o turno iniciado às ${activeShift?.startTime}.`}
+                    ? confirmPrompt.part === 1
+                      ? 'Registra somente a entrada do 1º turno.'
+                      : confirmPrompt.part === 2
+                      ? 'Registra somente a entrada do 2º turno.'
+                      : 'Será registrado somente o horário de entrada do seu turno.'
+                    : `Finaliza o turno iniciado às ${activeShift?.startTime}${
+                        confirmPrompt.part ? ` (${confirmPrompt.part}º turno)` : ''
+                      }.`}
                 </p>
               </div>
 

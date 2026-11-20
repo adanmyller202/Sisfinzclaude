@@ -5,6 +5,7 @@ import {
   LaborJob,
   LaborSalarySnapshot,
   MonthlySalaryCalculation,
+  ShiftPartKey,
   WeeklySchedule,
 } from '../types/labor';
 import { CurrencyCode } from '../types';
@@ -125,6 +126,15 @@ export function calculateShiftMinutes(startTime: string, endTime: string): numbe
   return 0;
 }
 
+export function calculateShiftPartMinutes(schedule: DaySchedule, part: ShiftPartKey): number {
+  if (!schedule || schedule.isOff || schedule.isUnset) return 0;
+  if (part === 2) {
+    if (!schedule.isSplitShift || !schedule.splitStartTime || !schedule.splitEndTime) return 0;
+    return calculateShiftMinutes(schedule.splitStartTime, schedule.splitEndTime);
+  }
+  return calculateShiftMinutes(schedule.startTime, schedule.endTime);
+}
+
 export function calculateDayScheduleMinutes(day: DaySchedule): number {
   if (!day || day.isOff || day.isUnset) return 0;
   let total = calculateShiftMinutes(day.startTime, day.endTime);
@@ -192,14 +202,13 @@ function getCircularMinuteDiff(actualTime: string, scheduledTime: string): numbe
 
 /**
  * Evaluate entry AND optional exit punctuality against the day's scheduled shift(s).
- * - Entry allows up to 5 min late tolerance and up to 60 min early arrival.
- * - Arriving > 60 min early is flagged as 'out_of_hours' (never falsely "Chegou no horário").
- * - Exiting > 5 min before scheduled end time is flagged as 'early_exit' (red).
+ * When `forcedShiftPart` (1 or 2) is provided on a split shift day, evaluates explicitly against that part.
  */
 export function evaluatePunchPunctuality(
   actualStartTime: string,
   schedule: DaySchedule,
-  actualEndTime?: string
+  actualEndTime?: string,
+  forcedShiftPart?: ShiftPartKey
 ): {
   status: PunctualityStatus;
   diffMinutes: number;
@@ -234,7 +243,17 @@ export function evaluatePunchPunctuality(
   let bestDiff = getCircularMinuteDiff(actualStartTime, schedule.startTime);
   let shiftPart: 1 | 2 | undefined = schedule.isSplitShift ? 1 : undefined;
 
-  if (schedule.isSplitShift && schedule.splitStartTime) {
+  if (forcedShiftPart === 2 && schedule.isSplitShift && schedule.splitStartTime) {
+    bestScheduledStart = schedule.splitStartTime;
+    bestScheduledEnd = schedule.splitEndTime || schedule.endTime;
+    bestDiff = getCircularMinuteDiff(actualStartTime, schedule.splitStartTime);
+    shiftPart = 2;
+  } else if (forcedShiftPart === 1) {
+    bestScheduledStart = schedule.startTime;
+    bestScheduledEnd = schedule.endTime;
+    bestDiff = getCircularMinuteDiff(actualStartTime, schedule.startTime);
+    shiftPart = schedule.isSplitShift ? 1 : undefined;
+  } else if (schedule.isSplitShift && schedule.splitStartTime) {
     const splitDiff = getCircularMinuteDiff(actualStartTime, schedule.splitStartTime);
     if (Math.abs(splitDiff) < Math.abs(bestDiff)) {
       bestScheduledStart = schedule.splitStartTime;
@@ -302,7 +321,12 @@ export function getDayAttendanceEntries(
   const entries: DayAttendanceEntry[] = [];
 
   if (job.activeShift && job.activeShift.startDate === dateStr) {
-    const evalRes = evaluatePunchPunctuality(job.activeShift.startTime, schedule);
+    const evalRes = evaluatePunchPunctuality(
+      job.activeShift.startTime,
+      schedule,
+      undefined,
+      job.activeShift.shiftPart
+    );
     entries.push({
       id: 'active_shift',
       isActive: true,
@@ -313,7 +337,12 @@ export function getDayAttendanceEntries(
 
   const dayShifts = (job.shifts || []).filter((s) => s.date === dateStr);
   for (const s of dayShifts) {
-    const evalRes = evaluatePunchPunctuality(s.startTime, schedule, s.endTime);
+    const evalRes = evaluatePunchPunctuality(
+      s.startTime,
+      schedule,
+      s.endTime,
+      s.shiftPart
+    );
     entries.push({
       id: s.id,
       isActive: false,
@@ -376,7 +405,12 @@ export function calculateQuarterlyLateAudit(
 
   if (job.activeShift && isInQuarter(job.activeShift.startDate)) {
     const sched = getScheduleForDate(job, job.activeShift.startDate);
-    const evalRes = evaluatePunchPunctuality(job.activeShift.startTime, sched);
+    const evalRes = evaluatePunchPunctuality(
+      job.activeShift.startTime,
+      sched,
+      undefined,
+      job.activeShift.shiftPart
+    );
     if (evalRes.status === 'late') {
       lateShifts.push({
         id: 'active_shift',
@@ -391,7 +425,7 @@ export function calculateQuarterlyLateAudit(
   for (const s of job.shifts || []) {
     if (!isInQuarter(s.date)) continue;
     const sched = getScheduleForDate(job, s.date);
-    const evalRes = evaluatePunchPunctuality(s.startTime, sched, s.endTime);
+    const evalRes = evaluatePunchPunctuality(s.startTime, sched, s.endTime, s.shiftPart);
     if (evalRes.status === 'late') {
       lateShifts.push({
         id: s.id,
@@ -430,7 +464,7 @@ export function calculateQuarterlyLateAudit(
 export function getDayOfWeekKey(dateStr: string): DayOfWeekKey {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, (m || 1) - 1, d || 1);
-  const jsDay = dt.getDay(); // 0 = Sun, 1 = Mon...
+  const jsDay = dt.getDay();
   const map: DayOfWeekKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   return map[jsDay] || 'mon';
 }
@@ -514,7 +548,6 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     override?.deductionPercent !== undefined ? override.deductionPercent : snap.deductionPercent || 0;
   const disabledIds = new Set(override?.disabledBenefitIds || []);
 
-  // Collect all single-month-only benefit IDs across overrides so they never leak into other months
   const allSingleOnlyBenefitIds = new Set<string>();
   for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
     const extraList = (mOv as any)?.extraBenefits;
@@ -551,9 +584,6 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       };
     });
 
-  // For subsequent months after a single-month benefit was added for `targetMonth`,
-  // surface that benefit as unchecked (`enabled: false`, `calculatedAmount: 0`) so the user sees it unchecked
-  // and future months do not receive the value.
   const singleMonthExtraBenefits = ((override as any)?.extraBenefits || []).map((b: LaborBenefit) => {
     const enabled = b.enabled !== false && !disabledIds.has(b.id);
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
@@ -617,7 +647,7 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
   };
 }
 
-/** Calculate full monthly salary (no automatic SAC/Aguinaldo; user adds any bonus manually as a benefit) */
+/** Calculate full monthly salary */
 export function calculateMonthSalary(job: LaborJob, targetMonth: string): MonthlySalaryCalculation {
   const base = calculateRawMonthSalary(job, targetMonth);
   return {
@@ -671,8 +701,6 @@ export function calculateWeeklyAudit(job: LaborJob, mondayDateStr: string) {
 
 /**
  * Compute monthly HR audit totals for a calendar month (YYYY-MM).
- * Only weeks explicitly registered in job.weekOverrides count toward scheduledMinutes;
- * empty past/future weeks remain 0h until filled or imported by the user.
  */
 export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
   const [yStr, mStr] = targetMonth.split('-');
@@ -721,7 +749,7 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
     const dayWorkedMins = dayShifts.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
 
     for (const s of dayShifts) {
-      const p = evaluatePunchPunctuality(s.startTime, daySched, s.endTime);
+      const p = evaluatePunchPunctuality(s.startTime, daySched, s.endTime, s.shiftPart);
       if (p.status === 'late') {
         lateCount++;
         totalLateMinutes += p.diffMinutes;

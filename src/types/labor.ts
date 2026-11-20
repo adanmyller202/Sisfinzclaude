@@ -8,6 +8,8 @@ export type TipFrequency = 'weekly' | 'daily';
 
 export type ShiftTag = 'overtime' | 'holiday' | 'split_shift' | 'day_swap' | 'advance' | 'absence';
 
+export type ShiftPartKey = 1 | 2;
+
 export interface DaySchedule {
   isOff: boolean;
   /** True when the week has no schedule registered yet (counts as 0h and excluded from calculations) */
@@ -43,6 +45,7 @@ export interface LaborMonthOverride {
   disabledBenefitIds?: string[];
   benefitValueOverrides?: Record<string, number>;
   benefitTypeOverrides?: Record<string, BenefitCalcType>;
+  extraBenefits?: LaborBenefit[];
   extraAmount?: number;
   extraNote?: string;
 }
@@ -54,6 +57,7 @@ export interface LaborShiftEntry {
   endTime: string;    // HH:mm
   durationMinutes: number;
   scheduledMinutes: number;
+  shiftPart?: ShiftPartKey;
   tags: ShiftTag[];
   note?: string;
   createdAt: string;
@@ -64,6 +68,7 @@ export interface ActiveShiftState {
   startDate: string; // YYYY-MM-DD
   startTime: string; // HH:mm
   scheduledMinutes: number;
+  shiftPart?: ShiftPartKey;
 }
 
 export interface LaborTipEntry {
@@ -119,7 +124,7 @@ export interface MonthlySalaryCalculation {
   deductionPercent: number;
   deductionAmount: number;
   netTotal: number;
-  aguinaldoAmount: number; // non-zero in June (06) and December (12)
+  aguinaldoAmount: number;
   totalWithAguinaldo: number;
   hourlyRateRef: number;
 }
