@@ -173,7 +173,7 @@ app.post('/api/work/parse-schedule', async (req, res) => {
     const safeMimeType = typeof mimeType === 'string' && allowedMimeTypes.includes(mimeType)
       ? mimeType
       : 'image/jpeg';
-    const cleanBase64 = imageBase64.replace(/^data:image\\/[a-zA-Z0-9.+-]+;base64,/, '');
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cleanBase64)) {
       res.status(400).json({ error: 'Formato de imagem inválido.' });
       return;
