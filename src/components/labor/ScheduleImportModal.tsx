@@ -16,6 +16,7 @@ import {
   ORDERED_WEEKDAYS,
   WEEKDAY_LABELS,
   calculateDayScheduleMinutes,
+  calculateShiftMinutes,
   formatMinutesAsHours,
 } from '../../utils/laborCalculations';
 import { auth } from '../../firebase/config';
@@ -575,12 +576,20 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                     {ORDERED_WEEKDAYS.map((dayKey) => {
                       const d = previewSchedule[dayKey];
                       const mins = calculateDayScheduleMinutes(d);
+                      const firstPartMins = !d.isOff ? calculateShiftMinutes(d.startTime, d.endTime) : 0;
+                      const suspiciousSplitEnd =
+                        !d.isOff &&
+                        Boolean(d.isSplitShift) &&
+                        (d.endTime === d.splitEndTime || firstPartMins > 10 * 60);
+
                       return (
                         <div
                           key={dayKey}
                           className={`rounded-2xl border p-2.5 space-y-2 ${
                             d.isOff
                               ? 'border-amber-200 bg-amber-50/50'
+                              : suspiciousSplitEnd
+                              ? 'border-rose-300 bg-rose-50/40'
                               : d.isSplitShift
                               ? 'border-indigo-200 bg-indigo-50/30'
                               : 'border-slate-200 bg-white'
@@ -608,7 +617,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                                   onClick={() =>
                                     updatePreviewDay(dayKey, {
                                       isSplitShift: !d.isSplitShift,
-                                      splitStartTime: d.splitStartTime || '19:00',
+                                      splitStartTime: d.splitStartTime || '20:30',
                                       splitEndTime: d.splitEndTime || '01:30',
                                     })
                                   }
@@ -625,6 +634,11 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
                             {!d.isOff ? (
                               <div className="flex items-center gap-1.5">
+                                {d.isSplitShift && (
+                                  <span className="text-[9.5px] font-black uppercase text-slate-400">
+                                    1º
+                                  </span>
+                                )}
                                 <input
                                   type="time"
                                   value={d.startTime}
@@ -636,9 +650,17 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                                   type="time"
                                   value={d.endTime}
                                   onChange={(e) => updatePreviewDay(dayKey, { endTime: e.target.value })}
-                                  className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-800"
+                                  className={`rounded-lg border px-1.5 py-1 text-xs font-bold text-slate-800 ${
+                                    suspiciousSplitEnd
+                                      ? 'border-rose-400 bg-rose-50'
+                                      : 'border-slate-200 bg-white'
+                                  }`}
                                 />
-                                <span className="text-[10px] font-black text-emerald-700 min-w-[38px] text-right">
+                                <span
+                                  className={`text-[10px] font-black min-w-[42px] text-right ${
+                                    suspiciousSplitEnd ? 'text-rose-600' : 'text-emerald-700'
+                                  }`}
+                                >
                                   {formatMinutesAsHours(mins)}
                                 </span>
                               </div>
@@ -646,6 +668,12 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                               <span className="text-[11px] font-bold text-amber-700 pr-2">Descanso</span>
                             )}
                           </div>
+
+                          {suspiciousSplitEnd && (
+                            <div className="text-[10px] font-bold text-rose-600">
+                              Verifique o horário de saída do 1º turno (parece repetido com o 2º turno).
+                            </div>
+                          )}
 
                           {/* Second Shift Row for Cortado (Split Shift) */}
                           {!d.isOff && d.isSplitShift && (
@@ -656,7 +684,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                               <div className="flex items-center gap-1.5">
                                 <input
                                   type="time"
-                                  value={d.splitStartTime || '19:00'}
+                                  value={d.splitStartTime || '20:30'}
                                   onChange={(e) =>
                                     updatePreviewDay(dayKey, { splitStartTime: e.target.value })
                                   }
