@@ -356,7 +356,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         nextShifts = [entry, ...currentShifts];
       }
     } else if (isSplitShiftDay) {
-      // Full-day quick punch on a split-shift day registers BOTH 1st and 2nd shifts so no hours are missed
       const existing1 = existingShifts.find((s) => s.shiftPart === 1) || existingShifts[0];
       const existing2 = existingShifts.find((s) => s.shiftPart === 2);
       const entry1 = buildQuickShiftEntry(date, schedule, 1, mode, lateInput, existing1?.id);
@@ -790,7 +789,9 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       .filter(
         (cb) =>
           snapBenefitIds.has(cb.id) ||
-          ((override as any)?.extraBenefits || []).some((eb: LaborBenefit) => eb.id === cb.id)
+          ((override as any)?.singleMonthBenefits || []).some(
+            (sb: LaborBenefit) => sb.id === cb.id
+          )
       )
       .map((cb) => ({
         id: cb.id,
@@ -856,6 +857,9 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     let updatedJob: LaborJob;
 
     if (scope === 'single') {
+      // Single-month scope ("Manter valor original nos próximos meses"):
+      // Apply enabled/new benefits ONLY in `selectedSalaryMonth` (marked & counted here),
+      // while keeping future months (`> selectedSalaryMonth`) at their original value with those benefits unchecked.
       const baseSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
       const baseSnapIds = new Set((baseSnap.benefits || []).map((b) => b.id));
 
@@ -890,7 +894,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         disabledBenefitIds,
         benefitValueOverrides,
         benefitTypeOverrides,
-        extraBenefits: singleMonthOnlyBenefits,
+        singleMonthBenefits: singleMonthOnlyBenefits,
         extraAmount: newExtra,
       };
 
@@ -911,6 +915,9 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         monthOverrides: nextMonthOverrides,
       };
     } else {
+      // Future scope ("Atualizar deste mês em diante"):
+      // Apply the full draft (including any newly created benefit) from selectedSalaryMonth onward,
+      // while keeping past months (< selectedSalaryMonth) intact.
       const pastSnapshots = (job.salaryHistory || []).filter(
         (s) => s.effectiveFromMonth < selectedSalaryMonth
       );
@@ -2613,7 +2620,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
               {quickPunchDay.isSplitShiftDay ? (
                 <div className="space-y-3">
-                  {/* 1st Shift Quick Block */}
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-emerald-950">
@@ -2653,7 +2659,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     </div>
                   </div>
 
-                  {/* 2nd Shift Quick Block */}
                   <div className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-indigo-950">
@@ -2693,7 +2698,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     </div>
                   </div>
 
-                  {/* Both Shifts at Once Shortcut */}
                   <button
                     type="button"
                     onClick={() => applyQuickPunch('on_time')}
@@ -2859,7 +2863,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                 )}
               </div>
 
-              {/* 1st Shift / Single Shift Row */}
               <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3 space-y-2">
                 {isSplitManualModal && (
                   <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
@@ -2899,7 +2902,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                 )}
               </div>
 
-              {/* 2nd Shift Row when Cortado is active */}
               {!editingActiveShift && !editingShiftId && isSplitManualModal && (
                 <div className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-indigo-800">

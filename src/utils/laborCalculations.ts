@@ -548,13 +548,17 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     override?.deductionPercent !== undefined ? override.deductionPercent : snap.deductionPercent || 0;
   const disabledIds = new Set(override?.disabledBenefitIds || []);
 
+  // Any benefit marked as singleMonthOnly in monthOverrides[M] applies ONLY in month M,
+  // and is excluded from all other months (both earlier and later months).
+  const singleMonthOnlyByMonth = new Map<string, LaborBenefit[]>();
   const allSingleOnlyBenefitIds = new Set<string>();
   for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
-    const extraList = (mOv as any)?.extraBenefits;
-    if (Array.isArray(extraList)) {
-      for (const eb of extraList) {
-        if (eb?.id && mKey !== targetMonth) {
-          allSingleOnlyBenefitIds.add(eb.id);
+    const singleList = (mOv as any)?.singleMonthBenefits;
+    if (Array.isArray(singleList) && singleList.length > 0) {
+      singleMonthOnlyByMonth.set(mKey, singleList);
+      for (const sb of singleList) {
+        if (sb?.id) {
+          allSingleOnlyBenefitIds.add(sb.id);
         }
       }
     }
@@ -584,7 +588,8 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       };
     });
 
-  const singleMonthExtraBenefits = ((override as any)?.extraBenefits || []).map((b: LaborBenefit) => {
+  // Active single-month benefits for `targetMonth`
+  const activeSingleMonthBenefits = (singleMonthOnlyByMonth.get(targetMonth) || []).map((b) => {
     const enabled = b.enabled !== false && !disabledIds.has(b.id);
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
     const rawValue =
@@ -606,25 +611,25 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     };
   });
 
-  const uncheckedFuturePlaceholders: typeof singleMonthExtraBenefits = [];
-  for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
+  // For months AFTER a single-month benefit was applied, display that benefit as unchecked
+  // (`enabled: false`, `calculatedAmount: 0`) so the user sees it unchecked while keeping its original salary.
+  const uncheckedLaterPlaceholders: typeof activeSingleMonthBenefits = [];
+  for (const [mKey, singleList] of singleMonthOnlyByMonth.entries()) {
     if (mKey >= targetMonth) continue;
-    const extraList = (mOv as any)?.extraBenefits;
-    if (!Array.isArray(extraList)) continue;
-    for (const eb of extraList) {
-      if (!eb?.id || singleMonthExtraBenefits.some((x: any) => x.id === eb.id)) continue;
-      uncheckedFuturePlaceholders.push({
-        id: eb.id,
-        name: eb.name,
-        type: eb.type || 'percent',
-        rawValue: Number(eb.value) || 0,
+    for (const sb of singleList) {
+      if (!sb?.id || activeSingleMonthBenefits.some((x) => x.id === sb.id)) continue;
+      uncheckedLaterPlaceholders.push({
+        id: sb.id,
+        name: sb.name,
+        type: sb.type || 'percent',
+        rawValue: Number(sb.value) || 0,
         calculatedAmount: 0,
         enabled: false,
       });
     }
   }
 
-  const benefits = [...baseBenefits, ...singleMonthExtraBenefits, ...uncheckedFuturePlaceholders];
+  const benefits = [...baseBenefits, ...activeSingleMonthBenefits, ...uncheckedLaterPlaceholders];
 
   const extraAmount = override?.extraAmount || 0;
   const benefitsTotal = benefits.reduce((acc, item) => acc + item.calculatedAmount, 0);
