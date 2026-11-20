@@ -29,7 +29,6 @@ interface ScheduleImportModalProps {
   onApplySchedule: (schedule: WeeklySchedule, saveAsDefault: boolean) => void;
 }
 
-// Server allows up to 2 models x 12s = 24s; give client 28s per attempt + 1 automatic retry on cold-start timeout
 const REQUEST_TIMEOUT_MS = 28000;
 
 const DAY_PATTERNS: { key: DayOfWeekKey; regex: RegExp }[] = [
@@ -66,6 +65,7 @@ function normalizeImportedSchedule(raw: any, fallback: WeeklySchedule): WeeklySc
     const isSplitShift = !isOff && (Boolean(entry.isSplitShift) || hasSplitTimes);
     result[day] = {
       isOff,
+      isUnset: false,
       startTime,
       endTime,
       isSplitShift,
@@ -96,6 +96,7 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
       next[dayMatch.key] = {
         ...next[dayMatch.key],
         isOff: true,
+        isUnset: false,
         isSplitShift: false,
       };
       continue;
@@ -111,6 +112,7 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
       const isSplitShift = times.length >= 4;
       next[dayMatch.key] = {
         isOff: false,
+        isUnset: false,
         startTime,
         endTime,
         isSplitShift,
@@ -127,14 +129,17 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
   return { schedule: next, matchedDays };
 }
 
-/** Compress image in memory only (max 1024px, JPEG 0.72) for fast upload and zero persistence */
+/**
+ * Compress image in memory only (max 1600px, JPEG 0.85) so wide multi-row spreadsheets
+ * remain sharp and readable for Gemini Vision while never being stored anywhere.
+ */
 async function compressImageInMemory(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       try {
-        const maxSide = 1024;
+        const maxSide = 1600;
         let { width, height } = img;
         if (width > maxSide || height > maxSide) {
           const ratio = Math.min(maxSide / width, maxSide / height);
@@ -147,7 +152,7 @@ async function compressImageInMemory(file: File): Promise<{ base64: string; mime
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas unavailable');
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         const base64 = dataUrl.split(',')[1] || '';
         resolve({ base64, mimeType: 'image/jpeg' });
       } catch (err) {
@@ -194,8 +199,6 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
   useEffect(() => () => abortInFlight(true), []);
 
-  // Pre-warm the backend container and Firebase auth token as soon as the modal opens
-  // so the first upload never suffers from serverless cold-start latency.
   useEffect(() => {
     if (!isOpen) return;
     auth.currentUser?.getIdToken().catch(() => {});
@@ -266,7 +269,6 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     setErrorMsg(null);
 
     try {
-      // Compress in memory and fetch auth token BEFORE starting the network timeout timer
       const [{ base64, mimeType }, idToken] = await Promise.all([
         compressImageInMemory(file),
         auth.currentUser?.getIdToken().catch(() => '') ?? Promise.resolve(''),
@@ -285,17 +287,19 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       let resp: Response | null = null;
       let lastError: any = null;
 
-      // Up to 2 attempts: if attempt 1 hits a cold-start timeout or 502/503/504, retry automatically
       for (let attempt = 1; attempt <= 2; attempt++) {
         if (userCancelledRef.current) return;
         if (attempt === 2) {
-          setStatusHint('Servidor aquecendo — concluindo leitura...');
+          setStatusHint('Refinando leitura da tabela...');
         }
         try {
           const result = await sendParseRequest(payload, idToken);
           if (
             attempt === 1 &&
-            (result.resp.status === 502 || result.resp.status === 503 || result.resp.status === 504)
+            (result.resp.status === 500 ||
+              result.resp.status === 502 ||
+              result.resp.status === 503 ||
+              result.resp.status === 504)
           ) {
             continue;
           }
@@ -461,7 +465,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                           type="text"
                           value={nameHint}
                           onChange={(e) => setNameHint(e.target.value)}
-                          placeholder="Ex: Martinez T."
+                          placeholder="Ex: Silva A."
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
                         />
                       </div>
@@ -531,7 +535,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                         rows={5}
                         value={pastedText}
                         onChange={(e) => setPastedText(e.target.value)}
-                        placeholder={'Ex:\nSeg 18:00 - 02:00\nTer Franco\nQua 18:00 - 02:00\nQui 18:00 - 02:00\nSex 18:00 - 02:30\nSab 12:30 - 16:30 + 20:30 - 01:30\nDom 13:00 - 15:30 + 19:00 - 01:30'}
+                        placeholder={'Ex:\nSeg 12:00 - 15:00 + 20:30 - 01:00\nTer 19:30 - 01:30\nQua Descanso\nQui 19:30 - 01:30\nSex 19:00 - 01:30\nSab 13:00 - 16:00 + 20:30 - 01:30\nDom 12:00 - 15:00 + 20:30 - 01:30'}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-xs font-bold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
                       />
                       <button

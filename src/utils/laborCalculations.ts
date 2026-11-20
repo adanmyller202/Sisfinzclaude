@@ -15,6 +15,12 @@ export const ORDERED_WEEKDAYS: DayOfWeekKey[] = ['mon', 'tue', 'wed', 'thu', 'fr
 /** Maximum entry delay (in minutes) still considered on time */
 export const LATE_TOLERANCE_MINUTES = 5;
 
+/** Maximum early arrival (in minutes) still considered within normal shift entry window */
+export const EARLY_ENTRY_WINDOW_MINUTES = 60;
+
+/** Maximum early exit tolerance (in minutes) before counting as left early */
+export const EARLY_EXIT_TOLERANCE_MINUTES = 5;
+
 /** Number of late arrivals in the same quarter that triggers suspension risk */
 export const QUARTERLY_LATE_LIMIT = 3;
 
@@ -147,7 +153,15 @@ export function formatDurationCompact(totalMinutes: number): string {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-export type PunctualityStatus = 'on_time' | 'early' | 'late' | 'extra_day' | 'no_schedule';
+export type PunctualityStatus =
+  | 'on_time'
+  | 'early'
+  | 'late'
+  | 'out_of_hours'
+  | 'extra_day'
+  | 'no_schedule';
+
+export type ExitPunctualityStatus = 'on_time' | 'early_exit' | 'none';
 
 export interface DayAttendanceEntry {
   id: string;
@@ -155,10 +169,16 @@ export interface DayAttendanceEntry {
   startTime: string;
   endTime?: string;
   scheduledStartTime?: string;
+  scheduledEndTime?: string;
   shiftPart?: 1 | 2;
   status: PunctualityStatus;
-  /** Positive = minutes after scheduled start, Negative = minutes early, 0 = exact */
+  /** Positive = minutes after scheduled start, Negative = minutes before scheduled start */
   diffMinutes: number;
+  exitStatus: ExitPunctualityStatus;
+  /** Positive = minutes left early (when early_exit), or minutes extra (when on_time) */
+  exitDiffMinutes: number;
+  /** True if entry is late/out_of_hours OR exit was early */
+  hasIssue: boolean;
 }
 
 function getCircularMinuteDiff(actualTime: string, scheduledTime: string): number {
@@ -171,59 +191,105 @@ function getCircularMinuteDiff(actualTime: string, scheduledTime: string): numbe
 }
 
 /**
- * Evaluate whether a punch-in time matches the day's scheduled shift(s).
- * Allows up to LATE_TOLERANCE_MINUTES (5 min) grace period before counting as late.
+ * Evaluate entry AND optional exit punctuality against the day's scheduled shift(s).
+ * - Entry allows up to 5 min late tolerance and up to 60 min early arrival.
+ * - Arriving > 60 min early is flagged as 'out_of_hours' (never falsely "Chegou no horário").
+ * - Exiting > 5 min before scheduled end time is flagged as 'early_exit' (red).
  */
 export function evaluatePunchPunctuality(
   actualStartTime: string,
-  schedule: DaySchedule
+  schedule: DaySchedule,
+  actualEndTime?: string
 ): {
   status: PunctualityStatus;
   diffMinutes: number;
   scheduledStartTime?: string;
+  scheduledEndTime?: string;
   shiftPart?: 1 | 2;
+  exitStatus: ExitPunctualityStatus;
+  exitDiffMinutes: number;
+  hasIssue: boolean;
 } {
   if (!schedule || schedule.isUnset) {
-    return { status: 'no_schedule', diffMinutes: 0 };
+    return {
+      status: 'no_schedule',
+      diffMinutes: 0,
+      exitStatus: 'none',
+      exitDiffMinutes: 0,
+      hasIssue: false,
+    };
   }
   if (schedule.isOff) {
-    return { status: 'extra_day', diffMinutes: 0 };
+    return {
+      status: 'extra_day',
+      diffMinutes: 0,
+      exitStatus: 'none',
+      exitDiffMinutes: 0,
+      hasIssue: false,
+    };
   }
 
-  let bestScheduled = schedule.startTime;
+  let bestScheduledStart = schedule.startTime;
+  let bestScheduledEnd = schedule.endTime;
   let bestDiff = getCircularMinuteDiff(actualStartTime, schedule.startTime);
   let shiftPart: 1 | 2 | undefined = schedule.isSplitShift ? 1 : undefined;
 
   if (schedule.isSplitShift && schedule.splitStartTime) {
     const splitDiff = getCircularMinuteDiff(actualStartTime, schedule.splitStartTime);
     if (Math.abs(splitDiff) < Math.abs(bestDiff)) {
-      bestScheduled = schedule.splitStartTime;
+      bestScheduledStart = schedule.splitStartTime;
+      bestScheduledEnd = schedule.splitEndTime || schedule.endTime;
       bestDiff = splitDiff;
       shiftPart = 2;
     }
   }
 
+  let status: PunctualityStatus;
   if (bestDiff > LATE_TOLERANCE_MINUTES) {
-    return {
-      status: 'late',
-      diffMinutes: bestDiff,
-      scheduledStartTime: bestScheduled,
-      shiftPart,
-    };
+    status = 'late';
+  } else if (bestDiff < -EARLY_ENTRY_WINDOW_MINUTES) {
+    status = 'out_of_hours';
+  } else if (bestDiff < 0) {
+    status = 'early';
+  } else {
+    status = 'on_time';
   }
-  if (bestDiff < 0) {
-    return {
-      status: 'early',
-      diffMinutes: bestDiff,
-      scheduledStartTime: bestScheduled,
-      shiftPart,
-    };
+
+  let exitStatus: ExitPunctualityStatus = 'none';
+  let exitDiffMinutes = 0;
+
+  if (actualEndTime && bestScheduledEnd) {
+    const schedDuration = calculateShiftMinutes(bestScheduledStart, bestScheduledEnd);
+    const actualDuration = calculateShiftMinutes(actualStartTime, actualEndTime);
+    const exitDiffFromEnd = getCircularMinuteDiff(actualEndTime, bestScheduledEnd);
+
+    if (
+      status === 'out_of_hours' &&
+      actualDuration < Math.max(30, schedDuration - EARLY_EXIT_TOLERANCE_MINUTES)
+    ) {
+      exitStatus = 'early_exit';
+      exitDiffMinutes = Math.max(0, schedDuration - actualDuration);
+    } else if (exitDiffFromEnd < -EARLY_EXIT_TOLERANCE_MINUTES) {
+      exitStatus = 'early_exit';
+      exitDiffMinutes = Math.abs(exitDiffFromEnd);
+    } else {
+      exitStatus = 'on_time';
+      exitDiffMinutes = Math.max(0, exitDiffFromEnd);
+    }
   }
+
+  const hasIssue =
+    status === 'late' || status === 'out_of_hours' || exitStatus === 'early_exit';
+
   return {
-    status: 'on_time',
-    diffMinutes: bestDiff, // 0..5 within grace tolerance
-    scheduledStartTime: bestScheduled,
+    status,
+    diffMinutes: bestDiff,
+    scheduledStartTime: bestScheduledStart,
+    scheduledEndTime: bestScheduledEnd,
     shiftPart,
+    exitStatus,
+    exitDiffMinutes,
+    hasIssue,
   };
 }
 
@@ -247,7 +313,7 @@ export function getDayAttendanceEntries(
 
   const dayShifts = (job.shifts || []).filter((s) => s.date === dateStr);
   for (const s of dayShifts) {
-    const evalRes = evaluatePunchPunctuality(s.startTime, schedule);
+    const evalRes = evaluatePunchPunctuality(s.startTime, schedule, s.endTime);
     entries.push({
       id: s.id,
       isActive: false,
@@ -325,7 +391,7 @@ export function calculateQuarterlyLateAudit(
   for (const s of job.shifts || []) {
     if (!isInQuarter(s.date)) continue;
     const sched = getScheduleForDate(job, s.date);
-    const evalRes = evaluatePunchPunctuality(s.startTime, sched);
+    const evalRes = evaluatePunchPunctuality(s.startTime, sched, s.endTime);
     if (evalRes.status === 'late') {
       lateShifts.push({
         id: s.id,
@@ -611,7 +677,7 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
     const dayWorkedMins = dayShifts.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
 
     for (const s of dayShifts) {
-      const p = evaluatePunchPunctuality(s.startTime, daySched);
+      const p = evaluatePunchPunctuality(s.startTime, daySched, s.endTime);
       if (p.status === 'late') {
         lateCount++;
         totalLateMinutes += p.diffMinutes;

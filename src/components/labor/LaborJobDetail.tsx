@@ -383,7 +383,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   };
 
   const handleSaveManualShift = async () => {
-    // 1. Updating an active shift's start date/time
     if (editingActiveShift && job.activeShift) {
       const [y, m, d] = shiftFormDate.split('-').map(Number);
       const [hh, mm] = shiftFormStart.split(':').map(Number);
@@ -402,7 +401,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       return;
     }
 
-    // 2. Updating an existing recorded shift (no duplicate)
     if (editingShiftId) {
       const durationMinutes = calculateShiftMinutes(shiftFormStart, shiftFormEnd);
       const sched = getScheduleForDate(job, shiftFormDate);
@@ -433,7 +431,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       return;
     }
 
-    // 3. Creating a new manual shift -> check for duplicate on the same day
     const existingForDate = (job.shifts || []).filter((s) => s.date === shiftFormDate);
     if (existingForDate.length > 0) {
       const sched = getScheduleForDate(job, shiftFormDate);
@@ -737,13 +734,16 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
   const renderShiftListItem = (s: LaborShiftEntry) => {
     const daySched = getScheduleForDate(job, s.date);
-    const punctuality = evaluatePunchPunctuality(s.startTime, daySched);
-    const isLate = punctuality.status === 'late';
+    const punctuality = evaluatePunchPunctuality(s.startTime, daySched, s.endTime);
+    const hasIssue = punctuality.hasIssue;
+    const isEntryBad = punctuality.status === 'late' || punctuality.status === 'out_of_hours';
+    const isExitBad = punctuality.exitStatus === 'early_exit';
+
     return (
       <div
         key={s.id}
         className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${
-          isLate ? 'border-rose-200 bg-rose-50/35' : 'border-slate-200/80 bg-white'
+          hasIssue ? 'border-rose-200 bg-rose-50/35' : 'border-slate-200/80 bg-white'
         }`}
       >
         <div className="min-w-0">
@@ -756,15 +756,30 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
               {formatMinutesAsHours(s.durationMinutes)}
             </span>
             {punctuality.status !== 'extra_day' && punctuality.status !== 'no_schedule' && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
-                  isLate ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
-                }`}
-              >
-                {isLate
-                  ? `Atraso ${formatDurationCompact(punctuality.diffMinutes)}`
-                  : 'No horário'}
-              </span>
+              <>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
+                    isEntryBad ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
+                  }`}
+                >
+                  {punctuality.status === 'late'
+                    ? `Chegou atrasado (${formatDurationCompact(punctuality.diffMinutes)})`
+                    : punctuality.status === 'out_of_hours'
+                    ? 'Entrada fora do horário'
+                    : 'Chegou no horário'}
+                </span>
+                {punctuality.exitStatus !== 'none' && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
+                      isExitBad ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {isExitBad
+                      ? `Saiu antes (${formatDurationCompact(punctuality.exitDiffMinutes)})`
+                      : 'Saiu no horário'}
+                  </span>
+                )}
+              </>
             )}
           </div>
           {(s.tags.length > 0 || s.note) && (
@@ -877,7 +892,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         </div>
       </div>
 
-      {/* Interactive Hold-to-Punch Hero */}
+      {/* Interactive Click-to-Confirm Punch Hero */}
       <HoldToPunchButton
         activeShift={job.activeShift}
         todaySchedule={todaySchedule}
@@ -941,7 +956,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                 </div>
               </div>
 
-              {/* 3-Dot Counter Pill */}
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <span
                   className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-black text-white ${
@@ -1182,15 +1196,15 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               const mins = calculateDayScheduleMinutes(sched);
                               const attendanceEntries = getDayAttendanceEntries(job, dayDate, sched);
                               const hasPunch = attendanceEntries.length > 0;
-                              const hasLateEntry = attendanceEntries.some((a) => a.status === 'late');
+                              const hasIssueEntry = attendanceEntries.some((a) => a.hasIssue);
                               const isWorkdayPendingPunch = !isUnset && !sched.isOff && !hasPunch;
 
                               return (
                                 <div
                                   key={dayKey}
                                   className={`rounded-2xl border p-3 transition-colors ${
-                                    hasLateEntry
-                                      ? 'border-rose-300 bg-rose-50/35 ring-1 ring-rose-100'
+                                    hasIssueEntry
+                                      ? 'border-rose-400 bg-rose-50/45 ring-1 ring-rose-200'
                                       : hasPunch
                                       ? isToday
                                         ? 'border-emerald-400 bg-emerald-50/45 ring-1 ring-emerald-200'
@@ -1220,12 +1234,16 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       {hasPunch ? (
                                         <span
                                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] font-black uppercase tracking-wide ${
-                                            hasLateEntry
+                                            hasIssueEntry
                                               ? 'bg-rose-100 text-rose-700 border border-rose-200'
                                               : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                           }`}
                                         >
-                                          <CheckCircle2 className="h-2.5 w-2.5" />
+                                          {hasIssueEntry ? (
+                                            <AlertTriangle className="h-2.5 w-2.5" />
+                                          ) : (
+                                            <CheckCircle2 className="h-2.5 w-2.5" />
+                                          )}
                                           {language === 'es'
                                             ? 'Fichaje registrado'
                                             : 'Ponto registrado'}
@@ -1274,6 +1292,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                             className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer ${
                                               sched.isOff
                                                 ? 'bg-amber-500 text-white'
+                                                : hasIssueEntry
+                                                ? 'bg-rose-100 text-rose-800'
                                                 : isWorkdayPendingPunch
                                                 ? 'bg-orange-100 text-orange-800'
                                                 : 'bg-emerald-100 text-emerald-800'
@@ -1330,7 +1350,9 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                         </div>
                                         <span
                                           className={`font-mono text-xs font-black ${
-                                            isWorkdayPendingPunch
+                                            hasIssueEntry
+                                              ? 'text-rose-700'
+                                              : isWorkdayPendingPunch
                                               ? 'text-orange-700'
                                               : 'text-emerald-700'
                                           }`}
@@ -1368,11 +1390,14 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     </div>
                                   )}
 
-                                  {/* Punctuality / Punch Status Strip with Alterar & Excluir buttons */}
+                                  {/* Entry + Exit Punctuality Strip with Alterar & Excluir buttons */}
                                   {attendanceEntries.length > 0 && (
                                     <div className="mt-2.5 space-y-1.5 border-t border-slate-200/70 pt-2">
                                       {attendanceEntries.map((att) => {
-                                        const isLate = att.status === 'late';
+                                        const isEntryBad =
+                                          att.status === 'late' || att.status === 'out_of_hours';
+                                        const isExitBad = att.exitStatus === 'early_exit';
+                                        const isIssue = att.hasIssue;
                                         const isExtra = att.status === 'extra_day';
                                         const isNoSched = att.status === 'no_schedule';
                                         const partLabel = att.shiftPart ? ` (${att.shiftPart}º turno)` : '';
@@ -1380,43 +1405,78 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                           ? `${att.startTime} → ${att.endTime}`
                                           : `Entrada ${att.startTime}`;
 
+                                        const entryText =
+                                          att.status === 'late'
+                                            ? `Chegou atrasado (${formatDurationCompact(att.diffMinutes)})${partLabel}`
+                                            : att.status === 'out_of_hours'
+                                            ? `Entrada fora do horário${partLabel}`
+                                            : isExtra
+                                            ? language === 'es'
+                                              ? 'Turno en día de franco'
+                                              : 'Turno em dia de franco'
+                                            : isNoSched
+                                            ? 'Ponto registrado (sem cronograma)'
+                                            : att.diffMinutes > 0
+                                            ? `Chegou no horário (+${att.diffMinutes}m)${partLabel}`
+                                            : `Chegou no horário${partLabel}`;
+
+                                        const exitText =
+                                          att.exitStatus === 'early_exit'
+                                            ? att.exitDiffMinutes > 0
+                                              ? `Saiu antes do horário (${formatDurationCompact(att.exitDiffMinutes)})`
+                                              : 'Saiu antes do horário'
+                                            : att.exitStatus === 'on_time'
+                                            ? 'Saiu no horário'
+                                            : null;
+
                                         return (
                                           <div
                                             key={att.id}
-                                            className={`flex flex-wrap items-center justify-between gap-1.5 rounded-xl px-2.5 py-1.5 text-[10.5px] font-black ${
-                                              isLate
-                                                ? 'bg-rose-100/90 text-rose-800 border border-rose-200'
+                                            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-[10.5px] font-black ${
+                                              isIssue
+                                                ? 'bg-rose-100/95 text-rose-900 border border-rose-200'
                                                 : isExtra
                                                 ? 'bg-indigo-100/80 text-indigo-800 border border-indigo-200'
                                                 : isNoSched
                                                 ? 'bg-slate-100 text-slate-700 border border-slate-200'
-                                                : 'bg-emerald-100/85 text-emerald-900 border border-emerald-200'
+                                                : 'bg-emerald-100/90 text-emerald-950 border border-emerald-200'
                                             }`}
                                           >
-                                            <span className="inline-flex items-center gap-1.5">
-                                              {isLate ? (
-                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
-                                              ) : isExtra || isNoSched ? (
-                                                <Clock className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
-                                              ) : (
-                                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                                              )}
-                                              <span>
-                                                {isLate
-                                                  ? `Atraso de ${formatDurationCompact(att.diffMinutes)}${partLabel}`
-                                                  : isExtra
-                                                  ? language === 'es'
-                                                    ? 'Turno en día de franco'
-                                                    : 'Turno em dia de franco'
-                                                  : isNoSched
-                                                  ? 'Ponto registrado (sem cronograma)'
-                                                  : att.status === 'early'
-                                                  ? `Chegou no horário (${formatDurationCompact(att.diffMinutes)} antes)${partLabel}`
-                                                  : att.diffMinutes > 0
-                                                  ? `Chegou no horário (tolerância +${att.diffMinutes}m)${partLabel}`
-                                                  : `Chegou no horário${partLabel}`}
+                                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                              <span
+                                                className={`inline-flex items-center gap-1 ${
+                                                  isEntryBad
+                                                    ? 'text-rose-700'
+                                                    : isExtra || isNoSched
+                                                    ? ''
+                                                    : 'text-emerald-800'
+                                                }`}
+                                              >
+                                                {isEntryBad ? (
+                                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                                                ) : isExtra || isNoSched ? (
+                                                  <Clock className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                                                ) : (
+                                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                                )}
+                                                <span>{entryText}</span>
                                               </span>
-                                            </span>
+
+                                              {exitText && (
+                                                <span
+                                                  className={`inline-flex items-center gap-1 ${
+                                                    isExitBad ? 'text-rose-700' : 'text-emerald-800'
+                                                  }`}
+                                                >
+                                                  {isExitBad ? (
+                                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                                                  ) : (
+                                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                                  )}
+                                                  <span>{exitText}</span>
+                                                </span>
+                                              )}
+                                            </div>
 
                                             <div className="inline-flex items-center gap-1.5">
                                               <span className="font-mono text-[10px]">
@@ -1424,8 +1484,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                               </span>
                                               {att.isActive && (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-white">
-                                                  <span className="h-1 w-1 rounded-full bg-white animate-pulse" />
-                                                  Em turno
+                                                  Saída pendente
                                                 </span>
                                               )}
                                               <button
@@ -1442,7 +1501,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                                   }
                                                 }}
                                                 className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide transition-colors cursor-pointer ${
-                                                  isLate
+                                                  isIssue
                                                     ? 'bg-rose-200/90 text-rose-900 hover:bg-rose-300/90'
                                                     : isExtra
                                                     ? 'bg-indigo-200/90 text-indigo-900 hover:bg-indigo-300/90'
@@ -1466,7 +1525,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                                   }
                                                 }}
                                                 className={`inline-flex items-center justify-center rounded-lg p-1 transition-colors cursor-pointer ${
-                                                  isLate
+                                                  isIssue
                                                     ? 'bg-rose-200/90 text-rose-900 hover:bg-rose-300'
                                                     : 'bg-white/80 text-rose-600 hover:bg-rose-100 hover:text-rose-700'
                                                 }`}
@@ -1516,7 +1575,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                       {/* 2. HISTÓRICO DE PONTOS & CONFERÊNCIA RH (MENSAL + SEMANAL) */}
                       {item.id === 'history' && (
                         <>
-                          {/* Mode Switcher: Mensal | Semanal */}
                           <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-slate-100 p-1">
                             <button
                               type="button"
@@ -1544,7 +1602,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
                           {historyMode === 'monthly' ? (
                             <>
-                              {/* Month Navigator */}
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                                   <button
@@ -1575,7 +1632,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 </span>
                               </div>
 
-                              {/* Monthly Totals */}
                               <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 border border-slate-200/70">
                                 <div>
                                   <div className="text-[9px] font-black uppercase text-slate-400">
@@ -1609,7 +1665,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 </div>
                               </div>
 
-                              {/* Monthly Punctuality Summary */}
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 text-[11px]">
                                 <div className="flex items-center gap-3">
                                   <span className="inline-flex items-center gap-1 font-black text-emerald-700">
@@ -1638,7 +1693,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 </span>
                               </div>
 
-                              {/* Weeks Breakdown inside Selected Month */}
                               <div className="space-y-1.5">
                                 <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                                   Semanas do mês (toque para editar na escala)
@@ -1685,7 +1739,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 ))}
                               </div>
 
-                              {/* Shifts Recorded in Selected Month */}
                               {monthlyAudit.monthShifts.length === 0 ? (
                                 <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
                                   Nenhum ponto registrado neste mês ainda.
@@ -1802,7 +1855,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </div>
                           )}
 
-                          {/* Month Selector + Quick Update Button */}
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                               <button
@@ -1838,7 +1890,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </button>
                           </div>
 
-                          {/* Breakdown Card for Selected Month */}
                           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-3.5 space-y-2">
                             <div className="flex items-center justify-between text-xs font-black text-slate-800">
                               <span>Salário Básico</span>
@@ -1897,7 +1948,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </div>
                           </div>
 
-                          {/* 12-Month Salary & Aguinaldo Timeline */}
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -2047,7 +2097,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </button>
                           </form>
 
-                          {/* Tip History */}
                           {(job.tips || []).length > 0 && (
                             <div className="space-y-1.5">
                               <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
@@ -2631,7 +2680,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </div>
 
                             <div className="flex items-center justify-between gap-2 pl-6">
-                              {/* Interactive % vs Valor Fixo Toggle */}
                               <div className="inline-flex rounded-xl bg-slate-100 p-0.5 shrink-0">
                                 <button
                                   type="button"
@@ -2694,7 +2742,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         );
                       })}
 
-                      {/* Add New Benefit Inline */}
                       <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-3 space-y-2">
                         <div className="text-[10px] font-black uppercase text-emerald-800">
                           + Adicionar Benefício / Adicional

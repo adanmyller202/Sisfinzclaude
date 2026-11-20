@@ -1,9 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Play, Square, Clock, Edit3, CheckCircle2, Sparkles } from 'lucide-react';
+import { LogIn, LogOut, Edit3, CheckCircle2, Sparkles, Clock } from 'lucide-react';
 import { LanguageCode } from '../../types';
 import { ActiveShiftState, DaySchedule } from '../../types/labor';
-import { calculateDayScheduleMinutes, formatMinutesAsHours } from '../../utils/laborCalculations';
+import {
+  formatLocalTimeHHMM,
+  formatMinutesAsHours,
+} from '../../utils/laborCalculations';
 
 interface HoldToPunchButtonProps {
   activeShift: ActiveShiftState | null;
@@ -14,11 +17,7 @@ interface HoldToPunchButtonProps {
   onOpenManualEntry: () => void;
 }
 
-const HOLD_DURATION_MS = 650;
-const RING_RADIUS = 72;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-function playPunchTone(type: 'start' | 'end' | 'tick') {
+function playPunchTone(type: 'start' | 'end') {
   if (typeof window === 'undefined') return;
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -28,58 +27,24 @@ function playPunchTone(type: 'start' | 'end' | 'tick') {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    if (type === 'tick') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(520, now);
-      gain.gain.setValueAtTime(0.035, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.045);
-    } else if (type === 'start') {
-      osc.type = 'triangle';
+    osc.type = 'triangle';
+    if (type === 'start') {
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.14);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.24);
     } else {
-      osc.type = 'triangle';
       osc.frequency.setValueAtTime(783.99, now);
       osc.frequency.exponentialRampToValueAtTime(523.25, now + 0.16);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.26);
     }
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.26);
     window.setTimeout(() => ctx.close().catch(() => {}), 350);
   } catch {
     // ignore audio errors
   }
-}
-
-function vibrate(ms: number) {
-  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-    try {
-      navigator.vibrate(ms);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function formatChronometer(elapsedSec: number): string {
-  const safe = Math.max(0, Math.floor(elapsedSec));
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = safe % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
@@ -91,93 +56,34 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   onOpenManualEntry,
 }) => {
   const reduceMotion = useReducedMotion();
-  const [holdProgress, setHoldProgress] = useState(0); // 0..1
-  const [isHolding, setIsHolding] = useState(false);
   const [rippleKey, setRippleKey] = useState(0);
-  const [elapsedSec, setElapsedSec] = useState(0);
-
-  const rafRef = useRef<number | null>(null);
-  const holdStartRef = useRef<number>(0);
-  const completedRef = useRef(false);
-
-  // Live 1-second chronometer while a shift is active
-  useEffect(() => {
-    if (!activeShift) {
-      setElapsedSec(0);
-      return;
-    }
-    const updateElapsed = () => {
-      const startedMs = new Date(activeShift.startedAtIso).getTime();
-      if (!Number.isNaN(startedMs)) {
-        setElapsedSec(Math.max(0, Math.floor((Date.now() - startedMs) / 1000)));
-      }
-    };
-    updateElapsed();
-    const id = window.setInterval(updateElapsed, 1000);
-    return () => window.clearInterval(id);
-  }, [activeShift]);
-
-  const cancelHold = () => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    setIsHolding(false);
-    setHoldProgress(0);
-  };
-
-  useEffect(() => () => cancelHold(), []);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    e.preventDefault();
-    completedRef.current = false;
-    setIsHolding(true);
-    holdStartRef.current = performance.now();
-    playPunchTone('tick');
-    vibrate(8);
-
-    const step = (now: number) => {
-      const elapsed = now - holdStartRef.current;
-      const pct = Math.min(1, elapsed / HOLD_DURATION_MS);
-      setHoldProgress(pct);
-
-      if (pct >= 1) {
-        completedRef.current = true;
-        rafRef.current = null;
-        setIsHolding(false);
-        setHoldProgress(0);
-        setRippleKey((k) => k + 1);
-        vibrate(25);
-        if (activeShift) {
-          playPunchTone('end');
-          onEndShift();
-        } else {
-          playPunchTone('start');
-          onStartShift();
-        }
-        return;
-      }
-      rafRef.current = requestAnimationFrame(step);
-    };
-
-    rafRef.current = requestAnimationFrame(step);
-  };
-
-  const handlePointerUpOrLeave = () => {
-    if (!completedRef.current) {
-      cancelHold();
-    }
-  };
-
-  const scheduledMinutes = activeShift?.scheduledMinutes || calculateDayScheduleMinutes(todaySchedule);
-  const shiftProgressRatio =
-    activeShift && scheduledMinutes > 0
-      ? Math.min(1, elapsedSec / (scheduledMinutes * 60))
-      : 0;
+  const [confirmPrompt, setConfirmPrompt] = useState<{
+    action: 'start' | 'end';
+    timeLabel: string;
+  } | null>(null);
 
   const isRunning = Boolean(activeShift);
-  const strokeDashoffset = RING_CIRCUMFERENCE * (1 - (isHolding ? holdProgress : isRunning ? shiftProgressRatio : 0));
+
+  const handleCircleClick = () => {
+    const nowTime = formatLocalTimeHHMM(new Date());
+    setConfirmPrompt({
+      action: isRunning ? 'end' : 'start',
+      timeLabel: nowTime,
+    });
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmPrompt) return;
+    const action = confirmPrompt.action;
+    setConfirmPrompt(null);
+    setRippleKey((k) => k + 1);
+    playPunchTone(action);
+    if (action === 'start') {
+      onStartShift();
+    } else {
+      onEndShift();
+    }
+  };
 
   const scheduleSummary = todaySchedule.isUnset
     ? language === 'es'
@@ -222,16 +128,15 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         />
         <span className="text-[11px] font-black tracking-wide text-slate-700">
           {isRunning
-            ? `${language === 'es' ? 'En turno desde' : 'Em turno desde'} ${activeShift?.startTime}`
+            ? `${language === 'es' ? 'Entrada marcada:' : 'Entrada marcada às'} ${activeShift?.startTime}`
             : todaySchedule.isUnset
             ? scheduleSummary
             : `${language === 'es' ? 'Turno hoy' : 'Turno hoje'}: ${scheduleSummary}`}
         </span>
       </div>
 
-      {/* Interactive Circular Hold-to-Punch Core */}
-      <div className="relative flex h-[176px] w-[176px] items-center justify-center">
-        {/* Expanding Ripple Wave on Punch Completion */}
+      {/* Circular Click-to-Confirm Button (No Timer) */}
+      <div className="relative flex h-[164px] w-[164px] items-center justify-center">
         <AnimatePresence>
           {rippleKey > 0 && !reduceMotion && (
             <motion.span
@@ -247,106 +152,45 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Breathing Ambient Ring */}
         {!reduceMotion && (
           <motion.span
-            animate={{
-              scale: isHolding ? 1.07 : [1, 1.05, 1],
-              opacity: isHolding ? 0.55 : [0.25, 0.45, 0.25],
-            }}
-            transition={
-              isHolding
-                ? { duration: 0.2 }
-                : { repeat: Infinity, duration: 2.8, ease: 'easeInOut' }
-            }
+            animate={{ scale: [1, 1.06, 1], opacity: [0.25, 0.45, 0.25] }}
+            transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut' }}
             className={`pointer-events-none absolute inset-1 rounded-full ${
               isRunning ? 'bg-rose-500/15' : 'bg-emerald-500/15'
             }`}
           />
         )}
 
-        {/* SVG Progress Ring (Hold 360° fill OR Live Shift Progress) */}
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
-          viewBox="0 0 176 176"
-        >
-          <circle
-            cx="88"
-            cy="88"
-            r={RING_RADIUS}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="7"
-            className={isRunning ? 'text-rose-100' : 'text-emerald-100'}
-          />
-          <circle
-            cx="88"
-            cy="88"
-            r={RING_RADIUS}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="7"
-            strokeLinecap="round"
-            strokeDasharray={RING_CIRCUMFERENCE}
-            strokeDashoffset={strokeDashoffset}
-            className={`transition-[stroke] duration-300 ${
-              isHolding
-                ? isRunning
-                  ? 'text-rose-500'
-                  : 'text-emerald-500'
-                : isRunning
-                ? 'text-rose-400'
-                : 'text-emerald-500'
-            }`}
-          />
-        </svg>
-
-        {/* Tactile Center Button */}
         <motion.button
           type="button"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUpOrLeave}
-          onPointerLeave={handlePointerUpOrLeave}
-          onPointerCancel={handlePointerUpOrLeave}
-          onContextMenu={(e) => e.preventDefault()}
-          animate={{ scale: isHolding ? 0.93 : 1 }}
-          transition={{ type: 'spring', stiffness: 480, damping: 24 }}
-          className={`relative z-10 flex h-[132px] w-[132px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer touch-none outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 ${
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.94 }}
+          onClick={handleCircleClick}
+          className={`relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 ${
             isRunning
-              ? 'bg-gradient-to-br from-rose-500 via-rose-600 to-orange-600 shadow-rose-600/30'
+              ? 'bg-gradient-to-br from-rose-500 via-rose-600 to-red-600 shadow-rose-600/30'
               : 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-600/30'
           }`}
         >
           {isRunning ? (
             <>
-              <Square className="mb-1 h-5 w-5 fill-current opacity-95" />
-              <span className="font-mono text-lg font-black tracking-tight leading-none">
-                {formatChronometer(elapsedSec)}
+              <LogOut className="mb-1.5 h-7 w-7" />
+              <span className="text-xs font-black uppercase tracking-widest leading-none">
+                {language === 'es' ? 'Marcar Salida' : 'Marcar Saída'}
               </span>
-              <span className="mt-1.5 text-[9px] font-black uppercase tracking-widest text-rose-100">
-                {isHolding
-                  ? language === 'es'
-                    ? 'Soltando...'
-                    : 'Encerrando...'
-                  : language === 'es'
-                  ? 'Mantén para salir'
-                  : 'Segure p/ sair'}
+              <span className="mt-1.5 text-[10px] font-bold text-rose-100">
+                {language === 'es' ? 'Toque para finalizar' : 'Toque para encerrar'}
               </span>
             </>
           ) : (
             <>
-              <Play className="mb-1 h-7 w-7 fill-current translate-x-0.5" />
+              <LogIn className="mb-1.5 h-7 w-7" />
               <span className="text-xs font-black uppercase tracking-widest leading-none">
-                {isHolding
-                  ? language === 'es'
-                    ? 'Iniciando...'
-                    : 'Batendo...'
-                  : language === 'es'
-                  ? 'Iniciar Turno'
-                  : 'Iniciar Turno'}
+                {language === 'es' ? 'Marcar Entrada' : 'Marcar Entrada'}
               </span>
-              <span className="mt-1.5 text-[9px] font-bold text-emerald-100">
-                {language === 'es' ? 'Mantén presionado' : 'Segure 0,7s'}
+              <span className="mt-1.5 text-[10px] font-bold text-emerald-100">
+                {language === 'es' ? 'Toque para ingresar' : 'Toque para ingressar'}
               </span>
             </>
           )}
@@ -355,12 +199,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
 
       {/* Bottom Helper Row */}
       <div className="relative z-10 mt-4 flex flex-wrap items-center justify-center gap-3">
-        {isRunning && scheduledMinutes > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
-            <Clock className="h-3 w-3 text-emerald-600" />
-            {language === 'es' ? 'Previsto:' : 'Previsto:'} {formatMinutesAsHours(scheduledMinutes)}
-          </span>
-        )}
         <button
           type="button"
           onClick={onOpenManualEntry}
@@ -370,6 +208,76 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
           {language === 'es' ? 'Cargar / ajustar turno manual' : 'Lançar / ajustar turno manual'}
         </button>
       </div>
+
+      {/* Confirmation Popup ("Certeza que quer ingressar/sair agora (HH:mm)?") */}
+      <AnimatePresence>
+        {confirmPrompt && (
+          <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmPrompt(null)}
+              className="absolute inset-0 bg-slate-900/55 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+              className="relative z-10 w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl space-y-4 text-center"
+            >
+              <div
+                className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md ${
+                  confirmPrompt.action === 'start'
+                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                    : 'bg-gradient-to-br from-rose-500 to-red-600'
+                }`}
+              >
+                <Clock className="h-6 w-6" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {confirmPrompt.action === 'start'
+                    ? language === 'es'
+                      ? `¿Seguro que quieres ingresar ahora (${confirmPrompt.timeLabel})?`
+                      : `Certeza que quer ingressar agora (${confirmPrompt.timeLabel})?`
+                    : language === 'es'
+                    ? `¿Seguro que quieres marcar la salida ahora (${confirmPrompt.timeLabel})?`
+                    : `Certeza que quer marcar a saída agora (${confirmPrompt.timeLabel})?`}
+                </h3>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  {confirmPrompt.action === 'start'
+                    ? 'Será registrado somente o horário de entrada do seu turno.'
+                    : `Finaliza o turno iniciado às ${activeShift?.startTime}.`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmPrompt(null)}
+                  className="rounded-2xl border border-slate-200 bg-white py-3 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAction}
+                  className={`rounded-2xl py-3 text-xs font-black uppercase tracking-wider text-white shadow-md cursor-pointer ${
+                    confirmPrompt.action === 'start'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {confirmPrompt.action === 'start' ? 'Sim, ingressar' : 'Sim, sair'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
