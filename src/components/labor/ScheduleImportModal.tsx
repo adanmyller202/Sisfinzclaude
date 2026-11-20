@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -28,6 +28,8 @@ interface ScheduleImportModalProps {
   employeeName?: string;
   onApplySchedule: (schedule: WeeklySchedule, saveAsDefault: boolean) => void;
 }
+
+const REQUEST_TIMEOUT_MS = 22000;
 
 const DAY_PATTERNS: { key: DayOfWeekKey; regex: RegExp }[] = [
   { key: 'mon', regex: /\b(seg(?:unda)?|lun(?:es)?|mon(?:day)?)\b/i },
@@ -123,14 +125,14 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
   return { schedule: next, matchedDays };
 }
 
-/** Compress image in memory only (max 1200px, JPEG 0.78) so it is never persisted anywhere */
+/** Compress image in memory only (max 1024px, JPEG 0.72) for fast upload and zero persistence */
 async function compressImageInMemory(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       try {
-        const maxSide = 1200;
+        const maxSide = 1024;
         let { width, height } = img;
         if (width > maxSide || height > maxSide) {
           const ratio = Math.min(maxSide / width, maxSide / height);
@@ -143,7 +145,7 @@ async function compressImageInMemory(file: File): Promise<{ base64: string; mime
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas unavailable');
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
         const base64 = dataUrl.split(',')[1] || '';
         resolve({ base64, mimeType: 'image/jpeg' });
       } catch (err) {
@@ -169,6 +171,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   onApplySchedule,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [pastedText, setPastedText] = useState('');
   const [nameHint, setNameHint] = useState(employeeName || '');
@@ -177,7 +180,17 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   const [previewSchedule, setPreviewSchedule] = useState<WeeklySchedule | null>(null);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
 
+  const abortInFlight = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => abortInFlight(), []);
+
   const resetModal = () => {
+    abortInFlight();
     setIsAnalyzing(false);
     setErrorMsg(null);
     setPreviewSchedule(null);
@@ -195,6 +208,15 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
 
+    abortInFlight();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    let didTimeout = false;
+    const timeoutId = window.setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
     setIsAnalyzing(true);
     setErrorMsg(null);
 
@@ -204,6 +226,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
       const resp = await fetch('/api/work/parse-schedule', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
@@ -232,8 +255,18 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         throw new Error('A IA não retornou horários válidos para esta imagem.');
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Erro ao analisar a imagem.');
+      if (err?.name === 'AbortError') {
+        if (didTimeout) {
+          setErrorMsg('A leitura demorou mais que o esperado. Tente novamente ou recorte só a tabela do cronograma.');
+        }
+      } else {
+        setErrorMsg(err?.message || 'Erro ao analisar a imagem.');
+      }
     } finally {
+      window.clearTimeout(timeoutId);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsAnalyzing(false);
     }
   };
@@ -372,13 +405,16 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                         type="button"
                         disabled={isAnalyzing}
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-4 py-8 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-60 cursor-pointer"
+                        className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-4 py-8 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-75 cursor-pointer"
                       >
                         {isAnalyzing ? (
                           <>
                             <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
                             <span className="text-xs font-black text-emerald-900">
                               Lendo horários com IA...
+                            </span>
+                            <span className="text-[10.5px] font-medium text-emerald-700/80">
+                              Isso costuma levar poucos segundos
                             </span>
                           </>
                         ) : (
@@ -395,6 +431,19 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                           </>
                         )}
                       </button>
+
+                      {isAnalyzing && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            abortInFlight();
+                            setIsAnalyzing(false);
+                          }}
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        >
+                          Cancelar leitura
+                        </button>
+                      )}
 
                       <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] font-medium text-slate-600">
                         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
