@@ -188,24 +188,47 @@ app.post('/api/work/parse-schedule', async (req, res) => {
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
     const prompt = `Leia esta imagem de cronograma semanal de trabalho${typeof employeeName === 'string' && employeeName.trim() ? ` para o funcionário "${employeeName.trim().slice(0, 120)}"` : ''} e retorne APENAS um JSON válido no formato:
 {"schedule":{"mon":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"tue":{"isOff":true,"startTime":"18:00","endTime":"02:00"},"wed":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"thu":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"fri":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sat":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sun":{"isOff":false,"startTime":"18:00","endTime":"02:00"}}}
-Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime. Não invente horários ilegíveis: indique o dia como folga somente se a imagem mostrar claramente uma folga; caso contrário, preserve o dia com horários vazios.`;
+Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { inlineData: { data: cleanBase64, mimeType: safeMimeType } },
-        { text: prompt },
-      ],
-      config: { responseMimeType: 'application/json' },
-    });
+    const modelsToTry = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    let rawText = '';
+    let lastErr: any = null;
 
-    const parsed = JSON.parse(response.text || '{}');
-    if (!parsed?.schedule || typeof parsed.schedule !== 'object') {
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { data: cleanBase64, mimeType: safeMimeType } },
+                { text: prompt },
+              ],
+            },
+          ],
+          config: { responseMimeType: 'application/json' },
+        });
+        rawText = response.text || '';
+        if (rawText.trim()) break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    if (!rawText.trim()) {
+      throw lastErr || new Error('Resposta vazia da IA');
+    }
+
+    const cleanedJson = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(cleanedJson);
+    const scheduleObj = parsed?.schedule || (parsed?.mon ? parsed : null);
+    if (!scheduleObj || typeof scheduleObj !== 'object') {
       res.status(422).json({ error: 'Não foi possível identificar os dias da semana na imagem.' });
       return;
     }
 
-    res.json({ schedule: parsed.schedule });
+    res.json({ schedule: scheduleObj });
   } catch (err) {
     console.error('[Labor] Schedule image parse failed:', err);
     res.status(500).json({ error: 'Erro ao analisar a imagem do cronograma.' });
