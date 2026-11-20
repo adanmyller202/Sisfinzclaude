@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   RotateCcw,
+  Edit3,
 } from 'lucide-react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../../types';
 import {
@@ -119,8 +120,10 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [selectedSalaryMonth, setSelectedSalaryMonth] = useState<string>(currentMonth);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
-  // Manual shift entry / post-shift summary modal state
+  // Manual shift entry / edit shift modal state
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [editingActiveShift, setEditingActiveShift] = useState(false);
   const [shiftFormDate, setShiftFormDate] = useState(todayStr);
   const [shiftFormStart, setShiftFormStart] = useState('18:00');
   const [shiftFormEnd, setShiftFormEnd] = useState('02:00');
@@ -130,6 +133,14 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [justFinishedShiftBanner, setJustFinishedShiftBanner] = useState<{
     durationMinutes: number;
     scheduledMinutes: number;
+  } | null>(null);
+
+  // Duplicate punch prevention popup
+  const [duplicatePunchPrompt, setDuplicatePunchPrompt] = useState<{
+    source: 'punch' | 'manual';
+    date: string;
+    existingShifts: LaborShiftEntry[];
+    isSplitShiftDay: boolean;
   } | null>(null);
 
   // Salary editor state + smart scope prompt ("Só neste mês" vs "Deste mês em diante")
@@ -210,8 +221,52 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setOpenSection((prev) => (prev === sec ? null : sec));
   };
 
+  // --- Shift Modal Openers ---
+  const openNewManualShiftModal = () => {
+    setEditingShiftId(null);
+    setEditingActiveShift(false);
+    setShiftFormDate(todayStr);
+    setShiftFormStart(todaySchedule.startTime || '18:00');
+    setShiftFormEnd(todaySchedule.endTime || '02:00');
+    setShiftFormTags([]);
+    setShiftFormNote('');
+    setShiftFormQuickTip('');
+    setShiftModalOpen(true);
+  };
+
+  const openEditShiftModal = (shift: LaborShiftEntry) => {
+    setEditingShiftId(shift.id);
+    setEditingActiveShift(false);
+    setShiftFormDate(shift.date);
+    setShiftFormStart(shift.startTime);
+    setShiftFormEnd(shift.endTime);
+    setShiftFormTags(shift.tags || []);
+    setShiftFormNote(shift.note || '');
+    setShiftFormQuickTip('');
+    setShiftModalOpen(true);
+  };
+
+  const openEditActiveShiftModal = () => {
+    if (!job.activeShift) return;
+    setEditingShiftId(null);
+    setEditingActiveShift(true);
+    setShiftFormDate(job.activeShift.startDate);
+    setShiftFormStart(job.activeShift.startTime);
+    setShiftFormEnd('');
+    setShiftFormTags([]);
+    setShiftFormNote('');
+    setShiftFormQuickTip('');
+    setShiftModalOpen(true);
+  };
+
+  const closeShiftModal = () => {
+    setShiftModalOpen(false);
+    setEditingShiftId(null);
+    setEditingActiveShift(false);
+  };
+
   // --- Punch Clock Handlers ---
-  const handleStartShift = async () => {
+  const startNewActiveShiftNow = async () => {
     const now = new Date();
     const startDate = formatLocalDateYYYYMMDD(now);
     const startTime = formatLocalTimeHHMM(now);
@@ -227,6 +282,23 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     });
   };
 
+  const handleStartShift = async () => {
+    const now = new Date();
+    const startDate = formatLocalDateYYYYMMDD(now);
+    const existingForToday = (job.shifts || []).filter((s) => s.date === startDate);
+    if (existingForToday.length > 0) {
+      const sched = getScheduleForDate(job, startDate);
+      setDuplicatePunchPrompt({
+        source: 'punch',
+        date: startDate,
+        existingShifts: existingForToday,
+        isSplitShiftDay: Boolean(sched.isSplitShift && !sched.isOff && !sched.isUnset),
+      });
+      return;
+    }
+    await startNewActiveShiftNow();
+  };
+
   const handleEndShift = async () => {
     if (!job.activeShift) return;
     const now = new Date();
@@ -238,18 +310,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         ? calculateShiftMinutes(job.activeShift.startTime, endTime)
         : Math.round((now.getTime() - startedMs) / 60000)
     );
-
-    setShiftFormDate(job.activeShift.startDate);
-    setShiftFormStart(job.activeShift.startTime);
-    setShiftFormEnd(endTime);
-    setShiftFormTags(
-      job.activeShift.scheduledMinutes > 0 &&
-        durationMinutes - job.activeShift.scheduledMinutes >= 20
-        ? ['overtime']
-        : []
-    );
-    setShiftFormNote('');
-    setShiftFormQuickTip('');
 
     const newShift: LaborShiftEntry = {
       id: `shift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -281,7 +341,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     }
   };
 
-  const handleSaveManualShift = async () => {
+  const commitNewManualShift = async () => {
     const durationMinutes = calculateShiftMinutes(shiftFormStart, shiftFormEnd);
     const sched = getScheduleForDate(job, shiftFormDate);
     const scheduledMinutes = calculateDayScheduleMinutes(sched);
@@ -316,10 +376,77 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       });
     }
 
-    setShiftModalOpen(false);
+    closeShiftModal();
     setShiftFormNote('');
     setShiftFormQuickTip('');
     setShiftFormTags([]);
+  };
+
+  const handleSaveManualShift = async () => {
+    // 1. Updating an active shift's start date/time
+    if (editingActiveShift && job.activeShift) {
+      const [y, m, d] = shiftFormDate.split('-').map(Number);
+      const [hh, mm] = shiftFormStart.split(':').map(Number);
+      const dt = new Date(y || 2026, (m || 1) - 1, d || 1, hh || 0, mm || 0, 0);
+      const sched = getScheduleForDate(job, shiftFormDate);
+      await onSaveJob({
+        ...job,
+        activeShift: {
+          startedAtIso: dt.toISOString(),
+          startDate: shiftFormDate,
+          startTime: shiftFormStart,
+          scheduledMinutes: calculateDayScheduleMinutes(sched),
+        },
+      });
+      closeShiftModal();
+      return;
+    }
+
+    // 2. Updating an existing recorded shift (no duplicate)
+    if (editingShiftId) {
+      const durationMinutes = calculateShiftMinutes(shiftFormStart, shiftFormEnd);
+      const sched = getScheduleForDate(job, shiftFormDate);
+      const scheduledMinutes = calculateDayScheduleMinutes(sched);
+
+      const updatedShifts = (job.shifts || [])
+        .map((s) =>
+          s.id === editingShiftId
+            ? {
+                ...s,
+                date: shiftFormDate,
+                startTime: shiftFormStart,
+                endTime: shiftFormEnd,
+                durationMinutes,
+                scheduledMinutes,
+                tags: shiftFormTags,
+                note: shiftFormNote.trim() || undefined,
+              }
+            : s
+        )
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      await onSaveJob({
+        ...job,
+        shifts: updatedShifts,
+      });
+      closeShiftModal();
+      return;
+    }
+
+    // 3. Creating a new manual shift -> check for duplicate on the same day
+    const existingForDate = (job.shifts || []).filter((s) => s.date === shiftFormDate);
+    if (existingForDate.length > 0) {
+      const sched = getScheduleForDate(job, shiftFormDate);
+      setDuplicatePunchPrompt({
+        source: 'manual',
+        date: shiftFormDate,
+        existingShifts: existingForDate,
+        isSplitShiftDay: Boolean(sched.isSplitShift && !sched.isOff && !sched.isUnset),
+      });
+      return;
+    }
+
+    await commitNewManualShift();
   };
 
   const handleDeleteShift = async (shiftId: string) => {
@@ -648,14 +775,25 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => handleDeleteShift(s.id)}
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-          aria-label="Excluir turno"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => openEditShiftModal(s)}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
+            aria-label="Alterar horário do turno"
+            title="Alterar horário"
+          >
+            <Edit3 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteShift(s.id)}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+            aria-label="Excluir turno"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   };
@@ -738,15 +876,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         language={language}
         onStartShift={handleStartShift}
         onEndShift={handleEndShift}
-        onOpenManualEntry={() => {
-          setShiftFormDate(todayStr);
-          setShiftFormStart(todaySchedule.startTime || '18:00');
-          setShiftFormEnd(todaySchedule.endTime || '02:00');
-          setShiftFormTags([]);
-          setShiftFormNote('');
-          setShiftFormQuickTip('');
-          setShiftModalOpen(true);
-        }}
+        onOpenManualEntry={openNewManualShiftModal}
       />
 
       {justFinishedShiftBanner && (
@@ -1203,7 +1333,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     </div>
                                   )}
 
-                                  {/* Punctuality / Punch Status Strip for this day */}
+                                  {/* Punctuality / Punch Status Strip with direct "Alterar" button */}
                                   {attendanceEntries.length > 0 && (
                                     <div className="mt-2.5 space-y-1.5 border-t border-slate-200/70 pt-2">
                                       {attendanceEntries.map((att) => {
@@ -1253,15 +1383,44 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                               </span>
                                             </span>
 
-                                            <span className="inline-flex items-center gap-1.5 font-mono text-[10px]">
-                                              <span>{timeRange}</span>
+                                            <div className="inline-flex items-center gap-1.5">
+                                              <span className="font-mono text-[10px]">
+                                                {timeRange}
+                                              </span>
                                               {att.isActive && (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-white">
                                                   <span className="h-1 w-1 rounded-full bg-white animate-pulse" />
                                                   Em turno
                                                 </span>
                                               )}
-                                            </span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (att.isActive) {
+                                                    openEditActiveShiftModal();
+                                                  } else {
+                                                    const found = (job.shifts || []).find(
+                                                      (s) => s.id === att.id
+                                                    );
+                                                    if (found) openEditShiftModal(found);
+                                                  }
+                                                }}
+                                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide transition-colors cursor-pointer ${
+                                                  isLate
+                                                    ? 'bg-rose-200/90 text-rose-900 hover:bg-rose-300/90'
+                                                    : isExtra
+                                                    ? 'bg-indigo-200/90 text-indigo-900 hover:bg-indigo-300/90'
+                                                    : isNoSched
+                                                    ? 'bg-slate-200/90 text-slate-800 hover:bg-slate-300/90'
+                                                    : 'bg-emerald-200/90 text-emerald-950 hover:bg-emerald-300/90'
+                                                }`}
+                                                title="Alterar horário deste ponto"
+                                              >
+                                                <Edit3 className="h-2.5 w-2.5" />
+                                                Alterar
+                                              </button>
+                                            </div>
                                           </div>
                                         );
                                       })}
@@ -2033,7 +2192,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         onApplySchedule={handleApplyImportedSchedule}
       />
 
-      {/* Manual Shift Modal */}
+      {/* Manual Shift / Edit Shift Modal */}
       <AnimatePresence>
         {shiftModalOpen && (
           <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -2041,7 +2200,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShiftModalOpen(false)}
+              onClick={closeShiftModal}
               className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs"
             />
             <motion.div
@@ -2051,17 +2210,30 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
               className="relative z-10 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] bg-white p-5 shadow-2xl space-y-4"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-900">Lançar / Ajustar Turno</h3>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {editingActiveShift
+                      ? 'Alterar Entrada (Turno em Andamento)'
+                      : editingShiftId
+                      ? 'Alterar Horário do Ponto'
+                      : 'Lançar / Ajustar Turno'}
+                  </h3>
+                  {(editingShiftId || editingActiveShift) && (
+                    <p className="text-[10.5px] font-medium text-emerald-700">
+                      Atualiza o ponto existente sem duplicar o dia
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShiftModalOpen(false)}
+                  onClick={closeShiftModal}
                   className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2 ${editingActiveShift ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 <div>
                   <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
                     Data
@@ -2084,85 +2256,193 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-bold"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
-                    Saída
-                  </label>
+                {!editingActiveShift && (
+                  <div>
+                    <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
+                      Saída
+                    </label>
+                    <input
+                      type="time"
+                      value={shiftFormEnd}
+                      onChange={(e) => setShiftFormEnd(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-bold"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {!editingActiveShift && (
+                <>
+                  <div className="text-center text-xs font-black text-emerald-700">
+                    Duração calculada:{' '}
+                    {formatMinutesAsHours(calculateShiftMinutes(shiftFormStart, shiftFormEnd))}
+                  </div>
+
+                  <div>
+                    <div className="mb-1.5 text-[10px] font-black uppercase text-slate-500">
+                      Tags rápidas do turno
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SHIFT_TAGS.map((tag) => {
+                        const active = shiftFormTags.includes(tag.id);
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() =>
+                              setShiftFormTags((prev) =>
+                                prev.includes(tag.id)
+                                  ? prev.filter((t) => t !== tag.id)
+                                  : [...prev, tag.id]
+                              )
+                            }
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-black transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {tag.labelPt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {!editingShiftId && job.tipFrequency === 'daily' && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
+                        Propina de hoje (opcional — entra no saldo)
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={shiftFormQuickTip}
+                        onChange={(e) => setShiftFormQuickTip(e.target.value)}
+                        placeholder="0"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"
+                      />
+                    </div>
+                  )}
+
                   <input
-                    type="time"
-                    value={shiftFormEnd}
-                    onChange={(e) => setShiftFormEnd(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-bold"
+                    type="text"
+                    value={shiftFormNote}
+                    onChange={(e) => setShiftFormNote(e.target.value)}
+                    placeholder="Nota do turno (ex: Fechei sozinho, +1h extra)"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold"
                   />
-                </div>
-              </div>
-
-              <div className="text-center text-xs font-black text-emerald-700">
-                Duração calculada: {formatMinutesAsHours(calculateShiftMinutes(shiftFormStart, shiftFormEnd))}
-              </div>
-
-              <div>
-                <div className="mb-1.5 text-[10px] font-black uppercase text-slate-500">
-                  Tags rápidas do turno
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {SHIFT_TAGS.map((tag) => {
-                    const active = shiftFormTags.includes(tag.id);
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() =>
-                          setShiftFormTags((prev) =>
-                            prev.includes(tag.id)
-                              ? prev.filter((t) => t !== tag.id)
-                              : [...prev, tag.id]
-                          )
-                        }
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-black transition-colors cursor-pointer ${
-                          active
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {tag.labelPt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {job.tipFrequency === 'daily' && (
-                <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
-                    Propina de hoje (opcional — entra no saldo)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={shiftFormQuickTip}
-                    onChange={(e) => setShiftFormQuickTip(e.target.value)}
-                    placeholder="0"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"
-                  />
-                </div>
+                </>
               )}
-
-              <input
-                type="text"
-                value={shiftFormNote}
-                onChange={(e) => setShiftFormNote(e.target.value)}
-                placeholder="Nota do turno (ex: Fechei sozinho, +1h extra)"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold"
-              />
 
               <button
                 type="button"
                 onClick={handleSaveManualShift}
                 className="w-full rounded-2xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700 cursor-pointer"
               >
-                Salvar Turno
+                {editingShiftId || editingActiveShift ? 'Salvar Alteração' : 'Salvar Turno'}
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Duplicate Punch Warning Popup */}
+      <AnimatePresence>
+        {duplicatePunchPrompt && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDuplicatePunchPrompt(null)}
+              className="absolute inset-0 bg-slate-900/55 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+              className="relative z-10 w-full max-w-sm rounded-[2rem] border border-amber-200 bg-white p-5 shadow-2xl space-y-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-slate-900">
+                    Ponto já batido em {formatShortDate(duplicatePunchPrompt.date)}
+                  </h3>
+                  <p className="mt-1 text-xs font-medium text-slate-600 leading-snug">
+                    Este dia já possui ponto registrado. Para evitar duplicação, deseja alterar o horário do ponto existente?
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3">
+                {duplicatePunchPrompt.existingShifts.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between text-xs font-black text-slate-800"
+                  >
+                    <span className="font-mono">
+                      {s.startTime} → {s.endTime}
+                    </span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] text-emerald-800">
+                      {formatMinutesAsHours(s.durationMinutes)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                {duplicatePunchPrompt.existingShifts.map((s, idx) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setDuplicatePunchPrompt(null);
+                      openEditShiftModal(s);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700 cursor-pointer"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    {duplicatePunchPrompt.existingShifts.length > 1
+                      ? `Alterar ${idx + 1}º ponto (${s.startTime} → ${s.endTime})`
+                      : 'Alterar ponto existente'}
+                  </button>
+                ))}
+
+                {duplicatePunchPrompt.isSplitShiftDay &&
+                  duplicatePunchPrompt.existingShifts.length < 2 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const src = duplicatePunchPrompt.source;
+                        setDuplicatePunchPrompt(null);
+                        if (src === 'punch') {
+                          await startNewActiveShiftNow();
+                        } else {
+                          await commitNewManualShift();
+                        }
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 py-2.5 text-xs font-black uppercase tracking-wider text-indigo-800 hover:bg-indigo-100 cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {duplicatePunchPrompt.source === 'punch'
+                        ? 'Iniciar 2º turno (Cortado)'
+                        : 'Salvar como 2º turno (Cortado)'}
+                    </button>
+                  )}
+
+                <button
+                  type="button"
+                  onClick={() => setDuplicatePunchPrompt(null)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
