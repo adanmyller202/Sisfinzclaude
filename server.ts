@@ -190,13 +190,13 @@ app.post('/api/work/parse-schedule', async (req, res) => {
 {"schedule":{"mon":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"tue":{"isOff":true,"startTime":"18:00","endTime":"02:00"},"wed":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"thu":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"fri":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sat":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sun":{"isOff":false,"startTime":"18:00","endTime":"02:00"}}}
 Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime.`;
 
-    const modelsToTry = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest'];
     let rawText = '';
     let lastErr: any = null;
 
     for (const modelName of modelsToTry) {
       try {
-        const response = await ai.models.generateContent({
+        const generatePromise = ai.models.generateContent({
           model: modelName,
           contents: [
             {
@@ -207,8 +207,19 @@ Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se 
               ],
             },
           ],
-          config: { responseMimeType: 'application/json' },
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0,
+            maxOutputTokens: 450,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout no modelo ${modelName}`)), 12000)
+        );
+
+        const response = await Promise.race([generatePromise, timeoutPromise]);
         rawText = response.text || '';
         if (rawText.trim()) break;
       } catch (e) {
