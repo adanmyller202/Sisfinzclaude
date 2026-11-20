@@ -150,6 +150,68 @@ app.post('/api/mone/live-token', async (req, res) => {
   }
 });
 
+// Parse a weekly work schedule image in memory with Gemini Vision. No image is persisted.
+app.post('/api/work/parse-schedule', async (req, res) => {
+  try {
+    const geminiApiKey = process.env.GEMINI_API_KEY || '';
+    const { imageBase64, mimeType, employeeName } = req.body || {};
+
+    if (!geminiApiKey) {
+      res.status(503).json({ error: 'Chave de IA indisponível no servidor.' });
+      return;
+    }
+    if (typeof imageBase64 !== 'string' || !imageBase64.trim()) {
+      res.status(400).json({ error: 'Imagem não fornecida.' });
+      return;
+    }
+    if (imageBase64.length > 12 * 1024 * 1024) {
+      res.status(413).json({ error: 'Imagem muito grande. Envie uma imagem menor.' });
+      return;
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const safeMimeType = typeof mimeType === 'string' && allowedMimeTypes.includes(mimeType)
+      ? mimeType
+      : 'image/jpeg';
+    const cleanBase64 = imageBase64.replace(/^data:image\\/[a-zA-Z0-9.+-]+;base64,/, '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cleanBase64)) {
+      res.status(400).json({ error: 'Formato de imagem inválido.' });
+      return;
+    }
+
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    if (!checkRateLimit(`work_schedule_ip:${clientIp}`)) {
+      res.status(429).json({ error: 'Muitas imagens analisadas. Aguarde um minuto.' });
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    const prompt = `Leia esta imagem de cronograma semanal de trabalho${typeof employeeName === 'string' && employeeName.trim() ? ` para o funcionário "${employeeName.trim().slice(0, 120)}"` : ''} e retorne APENAS um JSON válido no formato:
+{"schedule":{"mon":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"tue":{"isOff":true,"startTime":"18:00","endTime":"02:00"},"wed":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"thu":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"fri":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sat":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sun":{"isOff":false,"startTime":"18:00","endTime":"02:00"}}}
+Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime. Não invente horários ilegíveis: indique o dia como folga somente se a imagem mostrar claramente uma folga; caso contrário, preserve o dia com horários vazios.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        { inlineData: { data: cleanBase64, mimeType: safeMimeType } },
+        { text: prompt },
+      ],
+      config: { responseMimeType: 'application/json' },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    if (!parsed?.schedule || typeof parsed.schedule !== 'object') {
+      res.status(422).json({ error: 'Não foi possível identificar os dias da semana na imagem.' });
+      return;
+    }
+
+    res.json({ schedule: parsed.schedule });
+  } catch (err) {
+    console.error('[Labor] Schedule image parse failed:', err);
+    res.status(500).json({ error: 'Erro ao analisar a imagem do cronograma.' });
+  }
+});
+
 // Secure Exact-Email User Lookup with Abuse & Rate-Limiting Protection (Server Token Verified)
 app.post('/api/search-user', async (req, res) => {
   try {
