@@ -10,6 +10,8 @@ export type ShiftTag = 'overtime' | 'holiday' | 'split_shift' | 'day_swap' | 'ad
 
 export interface DaySchedule {
   isOff: boolean;
+  /** True when the week has no schedule registered yet (counts as 0h and excluded from calculations) */
+  isUnset?: boolean;
   startTime: string; // HH:mm
   endTime: string;   // HH:mm (if <= startTime, treated as overnight +1 day)
   isSplitShift?: boolean;

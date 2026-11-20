@@ -179,7 +179,13 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   const isRunning = Boolean(activeShift);
   const strokeDashoffset = RING_CIRCUMFERENCE * (1 - (isHolding ? holdProgress : isRunning ? shiftProgressRatio : 0));
 
-  const scheduleSummary = todaySchedule.isOff
+  const scheduleSummary = todaySchedule.isUnset
+    ? language === 'es'
+      ? 'Sin cronograma esta semana'
+      : language === 'en'
+      ? 'No schedule this week'
+      : 'Sem cronograma nesta semana'
+    : todaySchedule.isOff
     ? language === 'es'
       ? 'Hoy es tu franco'
       : language === 'en'
@@ -205,12 +211,20 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
       <div className="relative z-10 mb-5 flex items-center gap-2 rounded-full border border-emerald-200/80 bg-white/90 px-3.5 py-1.5 shadow-2xs">
         <span
           className={`h-2 w-2 rounded-full ${
-            isRunning ? 'bg-rose-500 animate-pulse' : todaySchedule.isOff ? 'bg-amber-400' : 'bg-emerald-500'
+            isRunning
+              ? 'bg-rose-500 animate-pulse'
+              : todaySchedule.isUnset
+              ? 'bg-slate-400'
+              : todaySchedule.isOff
+              ? 'bg-amber-400'
+              : 'bg-emerald-500'
           }`}
         />
         <span className="text-[11px] font-black tracking-wide text-slate-700">
           {isRunning
             ? `${language === 'es' ? 'En turno desde' : 'Em turno desde'} ${activeShift?.startTime}`
+            : todaySchedule.isUnset
+            ? scheduleSummary
             : `${language === 'es' ? 'Turno hoy' : 'Turno hoje'}: ${scheduleSummary}`}
         </span>
       </div>

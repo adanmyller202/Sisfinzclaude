@@ -20,6 +20,8 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../../types';
 import {
@@ -33,11 +35,14 @@ import {
   WeeklySchedule,
 } from '../../types/labor';
 import {
+  LATE_TOLERANCE_MINUTES,
   ORDERED_WEEKDAYS,
   WEEKDAY_LABELS,
   buildTwelveMonthSalaryProjection,
   calculateDayScheduleMinutes,
   calculateMonthSalary,
+  calculateMonthlyAudit,
+  calculateQuarterlyLateAudit,
   calculateShiftMinutes,
   calculateWeeklyAudit,
   evaluatePunchPunctuality,
@@ -50,6 +55,7 @@ import {
   getScheduleForDate,
   getScheduleForWeek,
   getWeekStartMonday,
+  hasScheduleForWeek,
   shiftDateByDays,
 } from '../../utils/laborCalculations';
 import { formatCurrency } from '../../utils/currency';
@@ -107,6 +113,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
   const [openSection, setOpenSection] = useState<AccordionSection>('schedule');
   const [selectedMonday, setSelectedMonday] = useState<string>(() => getWeekStartMonday(todayStr));
+  const [historyMode, setHistoryMode] = useState<'weekly' | 'monthly'>('monthly');
+  const [selectedAuditMonth, setSelectedAuditMonth] = useState<string>(currentMonth);
   const [selectedSalaryMonth, setSelectedSalaryMonth] = useState<string>(currentMonth);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
@@ -156,6 +164,10 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const todaySchedule = useMemo(() => getScheduleForDate(job, todayStr), [job, todayStr]);
+  const selectedWeekHasSchedule = useMemo(
+    () => hasScheduleForWeek(job, selectedMonday),
+    [job, selectedMonday]
+  );
   const weekSchedule = useMemo(
     () => getScheduleForWeek(job, selectedMonday),
     [job, selectedMonday]
@@ -163,6 +175,18 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const weeklyAudit = useMemo(
     () => calculateWeeklyAudit(job, selectedMonday),
     [job, selectedMonday]
+  );
+  const monthlyAudit = useMemo(
+    () => calculateMonthlyAudit(job, selectedAuditMonth),
+    [job, selectedAuditMonth]
+  );
+  const currentMonthAudit = useMemo(
+    () => calculateMonthlyAudit(job, currentMonth),
+    [job, currentMonth]
+  );
+  const quarterlyLateAudit = useMemo(
+    () => calculateQuarterlyLateAudit(job, todayStr),
+    [job, todayStr]
   );
   const currentMonthSalary = useMemo(
     () => calculateMonthSalary(job, selectedSalaryMonth),
@@ -212,12 +236,14 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         : Math.round((now.getTime() - startedMs) / 60000)
     );
 
-    // Pre-fill post-shift modal so user can add tags, notes, or daily tip
     setShiftFormDate(job.activeShift.startDate);
     setShiftFormStart(job.activeShift.startTime);
     setShiftFormEnd(endTime);
     setShiftFormTags(
-      durationMinutes - job.activeShift.scheduledMinutes >= 20 ? ['overtime'] : []
+      job.activeShift.scheduledMinutes > 0 &&
+        durationMinutes - job.activeShift.scheduledMinutes >= 20
+        ? ['overtime']
+        : []
     );
     setShiftFormNote('');
     setShiftFormQuickTip('');
@@ -229,7 +255,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       endTime,
       durationMinutes,
       scheduledMinutes: job.activeShift.scheduledMinutes,
-      tags: durationMinutes - job.activeShift.scheduledMinutes >= 20 ? ['overtime'] : [],
+      tags:
+        job.activeShift.scheduledMinutes > 0 &&
+        durationMinutes - job.activeShift.scheduledMinutes >= 20
+          ? ['overtime']
+          : [],
       createdAt: now.toISOString(),
     };
 
@@ -265,7 +295,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    let updatedJob: LaborJob = {
+    const updatedJob: LaborJob = {
       ...job,
       shifts: [entry, ...(job.shifts || [])].sort((a, b) => b.date.localeCompare(a.date)),
     };
@@ -304,7 +334,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     const currentWeek = getScheduleForWeek(job, selectedMonday);
     const updatedWeek: WeeklySchedule = {
       ...currentWeek,
-      [dayKey]: { ...currentWeek[dayKey], ...patch },
+      [dayKey]: { ...currentWeek[dayKey], ...patch, isUnset: false },
     };
     await onSaveJob({
       ...job,
@@ -319,13 +349,40 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     schedule: WeeklySchedule,
     saveAsDefault: boolean
   ) => {
+    const cleanedSchedule: WeeklySchedule = { ...schedule };
+    for (const dayKey of ORDERED_WEEKDAYS) {
+      cleanedSchedule[dayKey] = { ...cleanedSchedule[dayKey], isUnset: false };
+    }
     await onSaveJob({
       ...job,
-      defaultSchedule: saveAsDefault ? schedule : job.defaultSchedule,
+      defaultSchedule: saveAsDefault ? cleanedSchedule : job.defaultSchedule,
       weekOverrides: {
         ...(job.weekOverrides || {}),
-        [selectedMonday]: schedule,
+        [selectedMonday]: cleanedSchedule,
       },
+    });
+  };
+
+  const handleApplyDefaultToCurrentWeek = async () => {
+    const cleanedDefault: WeeklySchedule = { ...job.defaultSchedule };
+    for (const dayKey of ORDERED_WEEKDAYS) {
+      cleanedDefault[dayKey] = { ...cleanedDefault[dayKey], isUnset: false };
+    }
+    await onSaveJob({
+      ...job,
+      weekOverrides: {
+        ...(job.weekOverrides || {}),
+        [selectedMonday]: cleanedDefault,
+      },
+    });
+  };
+
+  const handleClearCurrentWeekSchedule = async () => {
+    const nextOverrides = { ...(job.weekOverrides || {}) };
+    delete nextOverrides[selectedMonday];
+    await onSaveJob({
+      ...job,
+      weekOverrides: nextOverrides,
     });
   };
 
@@ -510,6 +567,66 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     return `${d}/${m}`;
   };
 
+  const renderShiftListItem = (s: LaborShiftEntry) => {
+    const daySched = getScheduleForDate(job, s.date);
+    const punctuality = evaluatePunchPunctuality(s.startTime, daySched);
+    const isLate = punctuality.status === 'late';
+    return (
+      <div
+        key={s.id}
+        className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${
+          isLate ? 'border-rose-200 bg-rose-50/35' : 'border-slate-200/80 bg-white'
+        }`}
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-black text-slate-900">{formatShortDate(s.date)}</span>
+            <span className="font-mono text-xs font-bold text-slate-600">
+              {s.startTime} → {s.endTime}
+            </span>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-700">
+              {formatMinutesAsHours(s.durationMinutes)}
+            </span>
+            {punctuality.status !== 'extra_day' && punctuality.status !== 'no_schedule' && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
+                  isLate ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {isLate
+                  ? `Atraso ${formatDurationCompact(punctuality.diffMinutes)}`
+                  : 'No horário'}
+              </span>
+            )}
+          </div>
+          {(s.tags.length > 0 || s.note) && (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              {s.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-600"
+                >
+                  {SHIFT_TAGS.find((t) => t.id === tag)?.labelPt || tag}
+                </span>
+              ))}
+              {s.note && (
+                <span className="text-[10px] font-medium text-slate-500">• {s.note}</span>
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => handleDeleteShift(s.id)}
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+          aria-label="Excluir turno"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  };
+
   const accordionItems: {
     id: Exclude<AccordionSection, null>;
     title: string;
@@ -520,15 +637,17 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     {
       id: 'schedule',
       title: 'Escala Semanal & Importar IA',
-      subtitle: `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Editável Seg a Seg`,
-      badge: formatMinutesAsHours(weeklyAudit.scheduledMinutes),
+      subtitle: selectedWeekHasSchedule
+        ? `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Salva no histórico`
+        : `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Zerada (sem cronograma)`,
+      badge: selectedWeekHasSchedule ? formatMinutesAsHours(weeklyAudit.scheduledMinutes) : '0h',
       icon: Calendar,
     },
     {
       id: 'history',
       title: 'Pontos & Conferência RH',
-      subtitle: 'Horas reais batidas × cronograma da semana',
-      badge: formatMinutesAsHours(weeklyAudit.deltaMinutes, true),
+      subtitle: 'Relatório Mensal e Semanal • Tolerância 5 min',
+      badge: formatMinutesAsHours(currentMonthAudit.deltaMinutes, true),
       icon: Clock,
     },
     {
@@ -603,17 +722,98 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         />
       )}
 
+      {/* Quarterly Late Arrival Suspension Risk Alert (1/3, 2/3, 3/3) */}
+      <AnimatePresence>
+        {quarterlyLateAudit.lateCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className={`rounded-2xl border p-3.5 shadow-xs ${
+              quarterlyLateAudit.riskLevel === 'critical'
+                ? 'border-rose-300 bg-rose-50 text-rose-950'
+                : quarterlyLateAudit.riskLevel === 'high'
+                ? 'border-orange-300 bg-orange-50 text-orange-950'
+                : 'border-amber-300 bg-amber-50 text-amber-950'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white ${
+                    quarterlyLateAudit.riskLevel === 'critical'
+                      ? 'bg-rose-600'
+                      : quarterlyLateAudit.riskLevel === 'high'
+                      ? 'bg-orange-500'
+                      : 'bg-amber-500'
+                  }`}
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black leading-tight">
+                    {quarterlyLateAudit.riskLevel === 'critical'
+                      ? `Risco de Suspensão! (${quarterlyLateAudit.lateCount} de ${quarterlyLateAudit.limit} atrasos)`
+                      : quarterlyLateAudit.riskLevel === 'high'
+                      ? `Alerta Crítico: ${quarterlyLateAudit.lateCount} de ${quarterlyLateAudit.limit} atrasos no trimestre`
+                      : `Atenção: ${quarterlyLateAudit.lateCount} de ${quarterlyLateAudit.limit} atrasos no trimestre`}
+                  </div>
+                  <p className="mt-0.5 text-[10.5px] font-semibold opacity-85 leading-snug">
+                    {quarterlyLateAudit.riskLevel === 'critical'
+                      ? `${quarterlyLateAudit.labelPt}: você atingiu o limite de 3 atrasos acima de ${LATE_TOLERANCE_MINUTES} min.`
+                      : quarterlyLateAudit.riskLevel === 'high'
+                      ? `${quarterlyLateAudit.labelPt}: mais 1 atraso acima de ${LATE_TOLERANCE_MINUTES} min gera risco de suspensão.`
+                      : `${quarterlyLateAudit.labelPt}: restam ${quarterlyLateAudit.remainingBeforeRisk} antes do risco de suspensão (tolerância: ${LATE_TOLERANCE_MINUTES} min).`}
+                  </p>
+                </div>
+              </div>
+
+              {/* 3-Dot Counter Pill */}
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span
+                  className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-black text-white ${
+                    quarterlyLateAudit.riskLevel === 'critical'
+                      ? 'bg-rose-600'
+                      : quarterlyLateAudit.riskLevel === 'high'
+                      ? 'bg-orange-500'
+                      : 'bg-amber-500'
+                  }`}
+                >
+                  {quarterlyLateAudit.lateCount}/{quarterlyLateAudit.limit}
+                </span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3].map((step) => (
+                    <span
+                      key={step}
+                      className={`h-1.5 w-3 rounded-full ${
+                        step <= quarterlyLateAudit.lateCount
+                          ? quarterlyLateAudit.riskLevel === 'critical'
+                            ? 'bg-rose-600'
+                            : quarterlyLateAudit.riskLevel === 'high'
+                            ? 'bg-orange-500'
+                            : 'bg-amber-500'
+                          : 'bg-black/10'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Quick KPI Strip */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-2xs">
           <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-            Semana (RH)
+            Mês (RH)
           </div>
           <div className="mt-1 font-mono text-sm font-black text-slate-900">
-            {formatMinutesAsHours(weeklyAudit.workedMinutes)}
+            {formatMinutesAsHours(currentMonthAudit.workedMinutes)}
           </div>
           <div className="text-[9.5px] font-bold text-emerald-700">
-            Meta {formatMinutesAsHours(weeklyAudit.scheduledMinutes)}
+            Escala {formatMinutesAsHours(currentMonthAudit.scheduledMinutes)}
           </div>
         </div>
 
@@ -741,16 +941,55 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </button>
                           </div>
 
+                          {/* Empty / Unconfigured Week Notice */}
+                          {!selectedWeekHasSchedule && (
+                            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 p-3.5 space-y-2.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="text-xs font-black text-slate-800">
+                                    Semana zerada (0h) — fora dos cálculos do mês
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                                    Importe o cronograma desta semana ou marque manualmente qualquer dia abaixo para incluí-la no relatório mensal do RH.
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsImportOpen(true)}
+                                  className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[10.5px] font-black text-white hover:bg-emerald-700 cursor-pointer"
+                                >
+                                  <Upload className="h-3 w-3" />
+                                  Importar com IA
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleApplyDefaultToCurrentWeek}
+                                  className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-[10.5px] font-black text-emerald-800 hover:bg-emerald-50 cursor-pointer"
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                  Aplicar escala padrão
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="space-y-2">
                             {ORDERED_WEEKDAYS.map((dayKey, idx) => {
                               const dayDate = shiftDateByDays(selectedMonday, idx);
                               const sched = weekSchedule[dayKey];
+                              const isUnset = Boolean(sched.isUnset);
                               const isToday = dayDate === todayStr;
                               const mins = calculateDayScheduleMinutes(sched);
                               const attendanceEntries = getDayAttendanceEntries(job, dayDate, sched);
                               const hasLateEntry = attendanceEntries.some((a) => a.status === 'late');
                               const hasOnTimeEntry =
-                                attendanceEntries.length > 0 && !hasLateEntry;
+                                attendanceEntries.length > 0 &&
+                                !hasLateEntry &&
+                                attendanceEntries.some(
+                                  (a) => a.status === 'on_time' || a.status === 'early'
+                                );
 
                               return (
                                 <div
@@ -762,9 +1001,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       ? 'border-emerald-400 bg-emerald-50/40 ring-1 ring-emerald-200'
                                       : hasOnTimeEntry
                                       ? 'border-emerald-300/90 bg-emerald-50/25'
+                                      : isUnset
+                                      ? 'border-slate-200/70 bg-slate-50/50'
                                       : sched.isOff
                                       ? 'border-amber-200/80 bg-amber-50/35'
-                                      : 'border-slate-200/80 bg-slate-50/40'
+                                      : 'border-slate-200/80 bg-white'
                                   }`}
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -783,43 +1024,70 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     </div>
 
                                     <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateWeekDay(dayKey, { isOff: !sched.isOff })
-                                        }
-                                        className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer ${
-                                          sched.isOff
-                                            ? 'bg-amber-500 text-white'
-                                            : 'bg-emerald-100 text-emerald-800'
-                                        }`}
-                                      >
-                                        {sched.isOff ? 'Franco' : 'Trabalho'}
-                                      </button>
-                                      {!sched.isOff && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateWeekDay(dayKey, {
-                                              isSplitShift: !sched.isSplitShift,
-                                              splitStartTime: sched.splitStartTime || '19:00',
-                                              splitEndTime: sched.splitEndTime || '23:30',
-                                            })
-                                          }
-                                          className={`rounded-lg px-2 py-1 text-[10px] font-black cursor-pointer ${
-                                            sched.isSplitShift
-                                              ? 'bg-indigo-600 text-white'
-                                              : 'bg-white border border-slate-200 text-slate-500'
-                                          }`}
-                                          title="Ativar turno cortado (2 períodos no dia)"
-                                        >
-                                          Cortado
-                                        </button>
+                                      {isUnset ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              updateWeekDay(dayKey, {
+                                                isOff: false,
+                                                startTime: sched.startTime || '18:00',
+                                                endTime: sched.endTime || '02:00',
+                                              })
+                                            }
+                                            className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                                          >
+                                            + Trabalho
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => updateWeekDay(dayKey, { isOff: true })}
+                                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-500 hover:bg-amber-50 hover:text-amber-700 cursor-pointer"
+                                          >
+                                            Franco
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              updateWeekDay(dayKey, { isOff: !sched.isOff })
+                                            }
+                                            className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer ${
+                                              sched.isOff
+                                                ? 'bg-amber-500 text-white'
+                                                : 'bg-emerald-100 text-emerald-800'
+                                            }`}
+                                          >
+                                            {sched.isOff ? 'Franco' : 'Trabalho'}
+                                          </button>
+                                          {!sched.isOff && (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                updateWeekDay(dayKey, {
+                                                  isSplitShift: !sched.isSplitShift,
+                                                  splitStartTime: sched.splitStartTime || '19:00',
+                                                  splitEndTime: sched.splitEndTime || '23:30',
+                                                })
+                                              }
+                                              className={`rounded-lg px-2 py-1 text-[10px] font-black cursor-pointer ${
+                                                sched.isSplitShift
+                                                  ? 'bg-indigo-600 text-white'
+                                                  : 'bg-white border border-slate-200 text-slate-500'
+                                              }`}
+                                              title="Ativar turno cortado (2 períodos no dia)"
+                                            >
+                                              Cortado
+                                            </button>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                   </div>
 
-                                  {!sched.isOff && (
+                                  {!isUnset && !sched.isOff && (
                                     <div className="mt-2.5 space-y-2">
                                       <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-1.5">
@@ -881,6 +1149,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       {attendanceEntries.map((att) => {
                                         const isLate = att.status === 'late';
                                         const isExtra = att.status === 'extra_day';
+                                        const isNoSched = att.status === 'no_schedule';
                                         const partLabel = att.shiftPart ? ` (${att.shiftPart}º turno)` : '';
                                         const timeRange = att.endTime
                                           ? `${att.startTime} → ${att.endTime}`
@@ -894,39 +1163,33 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                                 ? 'bg-rose-100/90 text-rose-800 border border-rose-200'
                                                 : isExtra
                                                 ? 'bg-indigo-100/80 text-indigo-800 border border-indigo-200'
+                                                : isNoSched
+                                                ? 'bg-slate-100 text-slate-700 border border-slate-200'
                                                 : 'bg-emerald-100/85 text-emerald-900 border border-emerald-200'
                                             }`}
                                           >
                                             <span className="inline-flex items-center gap-1.5">
                                               {isLate ? (
                                                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
-                                              ) : isExtra ? (
+                                              ) : isExtra || isNoSched ? (
                                                 <Clock className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
                                               ) : (
                                                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                                               )}
                                               <span>
                                                 {isLate
-                                                  ? `${
-                                                      language === 'es' ? 'Atraso de' : 'Atraso de'
-                                                    } ${formatDurationCompact(att.diffMinutes)}${partLabel}`
+                                                  ? `Atraso de ${formatDurationCompact(att.diffMinutes)}${partLabel}`
                                                   : isExtra
                                                   ? language === 'es'
                                                     ? 'Turno en día de franco'
                                                     : 'Turno em dia de franco'
+                                                  : isNoSched
+                                                  ? 'Ponto registrado (sem cronograma)'
                                                   : att.status === 'early'
-                                                  ? `${
-                                                      language === 'es'
-                                                        ? 'Llegó a horario'
-                                                        : 'Chegou no horário'
-                                                    } (${formatDurationCompact(att.diffMinutes)} ${
-                                                      language === 'es' ? 'antes' : 'antes'
-                                                    })${partLabel}`
-                                                  : `${
-                                                      language === 'es'
-                                                        ? 'Llegó a horario'
-                                                        : 'Chegou no horário'
-                                                    }${partLabel}`}
+                                                  ? `Chegou no horário (${formatDurationCompact(att.diffMinutes)} antes)${partLabel}`
+                                                  : att.diffMinutes > 0
+                                                  ? `Chegou no horário (tolerância +${att.diffMinutes}m)${partLabel}`
+                                                  : `Chegou no horário${partLabel}`}
                                               </span>
                                             </span>
 
@@ -949,131 +1212,295 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             })}
                           </div>
 
-                          <div className="flex items-center justify-between pt-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                             <span className="text-xs font-black text-slate-600">
                               Total da semana: {formatMinutesAsHours(weeklyAudit.scheduledMinutes)}
                             </span>
-                            <button
-                              type="button"
-                              onClick={handleMakeCurrentWeekDefault}
-                              className="text-[11px] font-black text-emerald-700 hover:underline cursor-pointer"
-                            >
-                              Salvar como escala padrão
-                            </button>
+                            {selectedWeekHasSchedule && (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={handleClearCurrentWeekSchedule}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-rose-600 cursor-pointer"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  Zerar semana
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleMakeCurrentWeekDefault}
+                                  className="text-[11px] font-black text-emerald-700 hover:underline cursor-pointer"
+                                >
+                                  Salvar como padrão
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </>
                       )}
 
-                      {/* 2. HISTÓRICO DE PONTOS & CONFERÊNCIA RH */}
+                      {/* 2. HISTÓRICO DE PONTOS & CONFERÊNCIA RH (MENSAL + SEMANAL) */}
                       {item.id === 'history' && (
                         <>
-                          <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 border border-slate-200/70">
-                            <div>
-                              <div className="text-[9px] font-black uppercase text-slate-400">
-                                Cronograma
-                              </div>
-                              <div className="font-mono text-sm font-black text-slate-800">
-                                {formatMinutesAsHours(weeklyAudit.scheduledMinutes)}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[9px] font-black uppercase text-slate-400">
-                                Ponto Real
-                              </div>
-                              <div className="font-mono text-sm font-black text-emerald-700">
-                                {formatMinutesAsHours(weeklyAudit.workedMinutes)}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-[9px] font-black uppercase text-slate-400">
-                                Saldo RH
-                              </div>
-                              <div
-                                className={`font-mono text-sm font-black ${
-                                  weeklyAudit.deltaMinutes >= 0
-                                    ? 'text-emerald-600'
-                                    : 'text-rose-600'
-                                }`}
-                              >
-                                {formatMinutesAsHours(weeklyAudit.deltaMinutes, true)}
-                              </div>
-                            </div>
+                          {/* Mode Switcher: Mensal | Semanal */}
+                          <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-slate-100 p-1">
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode('monthly')}
+                              className={`rounded-xl py-2 text-xs font-black transition-all cursor-pointer ${
+                                historyMode === 'monthly'
+                                  ? 'bg-white text-emerald-700 shadow-xs'
+                                  : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                            >
+                              Conferência Mensal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode('weekly')}
+                              className={`rounded-xl py-2 text-xs font-black transition-all cursor-pointer ${
+                                historyMode === 'weekly'
+                                  ? 'bg-white text-emerald-700 shadow-xs'
+                                  : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                            >
+                              Conferência Semanal
+                            </button>
                           </div>
 
-                          {weeklyAudit.weekShifts.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
-                              Nenhum ponto registrado nesta semana ainda. Use o botão acima ou lance manualmente.
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {weeklyAudit.weekShifts.map((s) => {
-                                const daySched = getScheduleForDate(job, s.date);
-                                const punctuality = evaluatePunchPunctuality(s.startTime, daySched);
-                                const isLate = punctuality.status === 'late';
-                                return (
+                          {historyMode === 'monthly' ? (
+                            <>
+                              {/* Month Navigator */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedAuditMonth(shiftMonthStr(selectedAuditMonth, -1))
+                                    }
+                                    className="rounded-lg p-1.5 text-slate-600 hover:bg-white cursor-pointer"
+                                  >
+                                    <ChevronLeft className="h-4 w-4" />
+                                  </button>
+                                  <span className="px-2 text-xs font-black capitalize text-slate-800">
+                                    {formatMonthTitle(selectedAuditMonth)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedAuditMonth(shiftMonthStr(selectedAuditMonth, 1))
+                                    }
+                                    className="rounded-lg p-1.5 text-slate-600 hover:bg-white cursor-pointer"
+                                  >
+                                    <ChevronRight className="h-4 w-4" />
+                                  </button>
+                                </div>
+
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800 border border-emerald-200/70">
+                                  {monthlyAudit.configuredWeeksCount}/{monthlyAudit.totalWeeksCount} sem. preenchidas
+                                </span>
+                              </div>
+
+                              {/* Monthly Totals */}
+                              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 border border-slate-200/70">
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Cronograma Mês
+                                  </div>
+                                  <div className="font-mono text-sm font-black text-slate-800">
+                                    {formatMinutesAsHours(monthlyAudit.scheduledMinutes)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Ponto Real
+                                  </div>
+                                  <div className="font-mono text-sm font-black text-emerald-700">
+                                    {formatMinutesAsHours(monthlyAudit.workedMinutes)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Saldo RH Mês
+                                  </div>
                                   <div
-                                    key={s.id}
-                                    className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${
-                                      isLate
-                                        ? 'border-rose-200 bg-rose-50/35'
-                                        : 'border-slate-200/80 bg-white'
+                                    className={`font-mono text-sm font-black ${
+                                      monthlyAudit.deltaMinutes >= 0
+                                        ? 'text-emerald-600'
+                                        : 'text-rose-600'
                                     }`}
                                   >
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className="text-xs font-black text-slate-900">
-                                          {formatShortDate(s.date)}
+                                    {formatMinutesAsHours(monthlyAudit.deltaMinutes, true)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Monthly Punctuality Summary */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 text-[11px]">
+                                <div className="flex items-center gap-3">
+                                  <span className="inline-flex items-center gap-1 font-black text-emerald-700">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    {monthlyAudit.onTimeCount} no horário
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center gap-1 font-black ${
+                                      monthlyAudit.lateCount > 0 ? 'text-rose-600' : 'text-slate-400'
+                                    }`}
+                                  >
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    {monthlyAudit.lateCount} atraso{monthlyAudit.lateCount === 1 ? '' : 's'} (&gt;5m)
+                                  </span>
+                                </div>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                    quarterlyLateAudit.lateCount >= 3
+                                      ? 'bg-rose-600 text-white'
+                                      : quarterlyLateAudit.lateCount > 0
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-100 text-slate-500'
+                                  }`}
+                                >
+                                  Trimestre: {quarterlyLateAudit.lateCount}/3
+                                </span>
+                              </div>
+
+                              {/* Weeks Breakdown inside Selected Month */}
+                              <div className="space-y-1.5">
+                                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                  Semanas do mês (toque para editar na escala)
+                                </div>
+                                {monthlyAudit.weeksBreakdown.map((w) => (
+                                  <button
+                                    key={w.mondayDateStr}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedMonday(w.mondayDateStr);
+                                      setOpenSection('schedule');
+                                    }}
+                                    className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
+                                      w.hasSchedule
+                                        ? 'border-emerald-200/80 bg-white hover:border-emerald-400'
+                                        : 'border-dashed border-slate-200 bg-slate-50/70 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-xs font-black text-slate-800">
+                                        {formatShortDate(w.firstDayInMonth)} – {formatShortDate(w.lastDayInMonth)}
+                                      </span>
+                                      {!w.hasSchedule && (
+                                        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">
+                                          Zerada (0h)
                                         </span>
-                                        <span className="font-mono text-xs font-bold text-slate-600">
-                                          {s.startTime} → {s.endTime}
-                                        </span>
-                                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-700">
-                                          {formatMinutesAsHours(s.durationMinutes)}
-                                        </span>
-                                        {punctuality.status !== 'extra_day' && (
-                                          <span
-                                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
-                                              isLate
-                                                ? 'bg-rose-100 text-rose-700'
-                                                : 'bg-emerald-100 text-emerald-800'
-                                            }`}
-                                          >
-                                            {isLate
-                                              ? `Atraso ${formatDurationCompact(punctuality.diffMinutes)}`
-                                              : 'No horário'}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {(s.tags.length > 0 || s.note) && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                                          {s.tags.map((tag) => (
-                                            <span
-                                              key={tag}
-                                              className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-600"
-                                            >
-                                              {SHIFT_TAGS.find((t) => t.id === tag)?.labelPt || tag}
-                                            </span>
-                                          ))}
-                                          {s.note && (
-                                            <span className="text-[10px] font-medium text-slate-500">
-                                              • {s.note}
-                                            </span>
-                                          )}
-                                        </div>
                                       )}
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteShift(s.id)}
-                                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                                      aria-label="Excluir turno"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
+                                      <span className="font-bold text-slate-500">
+                                        {formatMinutesAsHours(w.workedMinutes)} / {formatMinutesAsHours(w.scheduledMinutes)}
+                                      </span>
+                                      {w.hasSchedule && (
+                                        <span
+                                          className={`font-black ${
+                                            w.deltaMinutes >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                          }`}
+                                        >
+                                          {formatMinutesAsHours(w.deltaMinutes, true)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Shifts Recorded in Selected Month */}
+                              {monthlyAudit.monthShifts.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
+                                  Nenhum ponto registrado neste mês ainda.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                    Pontos registrados no mês ({monthlyAudit.monthShifts.length})
                                   </div>
-                                );
-                              })}
-                            </div>
+                                  {monthlyAudit.monthShifts.map((s) => renderShiftListItem(s))}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedMonday(shiftDateByDays(selectedMonday, -7))
+                                    }
+                                    className="rounded-lg p-1.5 text-slate-600 hover:bg-white cursor-pointer"
+                                  >
+                                    <ChevronLeft className="h-4 w-4" />
+                                  </button>
+                                  <span className="px-2 text-xs font-black text-slate-800">
+                                    {formatShortDate(weeklyAudit.mondayDateStr)} – {formatShortDate(weeklyAudit.sundayDateStr)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedMonday(shiftDateByDays(selectedMonday, 7))
+                                    }
+                                    className="rounded-lg p-1.5 text-slate-600 hover:bg-white cursor-pointer"
+                                  >
+                                    <ChevronRight className="h-4 w-4" />
+                                  </button>
+                                </div>
+                                {!weeklyAudit.hasSchedule && (
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
+                                    Semana zerada (0h)
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 border border-slate-200/70">
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Cronograma
+                                  </div>
+                                  <div className="font-mono text-sm font-black text-slate-800">
+                                    {formatMinutesAsHours(weeklyAudit.scheduledMinutes)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Ponto Real
+                                  </div>
+                                  <div className="font-mono text-sm font-black text-emerald-700">
+                                    {formatMinutesAsHours(weeklyAudit.workedMinutes)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] font-black uppercase text-slate-400">
+                                    Saldo RH
+                                  </div>
+                                  <div
+                                    className={`font-mono text-sm font-black ${
+                                      weeklyAudit.deltaMinutes >= 0
+                                        ? 'text-emerald-600'
+                                        : 'text-rose-600'
+                                    }`}
+                                  >
+                                    {formatMinutesAsHours(weeklyAudit.deltaMinutes, true)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {weeklyAudit.weekShifts.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
+                                  Nenhum ponto registrado nesta semana ainda. Use o botão acima ou lance manualmente.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {weeklyAudit.weekShifts.map((s) => renderShiftListItem(s))}
+                                </div>
+                              )}
+                            </>
                           )}
                         </>
                       )}
@@ -1818,7 +2245,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             value={newBenefitValue}
                             onChange={(e) => setNewBenefitValue(e.target.value)}
                             placeholder="Valor"
-                            className="col-span-3 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold"
+                            className="col-span-3 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold"
                           />
                         </div>
                         <button

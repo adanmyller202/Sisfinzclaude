@@ -265,6 +265,10 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                                     <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                                     Em turno desde {job.activeShift?.startTime}
                                   </span>
+                                ) : todaySched.isUnset ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500">
+                                    Sem cronograma esta semana
+                                  </span>
                                 ) : todaySched.isOff ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">
                                     Hoje: Franco

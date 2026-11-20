@@ -12,6 +12,12 @@ import { getCurrentMonthStr, shiftMonthStr } from './finance';
 
 export const ORDERED_WEEKDAYS: DayOfWeekKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+/** Maximum entry delay (in minutes) still considered on time */
+export const LATE_TOLERANCE_MINUTES = 5;
+
+/** Number of late arrivals in the same quarter that triggers suspension risk */
+export const QUARTERLY_LATE_LIMIT = 3;
+
 export const WEEKDAY_LABELS: Record<DayOfWeekKey, { pt: string; es: string; en: string; shortPt: string; shortEs: string }> = {
   mon: { pt: 'Segunda', es: 'Lunes', en: 'Monday', shortPt: 'Seg', shortEs: 'Lun' },
   tue: { pt: 'Terça', es: 'Martes', en: 'Tuesday', shortPt: 'Ter', shortEs: 'Mar' },
@@ -31,6 +37,19 @@ export function createDefaultWeeklySchedule(): WeeklySchedule {
     fri: { isOff: false, startTime: '18:00', endTime: '02:30' },
     sat: { isOff: false, startTime: '18:00', endTime: '02:30' },
     sun: { isOff: false, startTime: '18:00', endTime: '01:30' },
+  };
+}
+
+/** Empty/zeroed week schedule used for any week that has not been manually filled or imported */
+export function createEmptyWeeklySchedule(): WeeklySchedule {
+  return {
+    mon: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    tue: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    wed: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    thu: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    fri: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    sat: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
+    sun: { isOff: true, isUnset: true, startTime: '18:00', endTime: '02:00' },
   };
 }
 
@@ -100,7 +119,7 @@ export function calculateShiftMinutes(startTime: string, endTime: string): numbe
 }
 
 export function calculateDayScheduleMinutes(day: DaySchedule): number {
-  if (day.isOff) return 0;
+  if (!day || day.isOff || day.isUnset) return 0;
   let total = calculateShiftMinutes(day.startTime, day.endTime);
   if (day.isSplitShift && day.splitStartTime && day.splitEndTime) {
     total += calculateShiftMinutes(day.splitStartTime, day.splitEndTime);
@@ -127,7 +146,7 @@ export function formatDurationCompact(totalMinutes: number): string {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-export type PunctualityStatus = 'on_time' | 'early' | 'late' | 'extra_day';
+export type PunctualityStatus = 'on_time' | 'early' | 'late' | 'extra_day' | 'no_schedule';
 
 export interface DayAttendanceEntry {
   id: string;
@@ -137,7 +156,7 @@ export interface DayAttendanceEntry {
   scheduledStartTime?: string;
   shiftPart?: 1 | 2;
   status: PunctualityStatus;
-  /** Positive = minutes late, Negative = minutes early, 0 = exact */
+  /** Positive = minutes after scheduled start, Negative = minutes early, 0 = exact */
   diffMinutes: number;
 }
 
@@ -150,7 +169,10 @@ function getCircularMinuteDiff(actualTime: string, scheduledTime: string): numbe
   return diff;
 }
 
-/** Evaluate whether a punch-in time matches the day's scheduled shift(s) or is late */
+/**
+ * Evaluate whether a punch-in time matches the day's scheduled shift(s).
+ * Allows up to LATE_TOLERANCE_MINUTES (5 min) grace period before counting as late.
+ */
 export function evaluatePunchPunctuality(
   actualStartTime: string,
   schedule: DaySchedule
@@ -160,6 +182,9 @@ export function evaluatePunchPunctuality(
   scheduledStartTime?: string;
   shiftPart?: 1 | 2;
 } {
+  if (!schedule || schedule.isUnset) {
+    return { status: 'no_schedule', diffMinutes: 0 };
+  }
   if (schedule.isOff) {
     return { status: 'extra_day', diffMinutes: 0 };
   }
@@ -177,7 +202,7 @@ export function evaluatePunchPunctuality(
     }
   }
 
-  if (bestDiff > 0) {
+  if (bestDiff > LATE_TOLERANCE_MINUTES) {
     return {
       status: 'late',
       diffMinutes: bestDiff,
@@ -195,7 +220,7 @@ export function evaluatePunchPunctuality(
   }
   return {
     status: 'on_time',
-    diffMinutes: 0,
+    diffMinutes: bestDiff, // 0..5 within grace tolerance
     scheduledStartTime: bestScheduled,
     shiftPart,
   };
@@ -234,6 +259,107 @@ export function getDayAttendanceEntries(
   return entries;
 }
 
+export function getQuarterInfo(dateOrMonthStr: string) {
+  const [yStr, mStr] = (dateOrMonthStr || '').split('-');
+  const year = Number(yStr) || new Date().getFullYear();
+  const month = Number(mStr) || new Date().getMonth() + 1;
+  const quarter = (Math.floor((month - 1) / 3) + 1) as 1 | 2 | 3 | 4;
+  const startMonth = (quarter - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  return {
+    year,
+    quarter,
+    startMonth,
+    endMonth,
+    labelPt: `${quarter}º Trimestre ${year}`,
+    labelEs: `${quarter}º Trimestre ${year}`,
+  };
+}
+
+export interface QuarterlyLateAudit {
+  year: number;
+  quarter: 1 | 2 | 3 | 4;
+  labelPt: string;
+  labelEs: string;
+  lateCount: number;
+  limit: number;
+  remainingBeforeRisk: number;
+  riskLevel: 'none' | 'warning' | 'high' | 'critical';
+  lateShifts: {
+    id: string;
+    date: string;
+    startTime: string;
+    scheduledStartTime?: string;
+    diffMinutes: number;
+  }[];
+}
+
+/** Count all late arrivals (> 5 min) inside the same quarter to alert about suspension risk (3/3) */
+export function calculateQuarterlyLateAudit(
+  job: LaborJob,
+  referenceDateOrMonthStr: string
+): QuarterlyLateAudit {
+  const qInfo = getQuarterInfo(referenceDateOrMonthStr);
+  const lateShifts: QuarterlyLateAudit['lateShifts'] = [];
+
+  const isInQuarter = (dateStr: string) => {
+    const [y, m] = (dateStr || '').split('-').map(Number);
+    return y === qInfo.year && m >= qInfo.startMonth && m <= qInfo.endMonth;
+  };
+
+  if (job.activeShift && isInQuarter(job.activeShift.startDate)) {
+    const sched = getScheduleForDate(job, job.activeShift.startDate);
+    const evalRes = evaluatePunchPunctuality(job.activeShift.startTime, sched);
+    if (evalRes.status === 'late') {
+      lateShifts.push({
+        id: 'active_shift',
+        date: job.activeShift.startDate,
+        startTime: job.activeShift.startTime,
+        scheduledStartTime: evalRes.scheduledStartTime,
+        diffMinutes: evalRes.diffMinutes,
+      });
+    }
+  }
+
+  for (const s of job.shifts || []) {
+    if (!isInQuarter(s.date)) continue;
+    const sched = getScheduleForDate(job, s.date);
+    const evalRes = evaluatePunchPunctuality(s.startTime, sched);
+    if (evalRes.status === 'late') {
+      lateShifts.push({
+        id: s.id,
+        date: s.date,
+        startTime: s.startTime,
+        scheduledStartTime: evalRes.scheduledStartTime,
+        diffMinutes: evalRes.diffMinutes,
+      });
+    }
+  }
+
+  lateShifts.sort((a, b) => b.date.localeCompare(a.date));
+  const lateCount = lateShifts.length;
+  const riskLevel: QuarterlyLateAudit['riskLevel'] =
+    lateCount === 0
+      ? 'none'
+      : lateCount === 1
+      ? 'warning'
+      : lateCount === 2
+      ? 'high'
+      : 'critical';
+
+  return {
+    year: qInfo.year,
+    quarter: qInfo.quarter,
+    labelPt: qInfo.labelPt,
+    labelEs: qInfo.labelEs,
+    lateCount,
+    limit: QUARTERLY_LATE_LIMIT,
+    remainingBeforeRisk: Math.max(0, QUARTERLY_LATE_LIMIT - lateCount),
+    riskLevel,
+    lateShifts,
+  };
+}
+
 export function getDayOfWeekKey(dateStr: string): DayOfWeekKey {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, (m || 1) - 1, d || 1);
@@ -270,8 +396,14 @@ export function shiftDateByDays(dateStr: string, days: number): string {
   return formatLocalDateYYYYMMDD(dt);
 }
 
+/** True only when the user explicitly imported, edited, or applied a schedule for this week */
+export function hasScheduleForWeek(job: LaborJob, mondayDateStr: string): boolean {
+  return Boolean(job.weekOverrides && job.weekOverrides[mondayDateStr]);
+}
+
+/** Returns the saved schedule for a week, or an empty (0h) schedule if none was registered */
 export function getScheduleForWeek(job: LaborJob, mondayDateStr: string): WeeklySchedule {
-  return job.weekOverrides?.[mondayDateStr] || job.defaultSchedule;
+  return job.weekOverrides?.[mondayDateStr] || createEmptyWeeklySchedule();
 }
 
 export function getScheduleForDate(job: LaborJob, dateStr: string): DaySchedule {
@@ -397,6 +529,7 @@ export function buildTwelveMonthSalaryProjection(
 
 /** Compute weekly HR audit totals for the week starting at mondayDateStr */
 export function calculateWeeklyAudit(job: LaborJob, mondayDateStr: string) {
+  const hasSchedule = hasScheduleForWeek(job, mondayDateStr);
   const weekSchedule = getScheduleForWeek(job, mondayDateStr);
   const weekDates = ORDERED_WEEKDAYS.map((dayKey, idx) => ({
     dayKey,
@@ -407,19 +540,122 @@ export function calculateWeeklyAudit(job: LaborJob, mondayDateStr: string) {
   const dateSet = new Set(weekDates.map((d) => d.date));
   const weekShifts = (job.shifts || []).filter((s) => dateSet.has(s.date));
 
-  const scheduledMinutes = weekDates.reduce(
-    (sum, d) => sum + calculateDayScheduleMinutes(d.schedule),
-    0
-  );
+  const scheduledMinutes = hasSchedule
+    ? weekDates.reduce((sum, d) => sum + calculateDayScheduleMinutes(d.schedule), 0)
+    : 0;
   const workedMinutes = weekShifts.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
 
   return {
     mondayDateStr,
     sundayDateStr: shiftDateByDays(mondayDateStr, 6),
+    hasSchedule,
     weekDates,
     weekShifts,
     scheduledMinutes,
     workedMinutes,
     deltaMinutes: workedMinutes - scheduledMinutes,
+  };
+}
+
+/**
+ * Compute monthly HR audit totals for a calendar month (YYYY-MM).
+ * Only weeks explicitly registered in job.weekOverrides count toward scheduledMinutes;
+ * empty past/future weeks remain 0h until filled or imported by the user.
+ */
+export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
+  const [yStr, mStr] = targetMonth.split('-');
+  const year = Number(yStr) || new Date().getFullYear();
+  const month = Number(mStr) || new Date().getMonth() + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const monthShifts = (job.shifts || [])
+    .filter((s) => s.date && s.date.startsWith(targetMonth))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const shiftsByDate = new Map<string, typeof monthShifts>();
+  for (const s of monthShifts) {
+    const list = shiftsByDate.get(s.date) || [];
+    list.push(s);
+    shiftsByDate.set(s.date, list);
+  }
+
+  const weekMap = new Map<
+    string,
+    {
+      mondayDateStr: string;
+      firstDayInMonth: string;
+      lastDayInMonth: string;
+      hasSchedule: boolean;
+      scheduledMinutes: number;
+      workedMinutes: number;
+      shiftsCount: number;
+    }
+  >();
+
+  let scheduledMinutes = 0;
+  let workedMinutes = 0;
+  let onTimeCount = 0;
+  let lateCount = 0;
+  let totalLateMinutes = 0;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const monday = getWeekStartMonday(dateStr);
+    const hasSched = hasScheduleForWeek(job, monday);
+    const daySched = getScheduleForDate(job, dateStr);
+    const daySchedMins = hasSched ? calculateDayScheduleMinutes(daySched) : 0;
+
+    const dayShifts = shiftsByDate.get(dateStr) || [];
+    const dayWorkedMins = dayShifts.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
+
+    for (const s of dayShifts) {
+      const p = evaluatePunchPunctuality(s.startTime, daySched);
+      if (p.status === 'late') {
+        lateCount++;
+        totalLateMinutes += p.diffMinutes;
+      } else if (p.status === 'on_time' || p.status === 'early') {
+        onTimeCount++;
+      }
+    }
+
+    scheduledMinutes += daySchedMins;
+    workedMinutes += dayWorkedMins;
+
+    const existing = weekMap.get(monday);
+    if (!existing) {
+      weekMap.set(monday, {
+        mondayDateStr: monday,
+        firstDayInMonth: dateStr,
+        lastDayInMonth: dateStr,
+        hasSchedule: hasSched,
+        scheduledMinutes: daySchedMins,
+        workedMinutes: dayWorkedMins,
+        shiftsCount: dayShifts.length,
+      });
+    } else {
+      existing.lastDayInMonth = dateStr;
+      existing.scheduledMinutes += daySchedMins;
+      existing.workedMinutes += dayWorkedMins;
+      existing.shiftsCount += dayShifts.length;
+    }
+  }
+
+  const weeksBreakdown = Array.from(weekMap.values()).map((w) => ({
+    ...w,
+    deltaMinutes: w.workedMinutes - w.scheduledMinutes,
+  }));
+
+  return {
+    month: targetMonth,
+    scheduledMinutes,
+    workedMinutes,
+    deltaMinutes: workedMinutes - scheduledMinutes,
+    monthShifts,
+    onTimeCount,
+    lateCount,
+    totalLateMinutes,
+    configuredWeeksCount: weeksBreakdown.filter((w) => w.hasSchedule).length,
+    totalWeeksCount: weeksBreakdown.length,
+    weeksBreakdown,
   };
 }
