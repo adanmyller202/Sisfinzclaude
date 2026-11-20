@@ -4,6 +4,8 @@ import { auth, db } from '../firebase/config';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
+  fallbackTitle?: string;
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -12,11 +14,10 @@ interface ErrorBoundaryState {
   isRepairing: boolean;
 }
 
-async function repairMissingIncomeExpectedDates(): Promise<boolean> {
+export function repairCachedIncomesSynchronously(): boolean {
   let repairedAny = false;
   const fallbackToday = new Date().toISOString().slice(0, 10);
 
-  // 1. Repair cached incomes in localStorage immediately
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -28,9 +29,10 @@ async function repairMissingIncomeExpectedDates(): Promise<boolean> {
       let changed = false;
       const fixed = parsed.map((item: any) => {
         if (item && typeof item === 'object' && (!item.expectedDate || typeof item.expectedDate !== 'string')) {
-          const month = typeof item.startMonth === 'string' && /^\d{4}-\d{2}$/.test(item.startMonth)
-            ? item.startMonth
-            : fallbackToday.slice(0, 7);
+          const month =
+            typeof item.startMonth === 'string' && /^\d{4}-\d{2}$/.test(item.startMonth)
+              ? item.startMonth
+              : fallbackToday.slice(0, 7);
           const day = String(Math.max(1, Math.min(28, Number(item.expectedDay) || 5))).padStart(2, '0');
           changed = true;
           return { ...item, expectedDate: `${month}-${day}` };
@@ -46,7 +48,14 @@ async function repairMissingIncomeExpectedDates(): Promise<boolean> {
     // ignore localStorage errors
   }
 
-  // 2. Repair any Firestore income documents missing expectedDate
+  return repairedAny;
+}
+
+export async function repairMissingIncomeExpectedDates(): Promise<boolean> {
+  let repairedAny = repairCachedIncomesSynchronously();
+  const fallbackToday = new Date().toISOString().slice(0, 10);
+
+  // Repair any Firestore income documents missing expectedDate
   try {
     if (typeof (auth as any).authStateReady === 'function') {
       await (auth as any).authStateReady();
@@ -134,7 +143,12 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     } catch {
       // ignore
     }
-    window.location.reload();
+    if (this.props.onReset) {
+      this.setState({ hasError: false, errorMessage: '', isRepairing: false });
+      this.props.onReset();
+    } else {
+      window.location.reload();
+    }
   };
 
   render() {
@@ -143,7 +157,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         <div className="min-h-screen flex items-center justify-center bg-[#F4F8F6] p-6">
           <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-xl text-center space-y-4">
             <h1 className="text-lg font-black text-slate-900">
-              Error al iniciar la aplicación
+              {this.props.fallbackTitle || 'Error al iniciar la aplicación'}
             </h1>
             <p className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 font-mono text-xs text-rose-700 break-words">
               {this.state.isRepairing
