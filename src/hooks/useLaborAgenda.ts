@@ -4,14 +4,16 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  runTransaction,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
-import { AccountItem, CurrencyCode } from '../types';
+import { useAccounts } from './useAccounts';
+import { CurrencyCode } from '../types';
 import { LaborJob, LaborTipEntry } from '../types/labor';
-import { getCurrentMonthStr } from '../utils/finance';
+
+const LOCAL_JOBS_PREFIX = 'sisfinz_labor_jobs_v1_';
 
 function sanitizePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
   return JSON.parse(JSON.stringify(obj));
@@ -29,148 +31,115 @@ function formatSafeDate(dateStr?: string): string {
 export function useLaborAgenda() {
   const { user } = useAuth();
   const userId = user?.uid;
+  const { accounts, refreshAccounts } = useAccounts();
+  const [jobs, setJobs] = useState<LaborJob[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const jobsStorageKey = `sisfinz_labor_jobs_v1_${userId || 'guest'}`;
+  const getLocalKey = useCallback(
+    (uid?: string) => `${LOCAL_JOBS_PREFIX}${uid || 'guest'}`,
+    []
+  );
 
-  const [jobs, setJobs] = useState<LaborJob[]>(() => {
+  // Load initial cache immediately (even before auth resolves) so UI feels instant
+  useEffect(() => {
     try {
-      const raw = localStorage.getItem(jobsStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-
-  const [accounts, setAccounts] = useState<AccountItem[]>(() => {
-    try {
+      const uid = userId || auth.currentUser?.uid;
       const raw =
-        (userId ? localStorage.getItem(`mc_acc_${userId}_accounts`) : null) ||
-        localStorage.getItem('mc_acc_last_accounts');
+        localStorage.getItem(getLocalKey(uid)) ||
+        localStorage.getItem(`${LOCAL_JOBS_PREFIX}guest`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          setJobs(parsed);
+        }
       }
     } catch {
-      // ignore
+      // ignore storage read error
+    } finally {
+      setLoading(false);
     }
-    return [];
-  });
+  }, [userId, getLocalKey]);
 
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Listen to Firestore labor_jobs in real time
+  // Real-time Firestore listener for logged-in user
   useEffect(() => {
     if (!userId) return;
-    setIsLoading(true);
+    setLoading(true);
     const colRef = collection(db, 'users', userId, 'labor_jobs');
     const unsub = onSnapshot(
       colRef,
-      (snapshot) => {
+      (snap) => {
         const list: LaborJob[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as LaborJob;
-          list.push({ ...data, id: docSnap.id });
+        snap.forEach((d) => {
+          list.push({ id: d.id, ...(d.data() as Omit<LaborJob, 'id'>) });
         });
         list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
         setJobs(list);
         try {
-          localStorage.setItem(jobsStorageKey, JSON.stringify(list));
+          localStorage.setItem(getLocalKey(userId), JSON.stringify(list));
         } catch {
           // ignore
         }
-        setIsLoading(false);
+        setLoading(false);
       },
-      () => {
-        setIsLoading(false);
+      (err) => {
+        console.warn('[useLaborAgenda] snapshot fallback:', err);
+        setLoading(false);
       }
     );
     return () => unsub();
-  }, [userId, jobsStorageKey]);
+  }, [userId, getLocalKey]);
 
-  // Listen to Firestore accounts so tips & salary can integrate directly with real balances
-  useEffect(() => {
-    if (!userId) return;
-    const accRef = collection(db, 'users', userId, 'accounts');
-    const unsub = onSnapshot(
-      accRef,
-      (snapshot) => {
-        const list: AccountItem[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as AccountItem;
-          if (data.isActive !== false) {
-            list.push({ ...data, id: docSnap.id });
-          }
-        });
-        setAccounts(list);
-      },
-      () => {
-        // keep localStorage fallback
-      }
-    );
-    return () => unsub();
-  }, [userId]);
-
-  const saveJob = useCallback(
-    async (job: LaborJob) => {
-      const updated: LaborJob = { ...job, updatedAt: new Date().toISOString() };
-      setJobs((prev) => {
-        const exists = prev.some((item) => item.id === updated.id);
-        const next = exists
-          ? prev.map((item) => (item.id === updated.id ? updated : item))
-          : [...prev, updated];
-        try {
-          localStorage.setItem(jobsStorageKey, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
-
-      if (userId) {
-        try {
-          await setDoc(
-            doc(db, 'users', userId, 'labor_jobs', updated.id),
-            sanitizePayload(updated),
-            { merge: true }
-          );
-        } catch (err) {
-          console.warn('[LaborAgenda] Saved locally, Firestore sync pending:', err);
-        }
+  const persistJobsLocally = useCallback(
+    (nextJobs: LaborJob[]) => {
+      setJobs(nextJobs);
+      try {
+        const uid = userId || auth.currentUser?.uid;
+        localStorage.setItem(getLocalKey(uid), JSON.stringify(nextJobs));
+      } catch {
+        // ignore
       }
     },
-    [userId, jobsStorageKey]
+    [userId, getLocalKey]
+  );
+
+  const saveJob = useCallback(
+    async (updatedJob: LaborJob): Promise<void> => {
+      const stamped: LaborJob = {
+        ...updatedJob,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const exists = jobs.some((j) => j.id === stamped.id);
+      const nextList = exists
+        ? jobs.map((j) => (j.id === stamped.id ? stamped : j))
+        : [...jobs, stamped];
+      persistJobsLocally(nextList);
+
+      const uid = userId || auth.currentUser?.uid;
+      if (uid) {
+        const ref = doc(db, 'users', uid, 'labor_jobs', stamped.id);
+        await setDoc(ref, sanitizePayload(stamped), { merge: true });
+      }
+    },
+    [jobs, persistJobsLocally, userId]
   );
 
   const deleteJob = useCallback(
-    async (jobId: string) => {
-      setJobs((prev) => {
-        const next = prev.filter((item) => item.id !== jobId);
-        try {
-          localStorage.setItem(jobsStorageKey, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
+    async (jobId: string): Promise<void> => {
+      const nextList = jobs.filter((j) => j.id !== jobId);
+      persistJobsLocally(nextList);
 
-      if (userId) {
-        try {
-          await deleteDoc(doc(db, 'users', userId, 'labor_jobs', jobId));
-        } catch (err) {
-          console.warn('[LaborAgenda] Deleted locally, Firestore sync pending:', err);
-        }
+      const uid = userId || auth.currentUser?.uid;
+      if (uid) {
+        await deleteDoc(doc(db, 'users', uid, 'labor_jobs', jobId));
       }
     },
-    [userId, jobsStorageKey]
+    [jobs, persistJobsLocally, userId]
   );
 
   /**
-   * Record a received tip (Propina) directly into the user's SisFinz account balance
-   * AND create a received Income record for that month so reports & balances stay 100% consistent.
+   * Register a tip (propina) and immediately add it to the selected SisFinz account balance
+   * + create a synced income record so the home balance & ledger stay 100% consistent.
    */
   const recordTipToSisFinz = useCallback(
     async (params: {
@@ -183,28 +152,22 @@ export function useLaborAgenda() {
       const { job, amount, date, accountId, note } = params;
       const now = new Date().toISOString();
       const safeDate = formatSafeDate(date);
-      const targetMonth = safeDate.slice(0, 7) || getCurrentMonthStr();
+      const targetMonth = safeDate.slice(0, 7) || '2026-11';
       const dayOfMonth = Math.max(1, Math.min(31, Number(safeDate.slice(8, 10)) || new Date().getDate()));
       const selectedAcc = accounts.find((a) => a.id === accountId);
       const incomeId = `inc_tip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
       let syncedToFinance = false;
 
-      if (userId && amount > 0) {
+      const uid = userId || auth.currentUser?.uid;
+      if (uid) {
         try {
-          // 1. Atomically credit the chosen account balance
+          // 1. Update selected account balance directly in Firestore
           if (selectedAcc) {
-            const accDocRef = doc(db, 'users', userId, 'accounts', selectedAcc.id);
-            await runTransaction(db, async (transaction) => {
-              const snap = await transaction.get(accDocRef);
-              if (!snap.exists()) return;
-              const data = snap.data();
-              const current = Number(data.currentBalance ?? data.balance ?? data.initialBalance ?? 0) || 0;
-              transaction.set(
-                accDocRef,
-                { currentBalance: current + amount, updatedAt: now },
-                { merge: true }
-              );
+            const currentBal = Number(selectedAcc.currentBalance ?? selectedAcc.initialBalance ?? 0);
+            const nextBal = currentBal + amount;
+            await updateDoc(doc(db, 'users', uid, 'accounts', selectedAcc.id), {
+              currentBalance: nextBal,
+              updatedAt: now,
             });
           }
 
@@ -220,21 +183,19 @@ export function useLaborAgenda() {
             startMonth: targetMonth,
             recurrence: 'none',
             accountId: selectedAcc?.id || undefined,
-            notes: note || `Registrado via Jornada Laboral (${job.role})`,
+            notes: note || `Propina registrada em ${job.companyName} (${job.role})`,
             createdAt: now,
             updatedAt: now,
           };
-
           await setDoc(
-            doc(db, 'users', userId, 'incomes', incomeId),
-            sanitizePayload(incomeDoc),
-            { merge: true }
+            doc(db, 'users', uid, 'incomes', incomeId),
+            sanitizePayload(incomeDoc)
           );
 
           // 3. Mark that income as already received in monthly_status
           const statusId = `income_${incomeId}_${targetMonth}`;
           await setDoc(
-            doc(db, 'users', userId, 'monthly_status', statusId),
+            doc(db, 'users', uid, 'monthly_status', statusId),
             sanitizePayload({
               id: statusId,
               month: targetMonth,
@@ -250,8 +211,9 @@ export function useLaborAgenda() {
           );
 
           syncedToFinance = true;
+          await refreshAccounts();
         } catch (err) {
-          console.warn('[LaborAgenda] Tip finance sync warning:', err);
+          console.warn('[useLaborAgenda] tip finance sync fallback:', err);
         }
       }
 
@@ -268,19 +230,22 @@ export function useLaborAgenda() {
         createdAt: now,
       };
 
-      await saveJob({
+      const updatedJob: LaborJob = {
         ...job,
         tips: [tipEntry, ...(job.tips || [])],
-      });
+      };
+      await saveJob(updatedJob);
 
       return tipEntry;
     },
-    [userId, accounts, saveJob]
+    [accounts, refreshAccounts, saveJob, userId]
   );
 
   /**
    * Sync the calculated monthly salary to a recurring Income item in SisFinz.
-   * Always includes `expectedDate` (YYYY-MM-05) so SisFinz income calculations never receive undefined.
+   * For `scope === 'single'`, only updates `exceptions[safeMonth]` WITHOUT touching `amount`
+   * (the baseline recurring amount for all other months stays intact).
+   * For `scope === 'future'`, updates the recurring `amount` from `safeMonth` onward.
    */
   const syncSalaryToSisFinz = useCallback(
     async (params: {
@@ -289,21 +254,28 @@ export function useLaborAgenda() {
       amount: number;
       scope: 'single' | 'future';
     }): Promise<boolean> => {
-      if (!userId || params.amount <= 0) return false;
+      const uid = userId || auth.currentUser?.uid;
+      if (!uid || params.amount <= 0) return false;
       const { job, targetMonth, amount, scope } = params;
-      const safeMonth = /^\d{4}-\d{2}$/.test(targetMonth) ? targetMonth : getCurrentMonthStr();
+      const safeMonth = /^\d{4}-\d{2}$/.test(targetMonth) ? targetMonth : '2026-11';
       const expectedDate = `${safeMonth}-05`;
       const now = new Date().toISOString();
       const incomeId = job.linkedSalaryIncomeId || `inc_salary_${job.id}`;
 
       try {
-        const incomeRef = doc(db, 'users', userId, 'incomes', incomeId);
-        if (scope === 'single' && job.linkedSalaryIncomeId) {
+        const incomeRef = doc(db, 'users', uid, 'incomes', incomeId);
+        if (scope === 'single') {
           await setDoc(
             incomeRef,
             sanitizePayload({
-              expectedDate,
+              id: incomeId,
+              name: `Salário • ${job.companyName}`,
+              currency: job.currency,
+              category: 'Salário',
               expectedDay: 5,
+              expectedDate,
+              recurrence: 'monthly',
+              accountId: job.defaultAccountId || undefined,
               exceptions: {
                 [safeMonth]: { amount },
               },
@@ -326,29 +298,28 @@ export function useLaborAgenda() {
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
               notes: `${job.role} • Sincronizado pela Jornada Laboral`,
-              createdAt: now,
               updatedAt: now,
             }),
             { merge: true }
           );
         }
 
-        if (job.linkedSalaryIncomeId !== incomeId) {
+        if (!job.linkedSalaryIncomeId) {
           await saveJob({ ...job, linkedSalaryIncomeId: incomeId });
         }
         return true;
       } catch (err) {
-        console.warn('[LaborAgenda] Salary sync failed:', err);
+        console.warn('[useLaborAgenda] salary sync warning:', err);
         return false;
       }
     },
-    [userId, saveJob]
+    [saveJob, userId]
   );
 
   return {
     jobs,
     accounts,
-    isLoading,
+    loading,
     saveJob,
     deleteJob,
     recordTipToSisFinz,
