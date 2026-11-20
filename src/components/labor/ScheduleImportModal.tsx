@@ -132,7 +132,7 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
 
 /**
  * Compress image in memory only (max 1800px, JPEG 0.88) so wide multi-row spreadsheets
- * remain crisp and readable for Gemini Vision while never being stored anywhere.
+ * remain sharp and readable for Gemini Vision while never being stored anywhere.
  */
 async function compressImageInMemory(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
@@ -190,6 +190,9 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   const [previewSchedule, setPreviewSchedule] = useState<WeeklySchedule | null>(null);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
 
+  const hasEmployeeName = Boolean(nameHint.trim());
+  const isImageUploadDisabled = isAnalyzing || !hasEmployeeName;
+
   const abortInFlight = (isUserCancel = false) => {
     if (isUserCancel) userCancelledRef.current = true;
     if (abortControllerRef.current) {
@@ -222,7 +225,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
   };
 
   const sendParseRequest = async (
-    payload: { imageBase64: string; mimeType: string; employeeName?: string },
+    payload: { imageBase64: string; mimeType: string; employeeName: string },
     idToken: string
   ) => {
     const controller = new AbortController();
@@ -263,6 +266,17 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const trimmedName = nameHint.trim();
+    if (!trimmedName) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setErrorMsg(
+        language === 'es'
+          ? 'Ingresa el nombre del empleado en la planilla antes de seleccionar la imagen.'
+          : 'Preencha o nome do empregado na planilha antes de selecionar a imagem.'
+      );
+      return;
+    }
+
     abortInFlight(false);
     userCancelledRef.current = false;
     setIsAnalyzing(true);
@@ -280,7 +294,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       const payload = {
         imageBase64: base64,
         mimeType,
-        employeeName: nameHint.trim() || undefined,
+        employeeName: trimmedName,
       };
 
       setStatusHint('Analisando horários com IA...');
@@ -459,31 +473,52 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                   {mode === 'image' ? (
                     <div className="space-y-3">
                       <div>
-                        <label className="mb-1 block text-[11px] font-black uppercase tracking-wider text-slate-500">
-                          Seu nome na planilha (opcional)
+                        <label className="mb-1 block text-[11px] font-black uppercase tracking-wider text-slate-700">
+                          {language === 'es'
+                            ? 'Tu nombre en la planilla *'
+                            : 'Seu nome na planilha *'}
                         </label>
                         <input
                           type="text"
+                          required
                           value={nameHint}
-                          onChange={(e) => setNameHint(e.target.value)}
+                          onChange={(e) => {
+                            setNameHint(e.target.value);
+                            if (errorMsg) setErrorMsg(null);
+                          }}
                           placeholder="Ex: Silva A."
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
                         />
+                        {!hasEmployeeName && (
+                          <p className="mt-1 text-[10.5px] font-bold text-amber-700">
+                            {language === 'es'
+                              ? 'Completa el nombre del empleado para habilitar la importación del print.'
+                              : 'Preencha o nome do empregado para habilitar o envio do print.'}
+                          </p>
+                        )}
                       </div>
 
                       <input
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        disabled={isImageUploadDisabled}
                         onChange={handleSelectImage}
                         className="hidden"
                       />
 
                       <button
                         type="button"
-                        disabled={isAnalyzing}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 px-4 py-8 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-75 cursor-pointer"
+                        disabled={isImageUploadDisabled}
+                        onClick={() => {
+                          if (!hasEmployeeName) return;
+                          fileInputRef.current?.click();
+                        }}
+                        className={`flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                          isImageUploadDisabled
+                            ? 'border-slate-200 bg-slate-100/80 text-slate-400 opacity-60 cursor-not-allowed'
+                            : 'border-emerald-300 bg-emerald-50/60 hover:border-emerald-500 hover:bg-emerald-50 cursor-pointer'
+                        }`}
                       >
                         {isAnalyzing ? (
                           <>
@@ -497,14 +532,30 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                           </>
                         ) : (
                           <>
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
+                            <div
+                              className={`flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md ${
+                                hasEmployeeName
+                                  ? 'bg-emerald-600 shadow-emerald-600/25'
+                                  : 'bg-slate-400 shadow-slate-400/20'
+                              }`}
+                            >
                               <Upload className="h-6 w-6" />
                             </div>
-                            <span className="text-sm font-black text-emerald-950">
+                            <span
+                              className={`text-sm font-black ${
+                                hasEmployeeName ? 'text-emerald-950' : 'text-slate-500'
+                              }`}
+                            >
                               Selecionar print do cronograma
                             </span>
-                            <span className="text-[11px] font-medium text-emerald-700/80">
-                              PNG, JPG ou foto da escala de domingo
+                            <span
+                              className={`text-[11px] font-medium ${
+                                hasEmployeeName ? 'text-emerald-700/80' : 'text-slate-400'
+                              }`}
+                            >
+                              {hasEmployeeName
+                                ? 'PNG, JPG ou foto da escala de domingo'
+                                : 'Digite o nome na planilha acima para liberar'}
                             </span>
                           </>
                         )}
