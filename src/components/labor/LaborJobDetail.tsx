@@ -456,6 +456,14 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     });
   };
 
+  const handleCancelActiveShift = async () => {
+    if (!job.activeShift) return;
+    await onSaveJob({
+      ...job,
+      activeShift: null,
+    });
+  };
+
   // --- Schedule Handlers ---
   const updateWeekDay = async (
     dayKey: DayOfWeekKey,
@@ -1173,13 +1181,9 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               const isToday = dayDate === todayStr;
                               const mins = calculateDayScheduleMinutes(sched);
                               const attendanceEntries = getDayAttendanceEntries(job, dayDate, sched);
+                              const hasPunch = attendanceEntries.length > 0;
                               const hasLateEntry = attendanceEntries.some((a) => a.status === 'late');
-                              const hasOnTimeEntry =
-                                attendanceEntries.length > 0 &&
-                                !hasLateEntry &&
-                                attendanceEntries.some(
-                                  (a) => a.status === 'on_time' || a.status === 'early'
-                                );
+                              const isWorkdayPendingPunch = !isUnset && !sched.isOff && !hasPunch;
 
                               return (
                                 <div
@@ -1187,30 +1191,53 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                   className={`rounded-2xl border p-3 transition-colors ${
                                     hasLateEntry
                                       ? 'border-rose-300 bg-rose-50/35 ring-1 ring-rose-100'
-                                      : isToday
-                                      ? 'border-emerald-400 bg-emerald-50/40 ring-1 ring-emerald-200'
-                                      : hasOnTimeEntry
-                                      ? 'border-emerald-300/90 bg-emerald-50/25'
+                                      : hasPunch
+                                      ? isToday
+                                        ? 'border-emerald-400 bg-emerald-50/45 ring-1 ring-emerald-200'
+                                        : 'border-emerald-300 bg-emerald-50/30'
+                                      : isWorkdayPendingPunch
+                                      ? isToday
+                                        ? 'border-orange-400 bg-orange-50/50 ring-1 ring-orange-200'
+                                        : 'border-orange-300 bg-orange-50/30'
                                       : isUnset
                                       ? 'border-slate-200/70 bg-slate-50/50'
-                                      : sched.isOff
-                                      ? 'border-amber-200/80 bg-amber-50/35'
-                                      : 'border-slate-200/80 bg-white'
+                                      : 'border-amber-200/80 bg-amber-50/35'
                                   }`}
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-black text-slate-900 w-16">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-xs font-black text-slate-900">
                                         {WEEKDAY_LABELS[dayKey].pt}
                                       </span>
                                       <span className="text-[10px] font-bold text-slate-400">
                                         {formatShortDate(dayDate)}
                                       </span>
                                       {isToday && (
-                                        <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[8.5px] font-black uppercase text-white">
+                                        <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[8.5px] font-black uppercase text-white">
                                           Hoje
                                         </span>
                                       )}
+                                      {hasPunch ? (
+                                        <span
+                                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] font-black uppercase tracking-wide ${
+                                            hasLateEntry
+                                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                          }`}
+                                        >
+                                          <CheckCircle2 className="h-2.5 w-2.5" />
+                                          {language === 'es'
+                                            ? 'Fichaje registrado'
+                                            : 'Ponto registrado'}
+                                        </span>
+                                      ) : isWorkdayPendingPunch ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[8.5px] font-black uppercase tracking-wide text-orange-800 border border-orange-200">
+                                          <Clock className="h-2.5 w-2.5" />
+                                          {language === 'es'
+                                            ? 'Pendiente de marcar'
+                                            : 'Ponto pendente de marcar'}
+                                        </span>
+                                      ) : null}
                                     </div>
 
                                     <div className="flex items-center gap-1.5">
@@ -1225,7 +1252,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                                 endTime: sched.endTime || '02:00',
                                               })
                                             }
-                                            className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                                            className="rounded-lg bg-orange-100 px-2.5 py-1 text-[10px] font-black uppercase text-orange-800 hover:bg-orange-200 cursor-pointer"
                                           >
                                             + Trabalho
                                           </button>
@@ -1247,6 +1274,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                             className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer ${
                                               sched.isOff
                                                 ? 'bg-amber-500 text-white'
+                                                : isWorkdayPendingPunch
+                                                ? 'bg-orange-100 text-orange-800'
                                                 : 'bg-emerald-100 text-emerald-800'
                                             }`}
                                           >
@@ -1299,7 +1328,13 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                             className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-800"
                                           />
                                         </div>
-                                        <span className="font-mono text-xs font-black text-emerald-700">
+                                        <span
+                                          className={`font-mono text-xs font-black ${
+                                            isWorkdayPendingPunch
+                                              ? 'text-orange-700'
+                                              : 'text-emerald-700'
+                                          }`}
+                                        >
                                           {formatMinutesAsHours(mins)}
                                         </span>
                                       </div>
@@ -1333,7 +1368,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     </div>
                                   )}
 
-                                  {/* Punctuality / Punch Status Strip with direct "Alterar" button */}
+                                  {/* Punctuality / Punch Status Strip with Alterar & Excluir buttons */}
                                   {attendanceEntries.length > 0 && (
                                     <div className="mt-2.5 space-y-1.5 border-t border-slate-200/70 pt-2">
                                       {attendanceEntries.map((att) => {
@@ -1419,6 +1454,26 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                               >
                                                 <Edit3 className="h-2.5 w-2.5" />
                                                 Alterar
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (att.isActive) {
+                                                    handleCancelActiveShift();
+                                                  } else {
+                                                    handleDeleteShift(att.id);
+                                                  }
+                                                }}
+                                                className={`inline-flex items-center justify-center rounded-lg p-1 transition-colors cursor-pointer ${
+                                                  isLate
+                                                    ? 'bg-rose-200/90 text-rose-900 hover:bg-rose-300'
+                                                    : 'bg-white/80 text-rose-600 hover:bg-rose-100 hover:text-rose-700'
+                                                }`}
+                                                aria-label="Excluir ponto deste dia"
+                                                title="Excluir ponto deste dia"
+                                              >
+                                                <Trash2 className="h-3 w-3" />
                                               </button>
                                             </div>
                                           </div>
