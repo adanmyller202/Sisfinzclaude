@@ -190,11 +190,12 @@ app.post('/api/work/parse-schedule', async (req, res) => {
 {"schedule":{"mon":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"tue":{"isOff":true,"startTime":"18:00","endTime":"02:00"},"wed":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"thu":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"fri":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sat":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sun":{"isOff":false,"startTime":"18:00","endTime":"02:00"}}}
 Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime.`;
 
-    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest'];
-    let rawText = '';
+    const modelsToTry = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    let scheduleObj: any = null;
     let lastErr: any = null;
 
     for (const modelName of modelsToTry) {
+      let timerId: ReturnType<typeof setTimeout> | null = null;
       try {
         const generatePromise = ai.models.generateContent({
           model: modelName,
@@ -210,33 +211,46 @@ Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se 
           config: {
             responseMimeType: 'application/json',
             temperature: 0,
-            maxOutputTokens: 450,
+            maxOutputTokens: 1200,
             thinkingConfig: { thinkingBudget: 0 },
           },
         });
 
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout no modelo ${modelName}`)), 12000)
-        );
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timerId = setTimeout(() => reject(new Error(`Timeout no modelo ${modelName}`)), 14000);
+        });
 
         const response = await Promise.race([generatePromise, timeoutPromise]);
-        rawText = response.text || '';
-        if (rawText.trim()) break;
+        const rawText = (response.text || '').trim();
+        if (!rawText) throw new Error('Resposta vazia da IA');
+
+        const cleanedJson = rawText
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/```\s*$/, '')
+          .trim();
+        const firstBrace = cleanedJson.indexOf('{');
+        const lastBrace = cleanedJson.lastIndexOf('}');
+        const jsonSlice =
+          firstBrace !== -1 && lastBrace > firstBrace
+            ? cleanedJson.slice(firstBrace, lastBrace + 1)
+            : cleanedJson;
+
+        const parsed = JSON.parse(jsonSlice);
+        const candidate = parsed?.schedule || (parsed?.mon ? parsed : null);
+        if (candidate && typeof candidate === 'object') {
+          scheduleObj = candidate;
+          break;
+        }
+        throw new Error('JSON sem campo schedule');
       } catch (e) {
         lastErr = e;
+      } finally {
+        if (timerId) clearTimeout(timerId);
       }
     }
 
-    if (!rawText.trim()) {
-      throw lastErr || new Error('Resposta vazia da IA');
-    }
-
-    const cleanedJson = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(cleanedJson);
-    const scheduleObj = parsed?.schedule || (parsed?.mon ? parsed : null);
-    if (!scheduleObj || typeof scheduleObj !== 'object') {
-      res.status(422).json({ error: 'Não foi possível identificar os dias da semana na imagem.' });
-      return;
+    if (!scheduleObj) {
+      throw lastErr || new Error('Não foi possível identificar os dias da semana na imagem.');
     }
 
     res.json({ schedule: scheduleObj });
