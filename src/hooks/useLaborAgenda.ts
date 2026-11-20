@@ -17,6 +17,15 @@ function sanitizePayload<T extends Record<string, any>>(obj: T): Record<string, 
   return JSON.parse(JSON.stringify(obj));
 }
 
+function formatSafeDate(dateStr?: string): string {
+  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function useLaborAgenda() {
   const { user } = useAuth();
   const userId = user?.uid;
@@ -173,8 +182,9 @@ export function useLaborAgenda() {
     }): Promise<LaborTipEntry> => {
       const { job, amount, date, accountId, note } = params;
       const now = new Date().toISOString();
-      const targetMonth = date.slice(0, 7) || getCurrentMonthStr();
-      const dayOfMonth = Math.max(1, Math.min(31, Number(date.slice(8, 10)) || new Date().getDate()));
+      const safeDate = formatSafeDate(date);
+      const targetMonth = safeDate.slice(0, 7) || getCurrentMonthStr();
+      const dayOfMonth = Math.max(1, Math.min(31, Number(safeDate.slice(8, 10)) || new Date().getDate()));
       const selectedAcc = accounts.find((a) => a.id === accountId);
       const incomeId = `inc_tip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -198,7 +208,7 @@ export function useLaborAgenda() {
             });
           }
 
-          // 2. Create a one-off Income item for the month
+          // 2. Create a one-off Income item for the month WITH expectedDate (required by SisFinz)
           const incomeDoc = {
             id: incomeId,
             name: note ? `Propina • ${job.companyName} (${note})` : `Propina • ${job.companyName}`,
@@ -206,6 +216,7 @@ export function useLaborAgenda() {
             currency: (selectedAcc?.currency || job.currency) as CurrencyCode,
             category: 'Propina',
             expectedDay: dayOfMonth,
+            expectedDate: safeDate,
             startMonth: targetMonth,
             recurrence: 'none',
             accountId: selectedAcc?.id || undefined,
@@ -221,7 +232,7 @@ export function useLaborAgenda() {
           );
 
           // 3. Mark that income as already received in monthly_status
-          const statusId = `${targetMonth}_income_${incomeId}`;
+          const statusId = `income_${incomeId}_${targetMonth}`;
           await setDoc(
             doc(db, 'users', userId, 'monthly_status', statusId),
             sanitizePayload({
@@ -229,6 +240,7 @@ export function useLaborAgenda() {
               month: targetMonth,
               itemId: incomeId,
               itemType: 'income',
+              isCompleted: true,
               status: 'received',
               completedAt: now,
               accountId: selectedAcc?.id || undefined,
@@ -245,7 +257,7 @@ export function useLaborAgenda() {
 
       const tipEntry: LaborTipEntry = {
         id: `tip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        date,
+        date: safeDate,
         amount,
         currency: (selectedAcc?.currency || job.currency) as CurrencyCode,
         accountId: selectedAcc?.id,
@@ -268,7 +280,7 @@ export function useLaborAgenda() {
 
   /**
    * Sync the calculated monthly salary to a recurring Income item in SisFinz.
-   * Supports updating only the selected month (via exceptions) or from that month onward.
+   * Always includes `expectedDate` (YYYY-MM-05) so SisFinz income calculations never receive undefined.
    */
   const syncSalaryToSisFinz = useCallback(
     async (params: {
@@ -279,6 +291,8 @@ export function useLaborAgenda() {
     }): Promise<boolean> => {
       if (!userId || params.amount <= 0) return false;
       const { job, targetMonth, amount, scope } = params;
+      const safeMonth = /^\d{4}-\d{2}$/.test(targetMonth) ? targetMonth : getCurrentMonthStr();
+      const expectedDate = `${safeMonth}-05`;
       const now = new Date().toISOString();
       const incomeId = job.linkedSalaryIncomeId || `inc_salary_${job.id}`;
 
@@ -288,8 +302,10 @@ export function useLaborAgenda() {
           await setDoc(
             incomeRef,
             sanitizePayload({
+              expectedDate,
+              expectedDay: 5,
               exceptions: {
-                [targetMonth]: { amount },
+                [safeMonth]: { amount },
               },
               updatedAt: now,
             }),
@@ -305,7 +321,8 @@ export function useLaborAgenda() {
               currency: job.currency,
               category: 'Salário',
               expectedDay: 5,
-              startMonth: targetMonth,
+              expectedDate,
+              startMonth: safeMonth,
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
               notes: `${job.role} • Sincronizado pela Jornada Laboral`,
