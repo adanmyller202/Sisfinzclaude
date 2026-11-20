@@ -39,12 +39,37 @@ const DAY_PATTERNS: { key: DayOfWeekKey; regex: RegExp }[] = [
   { key: 'sun', regex: /\b(dom(?:ingo)?|sun(?:day)?)\b/i },
 ];
 
-function normalizeTime(raw: string): string {
+function normalizeTime(raw: string, fallback = '18:00'): string {
+  if (!raw || typeof raw !== 'string') return fallback;
   const cleaned = raw.replace(/[hH.]/g, ':').trim();
-  const [hRaw, mRaw] = cleaned.split(':');
-  const h = Math.max(0, Math.min(23, Number(hRaw) || 0));
-  const m = Math.max(0, Math.min(59, Number(mRaw) || 0));
+  const match = cleaned.match(/(\d{1,2})(?::(\d{1,2}))?/);
+  if (!match) return fallback;
+  const h = Math.max(0, Math.min(23, Number(match[1]) || 0));
+  const m = Math.max(0, Math.min(59, Number(match[2]) || 0));
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function normalizeImportedSchedule(raw: any, fallback: WeeklySchedule): WeeklySchedule {
+  const result: WeeklySchedule = JSON.parse(JSON.stringify(fallback));
+  if (!raw || typeof raw !== 'object') return result;
+
+  for (const day of ORDERED_WEEKDAYS) {
+    const entry = raw[day];
+    if (!entry || typeof entry !== 'object') continue;
+    const isOff = Boolean(entry.isOff);
+    const startTime = entry.startTime ? normalizeTime(entry.startTime, result[day].startTime) : result[day].startTime;
+    const endTime = entry.endTime ? normalizeTime(entry.endTime, result[day].endTime) : result[day].endTime;
+    const isSplitShift = Boolean(entry.isSplitShift && entry.splitStartTime && entry.splitEndTime);
+    result[day] = {
+      isOff,
+      startTime,
+      endTime,
+      isSplitShift,
+      splitStartTime: isSplitShift ? normalizeTime(entry.splitStartTime, '19:00') : undefined,
+      splitEndTime: isSplitShift ? normalizeTime(entry.splitEndTime, '23:30') : undefined,
+    };
+  }
+  return result;
 }
 
 /** Local deterministic parser for pasted WhatsApp weekly schedule text */
@@ -98,14 +123,14 @@ function parseScheduleTextLocally(text: string, fallback: WeeklySchedule): { sch
   return { schedule: next, matchedDays };
 }
 
-/** Compress image in memory only (max 1400px, JPEG 0.8) so it is never persisted anywhere */
+/** Compress image in memory only (max 1200px, JPEG 0.78) so it is never persisted anywhere */
 async function compressImageInMemory(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       try {
-        const maxSide = 1400;
+        const maxSide = 1200;
         let { width, height } = img;
         if (width > maxSide || height > maxSide) {
           const ratio = Math.min(maxSide / width, maxSide / height);
@@ -118,13 +143,12 @@ async function compressImageInMemory(file: File): Promise<{ base64: string; mime
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas unavailable');
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
         const base64 = dataUrl.split(',')[1] || '';
         resolve({ base64, mimeType: 'image/jpeg' });
       } catch (err) {
         reject(err);
       } finally {
-        // Immediately release temporary object URL from memory
         URL.revokeObjectURL(objectUrl);
       }
     };
@@ -168,7 +192,6 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
   const handleSelectImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // Immediately clear file input so nothing remains referenced
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
 
@@ -204,7 +227,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 
       const data = await resp.json();
       if (data?.schedule) {
-        setPreviewSchedule(data.schedule as WeeklySchedule);
+        setPreviewSchedule(normalizeImportedSchedule(data.schedule, currentSchedule));
       } else {
         throw new Error('A IA não retornou horários válidos para esta imagem.');
       }
