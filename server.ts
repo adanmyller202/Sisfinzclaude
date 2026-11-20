@@ -186,9 +186,19 @@ app.post('/api/work/parse-schedule', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    const prompt = `Leia esta imagem de cronograma semanal de trabalho${typeof employeeName === 'string' && employeeName.trim() ? ` para o funcionário "${employeeName.trim().slice(0, 120)}"` : ''} e retorne APENAS um JSON válido no formato:
-{"schedule":{"mon":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"tue":{"isOff":true,"startTime":"18:00","endTime":"02:00"},"wed":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"thu":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"fri":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sat":{"isOff":false,"startTime":"18:00","endTime":"02:00"},"sun":{"isOff":false,"startTime":"18:00","endTime":"02:00"}}}
-Use formato HH:mm (24h). Se o dia for franco/folga/libre, marque isOff:true. Se houver turno cortado (dois turnos no mesmo dia), inclua isSplitShift:true, splitStartTime e splitEndTime.`;
+    const prompt = `Leia esta imagem de cronograma semanal de trabalho${typeof employeeName === 'string' && employeeName.trim() ? ` exclusivamente para a linha do funcionário "${employeeName.trim().slice(0, 120)}"` : ''} e retorne APENAS um JSON válido no formato:
+{"schedule":{"mon":{"isOff":false,"startTime":"12:00","endTime":"15:00","isSplitShift":true,"splitStartTime":"20:30","splitEndTime":"01:00"},"tue":{"isOff":false,"startTime":"19:30","endTime":"01:30","isSplitShift":false},"wed":{"isOff":true,"startTime":"18:00","endTime":"02:00","isSplitShift":false},"thu":{"isOff":false,"startTime":"19:30","endTime":"01:30","isSplitShift":false},"fri":{"isOff":false,"startTime":"19:00","endTime":"01:30","isSplitShift":false},"sat":{"isOff":false,"startTime":"13:00","endTime":"16:00","isSplitShift":true,"splitStartTime":"20:30","splitEndTime":"01:30"},"sun":{"isOff":false,"startTime":"12:00","endTime":"15:00","isSplitShift":true,"splitStartTime":"20:30","splitEndTime":"01:30"}}}
+
+REGRAS OBRIGATÓRIAS:
+1. Use formato 24h HH:mm (ex.: "12:00", "01:30").
+2. Se o dia for "DESCANSO", "FRANCO", "FOLGA", "LIBRE", "VACACIONES" ou "LICENCIA", marque "isOff": true e "isSplitShift": false.
+3. TURNO CORTADO (dois intervalos na mesma célula separados por "+" ou "/", ex.: "12:00 a 15:00 + 20:30 a 01:00hs"):
+   - "startTime" = início do 1º turno ("12:00")
+   - "endTime" = FIM DO 1º TURNO ("15:00") — NUNCA coloque o horário final do 2º turno em "endTime"!
+   - "isSplitShift" = true
+   - "splitStartTime" = início do 2º turno ("20:30")
+   - "splitEndTime" = fim do 2º turno ("01:00")
+4. Se o dia tiver apenas um turno (ex.: "19:30 a 01:30hs"), marque "isSplitShift": false e não inclua splitStartTime/splitEndTime.`;
 
     const modelsToTry = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
     let scheduleObj: any = null;
