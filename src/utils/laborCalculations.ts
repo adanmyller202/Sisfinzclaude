@@ -514,31 +514,46 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     override?.deductionPercent !== undefined ? override.deductionPercent : snap.deductionPercent || 0;
   const disabledIds = new Set(override?.disabledBenefitIds || []);
 
-  // Build effective benefit list for this month:
-  // - Start with snapshot benefits (respecting per-month enable/disable, type, and value overrides)
-  // - Include any extra benefits added specifically for this month (from override.extraBenefits)
-  const baseBenefits = (snap.benefits || []).map((b) => {
-    const enabled = b.enabled && !disabledIds.has(b.id);
-    const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
-    const rawValue =
-      override?.benefitValueOverrides?.[b.id] !== undefined
-        ? override.benefitValueOverrides[b.id]
-        : b.value;
-    const calculatedAmount = !enabled
-      ? 0
-      : effectiveType === 'percent'
-      ? Math.round((baseSalary * rawValue) / 100)
-      : rawValue;
-    return {
-      id: b.id,
-      name: b.name,
-      type: effectiveType,
-      rawValue,
-      calculatedAmount,
-      enabled,
-    };
-  });
+  // Collect all single-month-only benefit IDs across overrides so they never leak into other months
+  const allSingleOnlyBenefitIds = new Set<string>();
+  for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
+    const extraList = (mOv as any)?.extraBenefits;
+    if (Array.isArray(extraList)) {
+      for (const eb of extraList) {
+        if (eb?.id && mKey !== targetMonth) {
+          allSingleOnlyBenefitIds.add(eb.id);
+        }
+      }
+    }
+  }
 
+  const baseBenefits = (snap.benefits || [])
+    .filter((b) => !allSingleOnlyBenefitIds.has(b.id))
+    .map((b) => {
+      const enabled = b.enabled && !disabledIds.has(b.id);
+      const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
+      const rawValue =
+        override?.benefitValueOverrides?.[b.id] !== undefined
+          ? override.benefitValueOverrides[b.id]
+          : b.value;
+      const calculatedAmount = !enabled
+        ? 0
+        : effectiveType === 'percent'
+        ? Math.round((baseSalary * rawValue) / 100)
+        : rawValue;
+      return {
+        id: b.id,
+        name: b.name,
+        type: effectiveType,
+        rawValue,
+        calculatedAmount,
+        enabled,
+      };
+    });
+
+  // For subsequent months after a single-month benefit was added for `targetMonth`,
+  // surface that benefit as unchecked (`enabled: false`, `calculatedAmount: 0`) so the user sees it unchecked
+  // and future months do not receive the value.
   const singleMonthExtraBenefits = ((override as any)?.extraBenefits || []).map((b: LaborBenefit) => {
     const enabled = b.enabled !== false && !disabledIds.has(b.id);
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
@@ -561,7 +576,25 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     };
   });
 
-  const benefits = [...baseBenefits, ...singleMonthExtraBenefits];
+  const uncheckedFuturePlaceholders: typeof singleMonthExtraBenefits = [];
+  for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
+    if (mKey >= targetMonth) continue;
+    const extraList = (mOv as any)?.extraBenefits;
+    if (!Array.isArray(extraList)) continue;
+    for (const eb of extraList) {
+      if (!eb?.id || singleMonthExtraBenefits.some((x: any) => x.id === eb.id)) continue;
+      uncheckedFuturePlaceholders.push({
+        id: eb.id,
+        name: eb.name,
+        type: eb.type || 'percent',
+        rawValue: Number(eb.value) || 0,
+        calculatedAmount: 0,
+        enabled: false,
+      });
+    }
+  }
+
+  const benefits = [...baseBenefits, ...singleMonthExtraBenefits, ...uncheckedFuturePlaceholders];
 
   const extraAmount = override?.extraAmount || 0;
   const benefitsTotal = benefits.reduce((acc, item) => acc + item.calculatedAmount, 0);

@@ -633,9 +633,12 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     const override = job.monthOverrides?.[selectedSalaryMonth];
     const snapBenefitIds = new Set((snap.benefits || []).map((b) => b.id));
 
-    // Only include benefits that were in the snapshot OR explicitly added for this month
     const mergedDraft: LaborBenefit[] = calc.benefits
-      .filter((cb) => snapBenefitIds.has(cb.id) || ((override as any)?.extraBenefits || []).some((eb: LaborBenefit) => eb.id === cb.id))
+      .filter(
+        (cb) =>
+          snapBenefitIds.has(cb.id) ||
+          ((override as any)?.extraBenefits || []).some((eb: LaborBenefit) => eb.id === cb.id)
+      )
       .map((cb) => ({
         id: cb.id,
         name: cb.name,
@@ -701,8 +704,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
     if (scope === 'single') {
       // Single-month scope ("Manter valor original nos próximos meses"):
-      // Keep the baseline snapshot untouched so future months do NOT get new benefits,
-      // and store any newly created benefit inside monthOverrides[selectedSalaryMonth].extraBenefits.
+      // Apply enabled/new benefits ONLY in `selectedSalaryMonth`, and for subsequent months
+      // keep the benefit UNCHECKED (`enabled: false`) so future months keep their original value.
       const baseSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
       const baseSnapIds = new Set((baseSnap.benefits || []).map((b) => b.id));
 
@@ -710,31 +713,53 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       const benefitValueOverrides: Record<string, number> = {};
       const benefitTypeOverrides: Record<string, BenefitCalcType> = {};
       const singleMonthOnlyBenefits: LaborBenefit[] = [];
+      const newlyEnabledOrAddedIds: string[] = [];
 
       draftBenefits.forEach((b) => {
         benefitValueOverrides[b.id] = b.value;
         benefitTypeOverrides[b.id] = b.type;
         if (!baseSnapIds.has(b.id)) {
           singleMonthOnlyBenefits.push(b);
+          if (b.enabled) newlyEnabledOrAddedIds.push(b.id);
+        } else {
+          const origSnapBenefit = (baseSnap.benefits || []).find((sb) => sb.id === b.id);
+          if (b.enabled && (!origSnapBenefit || !origSnapBenefit.enabled)) {
+            newlyEnabledOrAddedIds.push(b.id);
+          }
         }
       });
 
-      const prevMonthOverride = job.monthOverrides?.[selectedSalaryMonth] || {};
+      const nextMonthOverrides: Record<string, any> = {
+        ...(job.monthOverrides || {}),
+      };
+
+      const prevMonthOverride = nextMonthOverrides[selectedSalaryMonth] || {};
+      nextMonthOverrides[selectedSalaryMonth] = {
+        ...prevMonthOverride,
+        baseSalary: newBase,
+        disabledBenefitIds,
+        benefitValueOverrides,
+        benefitTypeOverrides,
+        extraBenefits: singleMonthOnlyBenefits,
+        extraAmount: newExtra,
+      };
+
+      // Uncheck newly added/enabled benefits in subsequent months so future months stay original
+      if (newlyEnabledOrAddedIds.length > 0) {
+        for (const [mKey, mOv] of Object.entries(nextMonthOverrides)) {
+          if (mKey <= selectedSalaryMonth) continue;
+          const existingDisabled = new Set<string>(mOv?.disabledBenefitIds || []);
+          newlyEnabledOrAddedIds.forEach((id) => existingDisabled.add(id));
+          nextMonthOverrides[mKey] = {
+            ...mOv,
+            disabledBenefitIds: Array.from(existingDisabled),
+          };
+        }
+      }
 
       updatedJob = {
         ...job,
-        monthOverrides: {
-          ...(job.monthOverrides || {}),
-          [selectedSalaryMonth]: {
-            ...prevMonthOverride,
-            baseSalary: newBase,
-            disabledBenefitIds,
-            benefitValueOverrides,
-            benefitTypeOverrides,
-            extraBenefits: singleMonthOnlyBenefits,
-            extraAmount: newExtra,
-          } as any,
-        },
+        monthOverrides: nextMonthOverrides,
       };
     } else {
       // Future scope ("Atualizar deste mês em diante"):
@@ -780,7 +805,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setSalarySavedToast(
       scope === 'future'
         ? 'Salário, benefícios e projeção atualizados deste mês em diante!'
-        : 'Benefício/valor aplicado somente neste mês — próximos meses mantidos!'
+        : 'Benefício aplicado somente neste mês — próximos meses mantidos desmarcados!'
     );
     window.setTimeout(() => setSalarySavedToast(null), 3200);
   };
@@ -2033,6 +2058,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       ({b.rawValue}%)
                                     </span>
                                   )}
+                                  {!b.enabled && (
+                                    <span className="ml-1.5 rounded bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 no-underline inline-block">
+                                      Desmarcado
+                                    </span>
+                                  )}
                                 </span>
                                 <span className="font-mono">
                                   +{formatCurrency(b.calculatedAmount, job.currency)}
@@ -3049,8 +3079,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Manter valor original nos próximos meses
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-slate-500">
-                          Aplica o benefício criado somente em{' '}
-                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — os próximos meses mantêm o valor anterior sem esse benefício.
+                          Aplica o benefício somente em{' '}
+                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — nos próximos meses o benefício fica desmarcado e o valor original é mantido.
                         </div>
                       </button>
                     </div>
