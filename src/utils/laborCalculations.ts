@@ -57,6 +57,7 @@ export function createDefaultGastronomyBenefits(): LaborBenefit[] {
   return [
     { id: 'ben_asistencia', name: 'Assistência Perfeita', type: 'percent', value: 10, enabled: true },
     { id: 'ben_alimentacao', name: 'Alimentação', type: 'percent', value: 10, enabled: true },
+    { id: 'ben_antiguidade', name: 'Antiguidade', type: 'percent', value: 0, enabled: true },
     { id: 'ben_cortados', name: 'Turnos Cortados', type: 'fixed', value: 0, enabled: true },
     { id: 'ben_extras', name: 'Horas Extras', type: 'variable', value: 0, enabled: true },
   ];
@@ -449,19 +450,20 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
 
   const benefits = (snap.benefits || []).map((b) => {
     const enabled = b.enabled && !disabledIds.has(b.id);
+    const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
     const rawValue =
       override?.benefitValueOverrides?.[b.id] !== undefined
         ? override.benefitValueOverrides[b.id]
         : b.value;
     const calculatedAmount = !enabled
       ? 0
-      : b.type === 'percent'
+      : effectiveType === 'percent'
       ? Math.round((baseSalary * rawValue) / 100)
       : rawValue;
     return {
       id: b.id,
       name: b.name,
-      type: b.type,
+      type: effectiveType,
       rawValue,
       calculatedAmount,
       enabled,

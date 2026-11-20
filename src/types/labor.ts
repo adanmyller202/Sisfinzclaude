@@ -42,6 +42,7 @@ export interface LaborMonthOverride {
   deductionPercent?: number;
   disabledBenefitIds?: string[];
   benefitValueOverrides?: Record<string, number>;
+  benefitTypeOverrides?: Record<string, BenefitCalcType>;
   extraAmount?: number;
   extraNote?: string;
 }
