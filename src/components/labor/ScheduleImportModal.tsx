@@ -29,7 +29,8 @@ interface ScheduleImportModalProps {
   onApplySchedule: (schedule: WeeklySchedule, saveAsDefault: boolean) => void;
 }
 
-const REQUEST_TIMEOUT_MS = 22000;
+// Server allows up to 2 models x 12s = 24s; give client 28s per attempt + 1 automatic retry on cold-start timeout
+const REQUEST_TIMEOUT_MS = 28000;
 
 const DAY_PATTERNS: { key: DayOfWeekKey; regex: RegExp }[] = [
   { key: 'mon', regex: /\b(seg(?:unda)?|lun(?:es)?|mon(?:day)?)\b/i },
@@ -173,26 +174,38 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const userCancelledRef = useRef(false);
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [pastedText, setPastedText] = useState('');
   const [nameHint, setNameHint] = useState(employeeName || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [statusHint, setStatusHint] = useState('Isso costuma levar poucos segundos');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewSchedule, setPreviewSchedule] = useState<WeeklySchedule | null>(null);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
 
-  const abortInFlight = () => {
+  const abortInFlight = (isUserCancel = false) => {
+    if (isUserCancel) userCancelledRef.current = true;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
   };
 
-  useEffect(() => () => abortInFlight(), []);
+  useEffect(() => () => abortInFlight(true), []);
+
+  // Pre-warm the backend container and Firebase auth token as soon as the modal opens
+  // so the first upload never suffers from serverless cold-start latency.
+  useEffect(() => {
+    if (!isOpen) return;
+    auth.currentUser?.getIdToken().catch(() => {});
+    fetch('/api/health', { method: 'GET', cache: 'no-store' }).catch(() => {});
+  }, [isOpen]);
 
   const resetModal = () => {
-    abortInFlight();
+    abortInFlight(true);
     setIsAnalyzing(false);
+    setStatusHint('Isso costuma levar poucos segundos');
     setErrorMsg(null);
     setPreviewSchedule(null);
     setPastedText('');
@@ -204,12 +217,10 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
     onClose();
   };
 
-  const handleSelectImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (!file) return;
-
-    abortInFlight();
+  const sendParseRequest = async (
+    payload: { imageBase64: string; mimeType: string; employeeName?: string },
+    idToken: string
+  ) => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     let didTimeout = false;
@@ -218,13 +229,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
 
-    setIsAnalyzing(true);
-    setErrorMsg(null);
-
     try {
-      const { base64, mimeType } = await compressImageInMemory(file);
-      const idToken = await auth.currentUser?.getIdToken().catch(() => '');
-
       const resp = await fetch('/api/work/parse-schedule', {
         method: 'POST',
         signal: controller.signal,
@@ -232,12 +237,83 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({
-          imageBase64: base64,
-          mimeType,
-          employeeName: nameHint.trim() || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
+      return { resp, didTimeout };
+    } catch (err: any) {
+      if (err?.name === 'AbortError' && didTimeout) {
+        const timeoutErr = new Error('REQUEST_TIMEOUT');
+        (timeoutErr as any).isTimeout = true;
+        throw timeoutErr;
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+    }
+  };
+
+  const handleSelectImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    abortInFlight(false);
+    userCancelledRef.current = false;
+    setIsAnalyzing(true);
+    setStatusHint('Preparando imagem em memória...');
+    setErrorMsg(null);
+
+    try {
+      // Compress in memory and fetch auth token BEFORE starting the network timeout timer
+      const [{ base64, mimeType }, idToken] = await Promise.all([
+        compressImageInMemory(file),
+        auth.currentUser?.getIdToken().catch(() => '') ?? Promise.resolve(''),
+      ]);
+
+      if (userCancelledRef.current) return;
+
+      const payload = {
+        imageBase64: base64,
+        mimeType,
+        employeeName: nameHint.trim() || undefined,
+      };
+
+      setStatusHint('Analisando horários com IA...');
+
+      let resp: Response | null = null;
+      let lastError: any = null;
+
+      // Up to 2 attempts: if attempt 1 hits a cold-start timeout or 502/503/504, retry automatically
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (userCancelledRef.current) return;
+        if (attempt === 2) {
+          setStatusHint('Servidor aquecendo — concluindo leitura...');
+        }
+        try {
+          const result = await sendParseRequest(payload, idToken);
+          if (
+            attempt === 1 &&
+            (result.resp.status === 502 || result.resp.status === 503 || result.resp.status === 504)
+          ) {
+            continue;
+          }
+          resp = result.resp;
+          break;
+        } catch (err: any) {
+          lastError = err;
+          if (userCancelledRef.current) return;
+          if (attempt === 1 && (err?.isTimeout || err?.name === 'TypeError')) {
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!resp) {
+        throw lastError || new Error('Não foi possível conectar ao servidor.');
+      }
 
       if (!resp.ok) {
         const errBody = await resp.json().catch(() => ({}));
@@ -256,18 +332,14 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
         throw new Error('A IA não retornou horários válidos para esta imagem.');
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        if (didTimeout) {
-          setErrorMsg('A leitura demorou mais que o esperado. Tente novamente ou recorte só a tabela do cronograma.');
-        }
-      } else {
+      if (userCancelledRef.current) return;
+      if (err?.isTimeout || err?.message === 'REQUEST_TIMEOUT') {
+        setErrorMsg('A leitura demorou mais que o esperado. Tente novamente ou recorte só a tabela do cronograma.');
+      } else if (err?.name !== 'AbortError') {
         setErrorMsg(err?.message || 'Erro ao analisar a imagem.');
       }
     } finally {
-      window.clearTimeout(timeoutId);
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setIsAnalyzing(false);
     }
   };
@@ -415,7 +487,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                               Lendo horários com IA...
                             </span>
                             <span className="text-[10.5px] font-medium text-emerald-700/80">
-                              Isso costuma levar poucos segundos
+                              {statusHint}
                             </span>
                           </>
                         ) : (
@@ -437,7 +509,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            abortInFlight();
+                            abortInFlight(true);
                             setIsAnalyzing(false);
                           }}
                           className="w-full rounded-xl border border-slate-200 bg-white py-2 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
