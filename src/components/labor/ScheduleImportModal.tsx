@@ -61,14 +61,15 @@ function normalizeImportedSchedule(raw: any, fallback: WeeklySchedule): WeeklySc
     const isOff = Boolean(entry.isOff);
     const startTime = entry.startTime ? normalizeTime(entry.startTime, result[day].startTime) : result[day].startTime;
     const endTime = entry.endTime ? normalizeTime(entry.endTime, result[day].endTime) : result[day].endTime;
-    const isSplitShift = Boolean(entry.isSplitShift && entry.splitStartTime && entry.splitEndTime);
+    const hasSplitTimes = Boolean(entry.splitStartTime && entry.splitEndTime);
+    const isSplitShift = !isOff && (Boolean(entry.isSplitShift) || hasSplitTimes);
     result[day] = {
       isOff,
       startTime,
       endTime,
       isSplitShift,
       splitStartTime: isSplitShift ? normalizeTime(entry.splitStartTime, '19:00') : undefined,
-      splitEndTime: isSplitShift ? normalizeTime(entry.splitEndTime, '23:30') : undefined,
+      splitEndTime: isSplitShift ? normalizeTime(entry.splitEndTime, '01:30') : undefined,
     };
   }
   return result;
@@ -388,7 +389,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                           type="text"
                           value={nameHint}
                           onChange={(e) => setNameHint(e.target.value)}
-                          placeholder="Ex: Adan"
+                          placeholder="Ex: Martinez T."
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
                         />
                       </div>
@@ -458,7 +459,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                         rows={5}
                         value={pastedText}
                         onChange={(e) => setPastedText(e.target.value)}
-                        placeholder={'Ex:\nSeg 18:00 - 02:00\nTer Franco\nQua 18:00 - 02:00\nQui 18:00 - 02:00\nSex 18:00 - 02:30\nSab 18:00 - 02:30\nDom 18:00 - 01:30'}
+                        placeholder={'Ex:\nSeg 18:00 - 02:00\nTer Franco\nQua 18:00 - 02:00\nQui 18:00 - 02:00\nSex 18:00 - 02:30\nSab 12:30 - 16:30 + 20:30 - 01:30\nDom 13:00 - 15:30 + 19:00 - 01:30'}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-xs font-bold text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
                       />
                       <button
@@ -501,48 +502,101 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                       return (
                         <div
                           key={dayKey}
-                          className={`flex items-center justify-between gap-2 rounded-2xl border p-2.5 ${
-                            d.isOff ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200 bg-white'
+                          className={`rounded-2xl border p-2.5 space-y-2 ${
+                            d.isOff
+                              ? 'border-amber-200 bg-amber-50/50'
+                              : d.isSplitShift
+                              ? 'border-indigo-200 bg-indigo-50/30'
+                              : 'border-slate-200 bg-white'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="w-10 text-xs font-black text-slate-800">
-                              {language === 'es' ? WEEKDAY_LABELS[dayKey].shortEs : WEEKDAY_LABELS[dayKey].shortPt}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => updatePreviewDay(dayKey, { isOff: !d.isOff })}
-                              className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase cursor-pointer ${
-                                d.isOff
-                                  ? 'bg-amber-500 text-white'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}
-                            >
-                              {d.isOff ? 'Franco' : 'Turno'}
-                            </button>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-9 text-xs font-black text-slate-800">
+                                {language === 'es' ? WEEKDAY_LABELS[dayKey].shortEs : WEEKDAY_LABELS[dayKey].shortPt}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updatePreviewDay(dayKey, { isOff: !d.isOff })}
+                                className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase cursor-pointer ${
+                                  d.isOff
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {d.isOff ? 'Franco' : 'Turno'}
+                              </button>
+                              {!d.isOff && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updatePreviewDay(dayKey, {
+                                      isSplitShift: !d.isSplitShift,
+                                      splitStartTime: d.splitStartTime || '19:00',
+                                      splitEndTime: d.splitEndTime || '01:30',
+                                    })
+                                  }
+                                  className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase cursor-pointer ${
+                                    d.isSplitShift
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'border border-slate-200 bg-white text-slate-500'
+                                  }`}
+                                >
+                                  Cortado
+                                </button>
+                              )}
+                            </div>
+
+                            {!d.isOff ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={d.startTime}
+                                  onChange={(e) => updatePreviewDay(dayKey, { startTime: e.target.value })}
+                                  className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-800"
+                                />
+                                <span className="text-xs font-bold text-slate-400">→</span>
+                                <input
+                                  type="time"
+                                  value={d.endTime}
+                                  onChange={(e) => updatePreviewDay(dayKey, { endTime: e.target.value })}
+                                  className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-800"
+                                />
+                                <span className="text-[10px] font-black text-emerald-700 min-w-[38px] text-right">
+                                  {formatMinutesAsHours(mins)}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-bold text-amber-700 pr-2">Descanso</span>
+                            )}
                           </div>
 
-                          {!d.isOff ? (
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="time"
-                                value={d.startTime}
-                                onChange={(e) => updatePreviewDay(dayKey, { startTime: e.target.value })}
-                                className="rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs font-bold text-slate-800"
-                              />
-                              <span className="text-xs font-bold text-slate-400">→</span>
-                              <input
-                                type="time"
-                                value={d.endTime}
-                                onChange={(e) => updatePreviewDay(dayKey, { endTime: e.target.value })}
-                                className="rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs font-bold text-slate-800"
-                              />
-                              <span className="hidden sm:inline text-[10px] font-black text-emerald-700 w-11 text-right">
-                                {formatMinutesAsHours(mins)}
+                          {/* Second Shift Row for Cortado (Split Shift) */}
+                          {!d.isOff && d.isSplitShift && (
+                            <div className="flex items-center justify-between gap-2 pl-2 border-l-2 border-indigo-400">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                                2º turno (Cortado)
                               </span>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={d.splitStartTime || '19:00'}
+                                  onChange={(e) =>
+                                    updatePreviewDay(dayKey, { splitStartTime: e.target.value })
+                                  }
+                                  className="rounded-lg border border-indigo-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-800"
+                                />
+                                <span className="text-xs font-bold text-indigo-400">→</span>
+                                <input
+                                  type="time"
+                                  value={d.splitEndTime || '01:30'}
+                                  onChange={(e) =>
+                                    updatePreviewDay(dayKey, { splitEndTime: e.target.value })
+                                  }
+                                  className="rounded-lg border border-indigo-200 bg-white px-1.5 py-1 text-xs font-bold text-slate-800"
+                                />
+                              </div>
                             </div>
-                          ) : (
-                            <span className="text-[11px] font-bold text-amber-700 pr-2">Descanso</span>
                           )}
                         </div>
                       );
