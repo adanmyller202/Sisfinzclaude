@@ -10,6 +10,7 @@ import {
   repairMissingIncomeExpectedDates,
 } from '../components/ErrorBoundary';
 import { initSalaryBreakdownViewer } from './salaryBreakdownViewer';
+import { initBrandLogoSync } from './brandLogoSync';
 
 let pendingTimers: number[] = [];
 
@@ -102,6 +103,9 @@ export function initTabBarAutoScroll() {
 
   // Enable interactive salary composition breakdown viewer on synced salary incomes in Receitas
   initSalaryBreakdownViewer();
+
+  // Apply the new SisFinz vector logo across all screens & legacy logo slots
+  initBrandLogoSync();
 
   // Cancel any scheduled adjustment if the user starts manually scrolling
   window.addEventListener('touchstart', clearPendingTimers, { passive: true });

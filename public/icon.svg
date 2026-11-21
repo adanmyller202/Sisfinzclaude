@@ -1,11 +1,104 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#047857"/>
+    <linearGradient id="emeraldDarkTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="emeraldDarkBottom" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="mintRibbon" x1="12%" y1="18%" x2="88%" y2="82%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="52%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <linearGradient id="foldShadowTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064E3B" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#065F46" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="foldShadowBottom" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#064E3B" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#065F46" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="128" fill="url(#grad)"/>
-  <rect x="96" y="96" width="320" height="320" rx="48" fill="#ffffff" opacity="0.15"/>
-  <path d="M160 260 L230 330 L352 180" fill="none" stroke="#ffffff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Crisp white rounded app icon backdrop -->
+  <rect width="512" height="512" rx="112" fill="#FFFFFF"/>
+
+  <!-- Top dark emerald ribbon of the hexagonal S -->
+  <path
+    d="M 138 154
+       L 234 98
+       Q 256 85 278 98
+       L 390 163
+       L 354 222
+       L 264 170
+       Q 256 165 248 170
+       L 182 208
+       Z"
+    fill="url(#emeraldDarkTop)"
+  />
+
+  <!-- Bottom dark emerald ribbon of the hexagonal S (180-deg symmetric) -->
+  <path
+    d="M 374 358
+       L 278 414
+       Q 256 427 234 414
+       L 122 349
+       L 158 290
+       L 248 342
+       Q 256 347 264 342
+       L 330 304
+       Z"
+    fill="url(#emeraldDarkBottom)"
+  />
+
+  <!-- Inner fold shadows for realistic folded-ribbon depth -->
+  <path
+    d="M 138 154 L 182 208 L 154 224 C 132 212 122 184 138 154 Z"
+    fill="url(#foldShadowTop)"
+  />
+  <path
+    d="M 374 358 L 330 304 L 358 288 C 380 300 390 328 374 358 Z"
+    fill="url(#foldShadowBottom)"
+  />
+
+  <!-- Center vibrant mint-emerald folded diagonal ribbon -->
+  <path
+    d="M 146 150
+       C 122 164 114 186 114 210
+       L 114 228
+       C 114 252 126 270 148 283
+       L 318 381
+       C 334 390 352 384 366 362
+       C 390 348 398 326 398 302
+       L 398 284
+       C 398 260 386 242 364 229
+       L 194 131
+       C 178 122 160 128 146 150
+       Z
+       M 178 208
+       C 170 203 170 193 178 188
+       L 194 179
+       L 334 260
+       C 342 265 342 275 334 280
+       L 318 289
+       Z"
+    fill="url(#mintRibbon)"
+    fill-rule="evenodd"
+  />
+
+  <!-- Clean white inner negative-space cuts that define the crisp S channel -->
+  <path
+    d="M 192 204
+       L 252 169
+       Q 256 167 260 169
+       L 334 212
+       L 318 238
+       L 192 165
+       Z"
+    fill="#FFFFFF"
+    opacity="0"
+  />
 </svg>

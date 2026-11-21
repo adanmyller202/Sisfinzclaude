@@ -134,7 +134,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         ))}
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 40 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
@@ -142,9 +142,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       >
         {/* Brand Header */}
         <div className="text-center space-y-4">
-          <div className="relative mx-auto w-24 h-24 rounded-[2rem] overflow-hidden shadow-xl border border-white/90 group">
-            <img src="/assets/aistudio/image_89b2520a.jpeg" alt="SisFinz" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/10 to-transparent pointer-events-none" />
+          <div className="relative mx-auto w-24 h-24 rounded-[2rem] overflow-hidden shadow-xl border border-emerald-100 bg-white group">
+            <img src="/logo-sisfinz.svg" alt="SisFinz" className="w-full h-full object-contain p-1.5 transition-transform duration-700 group-hover:scale-110" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/5 to-transparent pointer-events-none" />
           </div>
           <div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center justify-center gap-2">
@@ -152,7 +152,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <Sparkles className="w-5 h-5 text-emerald-500" />
             </h1>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 mt-2 leading-none">
-              {mode === 'login' ? 'Bem-vindo teste' : mode === 'signup' ? 'Crie sua conta' : 'Recupere sua senha'}
+              {mode === 'login' ? 'Bem-vindo de volta' : mode === 'signup' ? 'Crie sua conta' : 'Recupere sua senha'}
             </p>
           </div>
         </div>
