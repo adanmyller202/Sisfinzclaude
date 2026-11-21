@@ -538,7 +538,18 @@ export function getEffectiveSalarySnapshot(job: LaborJob, targetMonth: string): 
   return active;
 }
 
-/** Calculate monthly salary from Base + Benefits + optional month extras */
+/**
+ * Pure calculation for a single month's salary & benefits:
+ * 1. Base salary & baseline benefits come from `salaryHistory` active at `targetMonth`.
+ * 2. Any single-month override (`monthOverrides[targetMonth]`) applies ONLY to `targetMonth`:
+ *    - `baseSalary` override
+ *    - `disabledBenefitIds` / `enabledBenefitIds`
+ *    - `benefitValueOverrides` / `benefitTypeOverrides`
+ *    - `singleMonthBenefits` (benefits created for `targetMonth` only)
+ *    - `extraAmount`
+ * 3. Single-month benefits from OTHER months NEVER leak into `targetMonth`'s total;
+ *    for months after `mKey`, they appear as unchecked (`enabled: false`, `calculatedAmount: 0`).
+ */
 function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<MonthlySalaryCalculation, 'aguinaldoAmount' | 'totalWithAguinaldo'> {
   const snap = getEffectiveSalarySnapshot(job, targetMonth);
   const override = job.monthOverrides?.[targetMonth];
@@ -547,9 +558,9 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
   const deductionPercent =
     override?.deductionPercent !== undefined ? override.deductionPercent : snap.deductionPercent || 0;
   const disabledIds = new Set(override?.disabledBenefitIds || []);
+  const explicitlyEnabledIds = new Set<string>((override as any)?.enabledBenefitIds || []);
 
-  // Any benefit marked as singleMonthOnly in monthOverrides[M] applies ONLY in month M,
-  // and is excluded from all other months (both earlier and later months).
+  // Collect single-month-only benefits across all months
   const singleMonthOnlyByMonth = new Map<string, LaborBenefit[]>();
   const allSingleOnlyBenefitIds = new Set<string>();
   for (const [mKey, mOv] of Object.entries(job.monthOverrides || {})) {
@@ -567,7 +578,9 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
   const baseBenefits = (snap.benefits || [])
     .filter((b) => !allSingleOnlyBenefitIds.has(b.id))
     .map((b) => {
-      const enabled = b.enabled && !disabledIds.has(b.id);
+      const enabled = explicitlyEnabledIds.has(b.id)
+        ? true
+        : b.enabled && !disabledIds.has(b.id);
       const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
       const rawValue =
         override?.benefitValueOverrides?.[b.id] !== undefined
@@ -588,9 +601,11 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       };
     });
 
-  // Active single-month benefits for `targetMonth`
+  // Single-month benefits belonging specifically to `targetMonth`
   const activeSingleMonthBenefits = (singleMonthOnlyByMonth.get(targetMonth) || []).map((b) => {
-    const enabled = b.enabled !== false && !disabledIds.has(b.id);
+    const enabled = explicitlyEnabledIds.has(b.id)
+      ? true
+      : !disabledIds.has(b.id) && b.enabled !== false;
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
     const rawValue =
       override?.benefitValueOverrides?.[b.id] !== undefined
@@ -611,8 +626,7 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     };
   });
 
-  // For months AFTER a single-month benefit was applied, display that benefit as unchecked
-  // (`enabled: false`, `calculatedAmount: 0`) so the user sees it unchecked while keeping its original salary.
+  // For subsequent months (> mKey), display that single-month benefit as unchecked (`enabled: false`, `calculatedAmount: 0`)
   const uncheckedLaterPlaceholders: typeof activeSingleMonthBenefits = [];
   for (const [mKey, singleList] of singleMonthOnlyByMonth.entries()) {
     if (mKey >= targetMonth) continue;

@@ -780,29 +780,17 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
   // --- Salary & Benefits Handlers ---
   const openSalaryEditor = () => {
-    const snap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
     const calc = calculateMonthSalary(job, selectedSalaryMonth);
-    const override = job.monthOverrides?.[selectedSalaryMonth];
-    const snapBenefitIds = new Set((snap.benefits || []).map((b) => b.id));
-
-    const mergedDraft: LaborBenefit[] = calc.benefits
-      .filter(
-        (cb) =>
-          snapBenefitIds.has(cb.id) ||
-          ((override as any)?.singleMonthBenefits || []).some(
-            (sb: LaborBenefit) => sb.id === cb.id
-          )
-      )
-      .map((cb) => ({
+    setDraftBaseSalary(String(calc.baseSalary || 0));
+    setDraftBenefits(
+      calc.benefits.map((cb) => ({
         id: cb.id,
         name: cb.name,
         type: cb.type,
         value: cb.rawValue,
         enabled: cb.enabled,
-      }));
-
-    setDraftBaseSalary(String(calc.baseSalary || 0));
-    setDraftBenefits(mergedDraft);
+      }))
+    );
     setDraftExtraAmount(String(calc.extraAmount || 0));
     setSalaryEditorOpen(true);
   };
@@ -864,6 +852,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       const baseSnapIds = new Set((baseSnap.benefits || []).map((b) => b.id));
 
       const disabledBenefitIds = draftBenefits.filter((b) => !b.enabled).map((b) => b.id);
+      const enabledBenefitIds = draftBenefits.filter((b) => b.enabled).map((b) => b.id);
       const benefitValueOverrides: Record<string, number> = {};
       const benefitTypeOverrides: Record<string, BenefitCalcType> = {};
       const singleMonthOnlyBenefits: LaborBenefit[] = [];
@@ -873,7 +862,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         benefitValueOverrides[b.id] = b.value;
         benefitTypeOverrides[b.id] = b.type;
         if (!baseSnapIds.has(b.id)) {
-          singleMonthOnlyBenefits.push(b);
+          singleMonthOnlyBenefits.push({ ...b, enabled: b.enabled });
           if (b.enabled) newlyEnabledOrAddedIds.push(b.id);
         } else {
           const origSnapBenefit = (baseSnap.benefits || []).find((sb) => sb.id === b.id);
@@ -892,20 +881,27 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         ...prevMonthOverride,
         baseSalary: newBase,
         disabledBenefitIds,
+        enabledBenefitIds,
         benefitValueOverrides,
         benefitTypeOverrides,
         singleMonthBenefits: singleMonthOnlyBenefits,
         extraAmount: newExtra,
       };
 
+      // In subsequent months, ensure any newly enabled/added benefit stays unchecked
       if (newlyEnabledOrAddedIds.length > 0) {
         for (const [mKey, mOv] of Object.entries(nextMonthOverrides)) {
           if (mKey <= selectedSalaryMonth) continue;
           const existingDisabled = new Set<string>(mOv?.disabledBenefitIds || []);
-          newlyEnabledOrAddedIds.forEach((id) => existingDisabled.add(id));
+          const existingEnabled = new Set<string>(mOv?.enabledBenefitIds || []);
+          newlyEnabledOrAddedIds.forEach((id) => {
+            existingDisabled.add(id);
+            existingEnabled.delete(id);
+          });
           nextMonthOverrides[mKey] = {
             ...mOv,
             disabledBenefitIds: Array.from(existingDisabled),
+            enabledBenefitIds: Array.from(existingEnabled),
           };
         }
       }
@@ -916,7 +912,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       };
     } else {
       // Future scope ("Atualizar deste mês em diante"):
-      // Apply the full draft (including any newly created benefit) from selectedSalaryMonth onward,
+      // Apply the full draft (including any newly created/enabled benefit) from selectedSalaryMonth onward,
       // while keeping past months (< selectedSalaryMonth) intact.
       const pastSnapshots = (job.salaryHistory || []).filter(
         (s) => s.effectiveFromMonth < selectedSalaryMonth
@@ -927,11 +923,17 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         benefits: draftBenefits,
         deductionPercent: 0,
       };
-      const nextOverrides = { ...(job.monthOverrides || {}) };
+      const nextOverrides: Record<string, any> = { ...(job.monthOverrides || {}) };
       if (newExtra > 0) {
         nextOverrides[selectedSalaryMonth] = { extraAmount: newExtra };
       } else {
         delete nextOverrides[selectedSalaryMonth];
+      }
+      // Clear stale single-month disabled overrides on future months so the new snapshot takes effect cleanly
+      for (const mKey of Object.keys(nextOverrides)) {
+        if (mKey > selectedSalaryMonth) {
+          delete nextOverrides[mKey];
+        }
       }
 
       updatedJob = {
@@ -1447,7 +1449,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             </button>
                           </div>
 
-                          {/* Empty / Unconfigured Week Notice */}
                           {!selectedWeekHasSchedule && (
                             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 p-3.5 space-y-2.5">
                               <div className="flex items-start justify-between gap-2">
@@ -1701,7 +1702,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     </div>
                                   )}
 
-                                  {/* Entry + Exit Punctuality Strip with Alterar & Excluir buttons */}
                                   {attendanceEntries.length > 0 && (
                                     <div className="mt-2.5 space-y-1.5 border-t border-slate-200/70 pt-2">
                                       {attendanceEntries.map((att) => {
