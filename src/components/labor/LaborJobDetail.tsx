@@ -102,6 +102,16 @@ const SHIFT_TAGS: { id: ShiftTag; labelPt: string; labelEs: string }[] = [
   { id: 'absence', labelPt: 'Falta / Atestado', labelEs: 'Falta' },
 ];
 
+const WEEKDAY_INITIALS: Record<DayOfWeekKey, string> = {
+  mon: 'S',
+  tue: 'T',
+  wed: 'Q',
+  thu: 'Q',
+  fri: 'S',
+  sat: 'S',
+  sun: 'D',
+};
+
 function addMinutesToHHMM(timeStr: string, deltaMinutes: number): string {
   const base = parseTimeToMinutes(timeStr || '18:00');
   const total = (((base + deltaMinutes) % 1440) + 1440) % 1440;
@@ -261,6 +271,50 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       .filter((t) => t.date?.startsWith(currentMonth))
       .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
   }, [job.tips, currentMonth]);
+
+  // Mini visual status dots for the 7 days of the selected week (used on the Schedule hub card)
+  const weekMiniDots = useMemo(() => {
+    return ORDERED_WEEKDAYS.map((dayKey, idx) => {
+      const dayDate = shiftDateByDays(selectedMonday, idx);
+      const sched = weekSchedule[dayKey];
+      const entries = getDayAttendanceEntries(job, dayDate, sched);
+      const hasPunch = entries.length > 0;
+      const hasIssue = entries.some((e) => e.hasIssue);
+      let state: 'unset' | 'off' | 'ok' | 'issue' | 'pending' = 'unset';
+      if (sched.isUnset) state = 'unset';
+      else if (sched.isOff) state = 'off';
+      else if (hasIssue) state = 'issue';
+      else if (hasPunch) state = 'ok';
+      else state = 'pending';
+      return {
+        dayKey,
+        initial: WEEKDAY_INITIALS[dayKey],
+        isToday: dayDate === todayStr,
+        state,
+      };
+    });
+  }, [job, selectedMonday, weekSchedule, todayStr]);
+
+  // Mini progress percentage for current month HR hours
+  const monthlyHoursProgress = useMemo(() => {
+    if (currentMonthAudit.scheduledMinutes <= 0) return 0;
+    return Math.min(
+      100,
+      Math.round((currentMonthAudit.workedMinutes / currentMonthAudit.scheduledMinutes) * 100)
+    );
+  }, [currentMonthAudit.workedMinutes, currentMonthAudit.scheduledMinutes]);
+
+  // Mini 6-month salary sparkline bars for the Salary hub card
+  const salarySparkBars = useMemo(() => {
+    const slice = twelveMonthProjection.slice(0, 6);
+    const maxVal = Math.max(1, ...slice.map((m) => m.netTotal));
+    return slice.map((m) => ({
+      month: m.month,
+      pct: Math.max(22, Math.round((m.netTotal / maxVal) * 100)),
+      isSelected: m.month === selectedSalaryMonth,
+      isPeak: m.netTotal === maxVal && slice.some((other) => other.netTotal < maxVal),
+    }));
+  }, [twelveMonthProjection, selectedSalaryMonth]);
 
   const toggleSection = (sec: AccordionSection) => {
     setOpenSection((prev) => (prev === sec ? null : sec));
@@ -1113,15 +1167,35 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     subtitle: string;
     badge?: string;
     icon: React.ComponentType<{ className?: string }>;
+    theme: {
+      iconGradient: string;
+      iconShadow: string;
+      openBorder: string;
+      closedBorder: string;
+      ambientGlow: string;
+      badgeBg: string;
+      chevronActive: string;
+      leftBar: string;
+    };
   }[] = [
     {
       id: 'schedule',
       title: 'Escala Semanal & Importar IA',
       subtitle: selectedWeekHasSchedule
         ? `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Salva no histórico`
-        : `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Zerada (sem cronograma)`,
+        : `${formatShortDate(weeklyAudit.mondayDateStr)} a ${formatShortDate(weeklyAudit.sundayDateStr)} • Zerada`,
       badge: selectedWeekHasSchedule ? formatMinutesAsHours(weeklyAudit.scheduledMinutes) : '0h',
       icon: Calendar,
+      theme: {
+        iconGradient: 'from-emerald-500 via-teal-500 to-cyan-600',
+        iconShadow: 'shadow-emerald-500/30',
+        openBorder: 'border-emerald-300 shadow-lg shadow-emerald-900/10',
+        closedBorder: 'border-emerald-100/90 hover:border-emerald-300',
+        ambientGlow: 'from-emerald-400/15 via-teal-300/10 to-transparent',
+        badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+        chevronActive: 'bg-emerald-600 text-white',
+        leftBar: 'from-emerald-500 to-teal-500',
+      },
     },
     {
       id: 'history',
@@ -1129,6 +1203,19 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       subtitle: 'Relatório Mensal e Semanal • Tolerância 5 min',
       badge: formatMinutesAsHours(currentMonthAudit.deltaMinutes, true),
       icon: Clock,
+      theme: {
+        iconGradient: 'from-indigo-500 via-blue-600 to-violet-600',
+        iconShadow: 'shadow-indigo-500/30',
+        openBorder: 'border-indigo-300 shadow-lg shadow-indigo-900/10',
+        closedBorder: 'border-indigo-100/90 hover:border-indigo-300',
+        ambientGlow: 'from-indigo-400/15 via-blue-300/10 to-transparent',
+        badgeBg:
+          currentMonthAudit.deltaMinutes >= 0
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
+            : 'bg-rose-50 text-rose-700 border-rose-200/80',
+        chevronActive: 'bg-indigo-600 text-white',
+        leftBar: 'from-indigo-500 to-blue-600',
+      },
     },
     {
       id: 'salary',
@@ -1136,6 +1223,16 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       subtitle: 'Básico + benefícios e projeção mensal',
       badge: formatCurrency(currentMonthSalary.netTotal, job.currency),
       icon: DollarSign,
+      theme: {
+        iconGradient: 'from-emerald-600 via-green-600 to-teal-600',
+        iconShadow: 'shadow-emerald-600/30',
+        openBorder: 'border-emerald-300 shadow-lg shadow-emerald-900/10',
+        closedBorder: 'border-emerald-100/90 hover:border-emerald-300',
+        ambientGlow: 'from-emerald-400/15 via-lime-300/10 to-transparent',
+        badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+        chevronActive: 'bg-emerald-600 text-white',
+        leftBar: 'from-emerald-600 to-green-500',
+      },
     },
     {
       id: 'tips',
@@ -1146,12 +1243,33 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
           : 'Diária por turno • Entra direto no saldo',
       badge: formatCurrency(currentMonthTipsTotal, job.currency),
       icon: Coins,
+      theme: {
+        iconGradient: 'from-amber-500 via-orange-500 to-yellow-500',
+        iconShadow: 'shadow-amber-500/30',
+        openBorder: 'border-amber-300 shadow-lg shadow-amber-900/10',
+        closedBorder: 'border-amber-100/90 hover:border-amber-300',
+        ambientGlow: 'from-amber-400/15 via-orange-300/10 to-transparent',
+        badgeBg: 'bg-amber-50 text-amber-800 border-amber-200/80',
+        chevronActive: 'bg-amber-500 text-white',
+        leftBar: 'from-amber-500 to-orange-500',
+      },
     },
     {
       id: 'settings',
       title: 'Ajustes do Trabalho',
       subtitle: `${job.companyName} • ${job.role}`,
+      badge: `${job.weeklyTargetHours || 48}h/sem`,
       icon: Settings,
+      theme: {
+        iconGradient: 'from-slate-700 via-slate-800 to-violet-700',
+        iconShadow: 'shadow-slate-600/25',
+        openBorder: 'border-slate-300 shadow-lg shadow-slate-900/10',
+        closedBorder: 'border-slate-200/90 hover:border-slate-300',
+        ambientGlow: 'from-slate-400/12 via-violet-300/10 to-transparent',
+        badgeBg: 'bg-slate-100 text-slate-700 border-slate-200/80',
+        chevronActive: 'bg-slate-800 text-white',
+        leftBar: 'from-slate-700 to-violet-600',
+      },
     },
   ];
 
@@ -1285,7 +1403,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
           <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
             Mês (RH)
           </div>
-          <div className="mt-1 font-mono text-sm font-black text-slate-900">
+          <div className="mt-1 font-mono text-[13px] sm:text-sm font-black text-slate-900">
             {formatMinutesAsHours(currentMonthAudit.workedMinutes)}
           </div>
           <div className="text-[9.5px] font-bold text-emerald-700">
@@ -1297,7 +1415,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
           <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
             Mês Previsto
           </div>
-          <div className="mt-1 truncate font-mono text-sm font-black text-emerald-700">
+          <div className="mt-1 truncate font-mono text-[12px] sm:text-sm font-black text-emerald-700">
             {formatCurrency(currentMonthSalary.netTotal, job.currency)}
           </div>
           <div className="text-[9.5px] font-bold text-slate-500">
@@ -1309,7 +1427,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
           <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
             Propinas Mês
           </div>
-          <div className="mt-1 truncate font-mono text-sm font-black text-amber-600">
+          <div className="mt-1 truncate font-mono text-[12px] sm:text-sm font-black text-amber-600">
             {formatCurrency(currentMonthTipsTotal, job.currency)}
           </div>
           <div className="text-[9.5px] font-bold text-slate-500">
@@ -1318,59 +1436,187 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         </div>
       </div>
 
-      {/* Expandable Settings-Style Accordion Modules */}
-      <div className="space-y-2.5">
-        {accordionItems.map((item) => {
+      {/* Interactive Animated Hub Modules */}
+      <div className="space-y-3">
+        {accordionItems.map((item, idx) => {
           const isOpen = openSection === item.id;
           const Icon = item.icon;
+          const th = item.theme;
 
           return (
-            <div
+            <motion.div
               key={item.id}
-              className={`overflow-hidden rounded-[1.5rem] border transition-colors ${
-                isOpen
-                  ? 'border-emerald-300 bg-white shadow-md shadow-emerald-900/5'
-                  : 'border-slate-200/80 bg-white/95 hover:border-emerald-200'
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: idx * 0.045,
+                type: 'spring',
+                stiffness: 340,
+                damping: 26,
+              }}
+              className={`relative overflow-hidden rounded-[1.75rem] border bg-white/95 backdrop-blur-md transition-all duration-300 ${
+                isOpen ? th.openBorder : `${th.closedBorder} shadow-xs hover:shadow-md`
               }`}
             >
-              <button
+              {/* Subtle Ambient Top-Right Glow */}
+              <div
+                className={`pointer-events-none absolute -top-10 -right-10 h-28 w-40 rounded-full bg-gradient-to-br ${th.ambientGlow} blur-2xl transition-opacity duration-300 ${
+                  isOpen ? 'opacity-100' : 'opacity-65'
+                }`}
+              />
+
+              {/* Animated Left Accent Bar when Open */}
+              <motion.div
+                initial={false}
+                animate={{
+                  scaleY: isOpen ? 1 : 0,
+                  opacity: isOpen ? 1 : 0,
+                }}
+                transition={{ duration: 0.25 }}
+                className={`pointer-events-none absolute left-0 top-3 bottom-3 w-1 origin-top rounded-r-full bg-gradient-to-b ${th.leftBar}`}
+              />
+
+              <motion.button
                 type="button"
+                whileTap={{ scale: 0.985 }}
                 onClick={() => toggleSection(item.id)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left cursor-pointer"
+                className="relative z-10 flex w-full flex-col gap-2.5 px-4 py-3.5 text-left cursor-pointer"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
-                      isOpen
-                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-black text-slate-900">{item.title}</div>
-                    <div className="truncate text-[10.5px] font-medium text-slate-500">
-                      {item.subtitle}
+                <div className="flex w-full items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {/* Vibrant Gradient Icon Orb */}
+                    <motion.div
+                      animate={{
+                        scale: isOpen ? 1.06 : 1,
+                        rotate: isOpen ? [0, -6, 0] : 0,
+                      }}
+                      transition={{ duration: 0.35 }}
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${th.iconGradient} text-white shadow-md ${th.iconShadow}`}
+                    >
+                      <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/30 via-transparent to-black/10" />
+                      <Icon className="relative z-10 h-5 w-5 stroke-[2.3]" />
+                    </motion.div>
+
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-black tracking-tight text-slate-900">
+                        {item.title}
+                      </div>
+                      <div className="truncate text-[10.5px] font-semibold text-slate-500">
+                        {item.subtitle}
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    {item.badge && (
+                      <span
+                        className={`rounded-full border px-2.5 py-1 font-mono text-[10px] font-black shadow-2xs ${th.badgeBg}`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                    <motion.span
+                      animate={{ rotate: isOpen ? 180 : 0 }}
+                      transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+                      className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                        isOpen
+                          ? `${th.chevronActive} shadow-sm`
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <ChevronDown className="h-4 w-4 stroke-[2.5]" />
+                    </motion.span>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {item.badge && (
-                    <span className="hidden sm:inline-block rounded-full bg-emerald-50 px-2.5 py-0.5 font-mono text-[10px] font-black text-emerald-800 border border-emerald-200/70">
-                      {item.badge}
+                {/* Live Interactive Mini-Preview Strip (visible when collapsed for instant glanceability) */}
+                {!isOpen && item.id === 'schedule' && (
+                  <div className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50/90 px-3 py-2 border border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      {weekMiniDots.map((dot) => {
+                        const dotCls =
+                          dot.state === 'ok'
+                            ? 'bg-emerald-500 text-white'
+                            : dot.state === 'issue'
+                            ? 'bg-rose-500 text-white'
+                            : dot.state === 'pending'
+                            ? 'bg-orange-400 text-white'
+                            : dot.state === 'off'
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-slate-200 text-slate-500';
+                        return (
+                          <span
+                            key={dot.dayKey}
+                            className={`flex h-6 w-6 items-center justify-center rounded-lg text-[9.5px] font-black transition-transform ${dotCls} ${
+                              dot.isToday ? 'ring-2 ring-slate-900 ring-offset-1 scale-105' : ''
+                            }`}
+                          >
+                            {dot.initial}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700">
+                      Toque p/ abrir
                     </span>
-                  )}
-                  <motion.span
-                    animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.22 }}
-                    className="text-slate-400"
-                  >
-                    <ChevronDown className="h-5 w-5" />
-                  </motion.span>
-                </div>
-              </button>
+                  </div>
+                )}
+
+                {!isOpen && item.id === 'history' && (
+                  <div className="space-y-1.5 rounded-2xl bg-slate-50/90 px-3 py-2 border border-slate-100">
+                    <div className="flex items-center justify-between text-[10px] font-bold">
+                      <span className="text-slate-600">
+                        Progresso do mês:{' '}
+                        <strong className="text-slate-900">
+                          {formatMinutesAsHours(currentMonthAudit.workedMinutes)}
+                        </strong>{' '}
+                        / {formatMinutesAsHours(currentMonthAudit.scheduledMinutes)}
+                      </span>
+                      <span className="font-mono font-black text-indigo-700">
+                        {monthlyHoursProgress}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${monthlyHoursProgress}%` }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {!isOpen && item.id === 'salary' && (
+                  <div className="flex items-end justify-between gap-3 rounded-2xl bg-emerald-50/60 px-3 py-2 border border-emerald-100/80">
+                    <div className="flex items-end gap-1.5 h-7">
+                      {salarySparkBars.map((bar, barIdx) => (
+                        <motion.span
+                          key={bar.month}
+                          initial={{ height: 4 }}
+                          animate={{ height: `${Math.max(24, bar.pct)}%` }}
+                          transition={{
+                            delay: 0.08 + barIdx * 0.04,
+                            type: 'spring',
+                            stiffness: 260,
+                            damping: 20,
+                          }}
+                          className={`w-2.5 rounded-t-md ${
+                            bar.isPeak
+                              ? 'bg-gradient-to-t from-amber-500 to-yellow-400'
+                              : bar.isSelected
+                              ? 'bg-gradient-to-t from-emerald-600 to-teal-400'
+                              : 'bg-emerald-300/80'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800">
+                      Projeção 12 meses →
+                    </span>
+                  </div>
+                )}
+              </motion.button>
 
               <AnimatePresence initial={false}>
                 {isOpen && (
@@ -1379,7 +1625,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                     className="overflow-hidden border-t border-slate-100"
                   >
                     <div className="p-4 space-y-4">
@@ -2583,7 +2829,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </motion.div>
           );
         })}
       </div>
