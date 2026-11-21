@@ -125,7 +125,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const currentMonth = getCurrentMonthStr();
   const currentWeekMonday = useMemo(() => getWeekStartMonday(todayStr), [todayStr]);
 
-  const [openSection, setOpenSection] = useState<AccordionSection>('schedule');
+  // All accordion menus start closed by default when entering a job
+  const [openSection, setOpenSection] = useState<AccordionSection>(null);
   const [selectedMonday, setSelectedMonday] = useState<string>(() => getWeekStartMonday(todayStr));
   const [historyMode, setHistoryMode] = useState<'weekly' | 'monthly'>('monthly');
   const [selectedAuditMonth, setSelectedAuditMonth] = useState<string>(currentMonth);
@@ -845,9 +846,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     let updatedJob: LaborJob;
 
     if (scope === 'single') {
-      // Single-month scope ("Manter valor original nos próximos meses"):
-      // Apply enabled/new benefits ONLY in `selectedSalaryMonth` (marked & counted here),
-      // while keeping future months (`> selectedSalaryMonth`) at their original value with those benefits unchecked.
       const baseSnap = getEffectiveSalarySnapshot(job, selectedSalaryMonth);
       const baseSnapIds = new Set((baseSnap.benefits || []).map((b) => b.id));
 
@@ -888,7 +886,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         extraAmount: newExtra,
       };
 
-      // In subsequent months, ensure any newly enabled/added benefit stays unchecked
       if (newlyEnabledOrAddedIds.length > 0) {
         for (const [mKey, mOv] of Object.entries(nextMonthOverrides)) {
           if (mKey <= selectedSalaryMonth) continue;
@@ -911,9 +908,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         monthOverrides: nextMonthOverrides,
       };
     } else {
-      // Future scope ("Atualizar deste mês em diante"):
-      // Apply the full draft (including any newly created/enabled benefit) from selectedSalaryMonth onward,
-      // while keeping past months (< selectedSalaryMonth) intact.
       const pastSnapshots = (job.salaryHistory || []).filter(
         (s) => s.effectiveFromMonth < selectedSalaryMonth
       );
@@ -929,7 +923,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       } else {
         delete nextOverrides[selectedSalaryMonth];
       }
-      // Clear stale single-month disabled overrides on future months so the new snapshot takes effect cleanly
       for (const mKey of Object.keys(nextOverrides)) {
         if (mKey > selectedSalaryMonth) {
           delete nextOverrides[mKey];
@@ -960,7 +953,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setSalarySavedToast(
       scope === 'future'
         ? 'Salário, benefícios e projeção atualizados deste mês em diante!'
-        : 'Benefício aplicado somente neste mês — próximos meses mantidos desmarcados!'
+        : 'Benefício aplicado somente neste mês — próximos meses mantidos!'
     );
     window.setTimeout(() => setSalarySavedToast(null), 3200);
   };
@@ -2209,31 +2202,26 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               </span>
                             </div>
 
-                            {currentMonthSalary.benefits.map((b) => (
-                              <div
-                                key={b.id}
-                                className={`flex items-center justify-between text-xs font-bold ${
-                                  b.enabled ? 'text-slate-700' : 'text-slate-400 line-through'
-                                }`}
-                              >
-                                <span>
-                                  {b.name}{' '}
-                                  {b.type === 'percent' && (
-                                    <span className="text-[10px] text-emerald-700">
-                                      ({b.rawValue}%)
-                                    </span>
-                                  )}
-                                  {!b.enabled && (
-                                    <span className="ml-1.5 rounded bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 no-underline inline-block">
-                                      Desmarcado
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="font-mono">
-                                  +{formatCurrency(b.calculatedAmount, job.currency)}
-                                </span>
-                              </div>
-                            ))}
+                            {currentMonthSalary.benefits
+                              .filter((b) => b.enabled)
+                              .map((b) => (
+                                <div
+                                  key={b.id}
+                                  className="flex items-center justify-between text-xs font-bold text-slate-700"
+                                >
+                                  <span>
+                                    {b.name}{' '}
+                                    {b.type === 'percent' && (
+                                      <span className="text-[10px] text-emerald-700">
+                                        ({b.rawValue}%)
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="font-mono">
+                                    +{formatCurrency(b.calculatedAmount, job.currency)}
+                                  </span>
+                                </div>
+                              ))}
 
                             {currentMonthSalary.extraAmount > 0 && (
                               <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
@@ -3424,7 +3412,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-slate-500">
                           Aplica o benefício somente em{' '}
-                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — nos próximos meses o benefício fica desmarcado e o valor original é mantido.
+                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — nos próximos meses o benefício não é aplicado e o valor original é mantido.
                         </div>
                       </button>
                     </div>
