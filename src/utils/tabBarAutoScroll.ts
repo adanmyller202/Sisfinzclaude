@@ -9,6 +9,7 @@ import {
   repairCachedIncomesSynchronously,
   repairMissingIncomeExpectedDates,
 } from '../components/ErrorBoundary';
+import { initSalaryBreakdownViewer } from './salaryBreakdownViewer';
 
 let pendingTimers: number[] = [];
 
@@ -98,6 +99,9 @@ export function initTabBarAutoScroll() {
   // Proactively repair any income cached without expectedDate before React mounts
   repairCachedIncomesSynchronously();
   repairMissingIncomeExpectedDates().catch(() => {});
+
+  // Enable interactive salary composition breakdown viewer on synced salary incomes in Receitas
+  initSalaryBreakdownViewer();
 
   // Cancel any scheduled adjustment if the user starts manually scrolling
   window.addEventListener('touchstart', clearPendingTimers, { passive: true });

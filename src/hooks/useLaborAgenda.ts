@@ -12,6 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { useAccounts } from './useAccounts';
 import { CurrencyCode } from '../types';
 import { LaborJob, LaborTipEntry } from '../types/labor';
+import { calculateMonthSalary } from '../utils/laborCalculations';
+import { formatCurrency } from '../utils/currency';
 
 const LOCAL_JOBS_PREFIX = 'sisfinz_labor_jobs_v1_';
 
@@ -26,6 +28,43 @@ function formatSafeDate(dateStr?: string): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function buildSalaryBreakdownData(job: LaborJob, targetMonth: string) {
+  const calc = calculateMonthSalary(job, targetMonth);
+  const activeBenefits = calc.benefits.filter((b) => b.enabled);
+
+  const lines: string[] = [
+    `Salário Básico: ${formatCurrency(calc.baseSalary, job.currency)}`,
+  ];
+  for (const b of activeBenefits) {
+    const pct = b.type === 'percent' ? ` (${b.rawValue}%)` : '';
+    lines.push(`${b.name}${pct}: +${formatCurrency(b.calculatedAmount, job.currency)}`);
+  }
+  if (calc.extraAmount > 0) {
+    lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, job.currency)}`);
+  }
+
+  return {
+    notes: `${job.role} • ${lines.join(' | ')}`,
+    breakdown: {
+      jobId: job.id,
+      companyName: job.companyName,
+      role: job.role,
+      currency: job.currency,
+      month: targetMonth,
+      baseSalary: calc.baseSalary,
+      benefits: activeBenefits.map((b) => ({
+        id: b.id,
+        name: b.name,
+        type: b.type,
+        rawValue: b.rawValue,
+        calculatedAmount: b.calculatedAmount,
+      })),
+      extraAmount: calc.extraAmount,
+      netTotal: calc.netTotal,
+    },
+  };
 }
 
 export function useLaborAgenda() {
@@ -161,7 +200,6 @@ export function useLaborAgenda() {
       const uid = userId || auth.currentUser?.uid;
       if (uid) {
         try {
-          // 1. Update selected account balance directly in Firestore
           if (selectedAcc) {
             const currentBal = Number(selectedAcc.currentBalance ?? selectedAcc.initialBalance ?? 0);
             const nextBal = currentBal + amount;
@@ -171,7 +209,6 @@ export function useLaborAgenda() {
             });
           }
 
-          // 2. Create a one-off Income item for the month WITH expectedDate (required by SisFinz)
           const incomeDoc = {
             id: incomeId,
             name: note ? `Propina • ${job.companyName} (${note})` : `Propina • ${job.companyName}`,
@@ -192,7 +229,6 @@ export function useLaborAgenda() {
             sanitizePayload(incomeDoc)
           );
 
-          // 3. Mark that income as already received in monthly_status
           const statusId = `income_${incomeId}_${targetMonth}`;
           await setDoc(
             doc(db, 'users', uid, 'monthly_status', statusId),
@@ -242,10 +278,8 @@ export function useLaborAgenda() {
   );
 
   /**
-   * Sync the calculated monthly salary to a recurring Income item in SisFinz.
-   * For `scope === 'single'`, only updates `exceptions[safeMonth]` WITHOUT touching `amount`
-   * (the baseline recurring amount for all other months stays intact).
-   * For `scope === 'future'`, updates the recurring `amount` from `safeMonth` onward.
+   * Sync the calculated monthly salary AND its full salary/benefits composition
+   * to a recurring Income item in SisFinz.
    */
   const syncSalaryToSisFinz = useCallback(
     async (params: {
@@ -261,6 +295,7 @@ export function useLaborAgenda() {
       const expectedDate = `${safeMonth}-05`;
       const now = new Date().toISOString();
       const incomeId = job.linkedSalaryIncomeId || `inc_salary_${job.id}`;
+      const { notes: compositionNotes, breakdown } = buildSalaryBreakdownData(job, safeMonth);
 
       try {
         const incomeRef = doc(db, 'users', uid, 'incomes', incomeId);
@@ -269,6 +304,7 @@ export function useLaborAgenda() {
             incomeRef,
             sanitizePayload({
               id: incomeId,
+              laborJobId: job.id,
               name: `Salário • ${job.companyName}`,
               currency: job.currency,
               category: 'Salário',
@@ -277,7 +313,10 @@ export function useLaborAgenda() {
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
               exceptions: {
-                [safeMonth]: { amount },
+                [safeMonth]: { amount, notes: compositionNotes },
+              },
+              salaryBreakdowns: {
+                [safeMonth]: breakdown,
               },
               updatedAt: now,
             }),
@@ -288,6 +327,7 @@ export function useLaborAgenda() {
             incomeRef,
             sanitizePayload({
               id: incomeId,
+              laborJobId: job.id,
               name: `Salário • ${job.companyName}`,
               amount,
               currency: job.currency,
@@ -297,7 +337,11 @@ export function useLaborAgenda() {
               startMonth: safeMonth,
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
-              notes: `${job.role} • Sincronizado pela Jornada Laboral`,
+              notes: compositionNotes,
+              salaryBreakdown: breakdown,
+              salaryBreakdowns: {
+                [safeMonth]: breakdown,
+              },
               updatedAt: now,
             }),
             { merge: true }
