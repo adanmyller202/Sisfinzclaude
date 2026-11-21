@@ -1636,23 +1636,48 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                   {!isUnset && !sched.isOff && (
                                     <div className="mt-2.5 space-y-2">
                                       <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-1.5">
+                                        <div
+                                          className={`flex items-center gap-1.5 ${
+                                            sched.isSplitShift
+                                              ? 'pl-2 border-l-2 border-indigo-300'
+                                              : ''
+                                          }`}
+                                        >
+                                          {sched.isSplitShift && (
+                                            <span className="text-[10px] font-black text-indigo-700 mr-1">
+                                              1º turno:
+                                            </span>
+                                          )}
                                           <input
                                             type="time"
                                             value={sched.startTime}
                                             onChange={(e) =>
                                               updateWeekDay(dayKey, { startTime: e.target.value })
                                             }
-                                            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-800"
+                                            className={`rounded-xl border bg-white text-xs font-black text-slate-800 ${
+                                              sched.isSplitShift
+                                                ? 'border-indigo-200 px-2 py-1'
+                                                : 'border-slate-200 px-2.5 py-1.5'
+                                            }`}
                                           />
-                                          <span className="text-xs font-black text-slate-400">→</span>
+                                          <span
+                                            className={`text-xs font-black ${
+                                              sched.isSplitShift ? 'text-indigo-400' : 'text-slate-400'
+                                            }`}
+                                          >
+                                            →
+                                          </span>
                                           <input
                                             type="time"
                                             value={sched.endTime}
                                             onChange={(e) =>
                                               updateWeekDay(dayKey, { endTime: e.target.value })
                                             }
-                                            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-800"
+                                            className={`rounded-xl border bg-white text-xs font-black text-slate-800 ${
+                                              sched.isSplitShift
+                                                ? 'border-indigo-200 px-2 py-1'
+                                                : 'border-slate-200 px-2.5 py-1.5'
+                                            }`}
                                           />
                                         </div>
                                         <span
