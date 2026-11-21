@@ -638,7 +638,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                           key={dayKey}
                           className={`rounded-2xl border p-2.5 space-y-2 ${
                             d.isOff
-                              ? 'border-amber-200 bg-amber-50/50'
+                              ? 'border-purple-200 bg-purple-50/55'
                               : suspiciousSplitEnd
                               ? 'border-rose-300 bg-rose-50/40'
                               : d.isSplitShift
@@ -656,7 +656,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                                 onClick={() => updatePreviewDay(dayKey, { isOff: !d.isOff })}
                                 className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase cursor-pointer ${
                                   d.isOff
-                                    ? 'bg-amber-500 text-white'
+                                    ? 'bg-purple-600 text-white'
                                     : 'bg-emerald-100 text-emerald-800'
                                 }`}
                               >
@@ -716,7 +716,7 @@ export const ScheduleImportModal: React.FC<ScheduleImportModalProps> = ({
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-[11px] font-bold text-amber-700 pr-2">Descanso</span>
+                              <span className="text-[11px] font-bold text-purple-700 pr-2">Descanso</span>
                             )}
                           </div>
 

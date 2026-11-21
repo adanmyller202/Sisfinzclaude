@@ -270,7 +270,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                                     Sem cronograma esta semana
                                   </span>
                                 ) : todaySched.isOff ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-[10px] font-black uppercase text-purple-800">
                                     Hoje: Franco
                                   </span>
                                 ) : (

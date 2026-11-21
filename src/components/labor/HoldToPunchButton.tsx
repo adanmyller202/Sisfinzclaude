@@ -147,7 +147,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               : todaySchedule.isUnset
               ? 'bg-slate-400'
               : todaySchedule.isOff
-              ? 'bg-amber-400'
+              ? 'bg-purple-500'
               : 'bg-emerald-500'
           }`}
         />

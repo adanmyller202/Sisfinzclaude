@@ -1507,8 +1507,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       : isUnset
                                       ? 'border-slate-200/70 bg-slate-50/50'
                                       : isToday
-                                      ? 'border-sky-400 bg-sky-50/65 ring-1 ring-sky-200'
-                                      : 'border-sky-300/90 bg-sky-50/55'
+                                      ? 'border-purple-400 bg-purple-50/70 ring-1 ring-purple-200'
+                                      : 'border-purple-300/90 bg-purple-50/50'
                                   }`}
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1584,7 +1584,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => updateWeekDay(dayKey, { isOff: true })}
-                                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-500 hover:bg-sky-50 hover:text-sky-700 cursor-pointer"
+                                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-500 hover:bg-purple-50 hover:text-purple-700 cursor-pointer"
                                           >
                                             Franco
                                           </button>
@@ -1598,7 +1598,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                             }
                                             className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer ${
                                               sched.isOff
-                                                ? 'bg-sky-600 text-white shadow-2xs'
+                                                ? 'bg-purple-600 text-white shadow-2xs'
                                                 : hasIssueEntry
                                                 ? 'bg-rose-100 text-rose-800'
                                                 : isWorkdayPendingPunch
