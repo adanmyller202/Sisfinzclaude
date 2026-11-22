@@ -109,6 +109,18 @@ export interface LaborJob {
   shifts: LaborShiftEntry[];
   activeShift: ActiveShiftState | null;
   tips: LaborTipEntry[];
+  /** Audit trail for salary advances registered from the salary editor. */
+  salaryAdvanceHistory?: {
+    id: string;
+    month: string;
+    amount: number;
+    reason: string;
+    createIncome: boolean;
+    creditNow: boolean;
+    depositDate?: string;
+    accountId?: string;
+    createdAt: string;
+  }[];
   createdAt: string;
   updatedAt: string;
 }
