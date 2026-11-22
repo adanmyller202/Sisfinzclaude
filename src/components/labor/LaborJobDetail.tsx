@@ -90,6 +90,15 @@ interface LaborJobDetailProps {
     amount: number;
     scope: 'single' | 'future';
   }) => Promise<boolean>;
+  onRegisterSalaryAdvanceIncome: (params: {
+    id: string;
+    job: LaborJob;
+    amount: number;
+    reason: string;
+    creditNow: boolean;
+    depositDate: string;
+    accountId?: string;
+  }) => Promise<boolean>;
 }
 
 type AccordionSection = 'schedule' | 'history' | 'salary' | 'tips' | 'settings' | null;
@@ -130,6 +139,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   onDeleteJob,
   onRecordTipToSisFinz,
   onSyncSalaryToSisFinz,
+  onRegisterSalaryAdvanceIncome,
 }) => {
   const locale = getLocaleForLanguage(language);
   const todayStr = formatLocalDateYYYYMMDD(new Date());
@@ -193,6 +203,15 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [newBenefitIsDeduction, setNewBenefitIsDeduction] = useState(false);
   const [syncSalaryWithFinance, setSyncSalaryWithFinance] = useState(true);
   const [scopeConfirmOpen, setScopeConfirmOpen] = useState(false);
+  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+  const [advanceReason, setAdvanceReason] = useState('');
+  const [advanceCreateIncome, setAdvanceCreateIncome] = useState(true);
+  const [advanceWhen, setAdvanceWhen] = useState<'today' | 'scheduled'>('today');
+  const [advanceDate, setAdvanceDate] = useState(todayStr);
+  const [advanceAccountId, setAdvanceAccountId] = useState(
+    job.defaultAccountId || accounts[0]?.id || ''
+  );
+  const [advanceIncomeId, setAdvanceIncomeId] = useState('');
   const [salarySavedToast, setSalarySavedToast] = useState<string | null>(null);
 
   // Tip registration state
@@ -907,6 +926,22 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     }, 80);
   };
 
+  const handleFirstSaveClick = () => {
+    if (totalDraftDeductionAmount > 0) {
+      setAdvanceReason('');
+      setAdvanceCreateIncome(true);
+      setAdvanceWhen('today');
+      setAdvanceDate(todayStr);
+      setAdvanceAccountId(job.defaultAccountId || accounts[0]?.id || '');
+      setAdvanceIncomeId(
+        `inc_advance_${job.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      );
+      setAdvanceModalOpen(true);
+      return;
+    }
+    setScopeConfirmOpen(true);
+  };
+
   const handleAddBenefitToDraft = () => {
     if (!newBenefitName.trim()) return;
     const val = Math.max(0, Number(newBenefitValue.replace(',', '.')) || 0);
@@ -1035,6 +1070,31 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       };
     }
 
+    if (totalDraftDeductionAmount > 0) {
+      const advanceRecord = {
+        id: advanceIncomeId,
+        month: selectedSalaryMonth,
+        amount: totalDraftDeductionAmount,
+        reason: advanceReason.trim(),
+        createIncome: advanceCreateIncome,
+        creditNow: advanceCreateIncome && advanceWhen === 'today',
+        depositDate: advanceCreateIncome
+          ? advanceWhen === 'today' ? todayStr : advanceDate
+          : undefined,
+        accountId: advanceCreateIncome ? advanceAccountId || undefined : undefined,
+        createdAt: new Date().toISOString(),
+      };
+      updatedJob = {
+        ...updatedJob,
+        salaryAdvanceHistory: [
+          ...((job as any).salaryAdvanceHistory || []).filter(
+            (entry: any) => entry.id !== advanceIncomeId
+          ),
+          advanceRecord,
+        ],
+      };
+    }
+
     await onSaveJob(updatedJob);
 
     const nextCalc = calculateMonthSalary(updatedJob, selectedSalaryMonth);
@@ -1045,6 +1105,25 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         amount: nextCalc.netTotal,
         scope,
       });
+    }
+
+    if (totalDraftDeductionAmount > 0 && advanceCreateIncome) {
+      const registered = await onRegisterSalaryAdvanceIncome({
+        id: advanceIncomeId,
+        job,
+        amount: totalDraftDeductionAmount,
+        reason: advanceReason.trim(),
+        creditNow: advanceWhen === 'today',
+        depositDate: advanceWhen === 'today' ? todayStr : advanceDate,
+        accountId: advanceAccountId || job.defaultAccountId,
+      });
+      if (!registered) {
+        setSalarySavedToast(
+          'Salário salvo, mas não foi possível criar a receita da antecipação. Confira a conexão e tente novamente.'
+        );
+        window.setTimeout(() => setSalarySavedToast(null), 5000);
+        return;
+      }
     }
 
     setScopeConfirmOpen(false);
@@ -1319,6 +1398,16 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   ];
 
   const draftBaseNum = Math.max(0, Number(draftBaseSalary.replace(',', '.')) || 0);
+  const activeDraftDeductions = draftBenefits.filter(
+    (benefit) => benefit.enabled && benefit.isDeduction && Number(benefit.value) > 0
+  );
+  const totalDraftDeductionAmount = activeDraftDeductions.reduce((sum, benefit) => {
+    const amount =
+      benefit.type === 'percent'
+        ? Math.round((draftBaseNum * (Number(benefit.value) || 0)) / 100)
+        : Number(benefit.value) || 0;
+    return sum + amount;
+  }, 0);
   const enabledAdditions = currentMonthSalary.benefits.filter((b) => b.enabled && !b.isDeduction);
   const enabledDeductions = currentMonthSalary.benefits.filter((b) => b.enabled && b.isDeduction);
 
@@ -3860,7 +3949,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => setScopeConfirmOpen(true)}
+                      onClick={handleFirstSaveClick}
                       className="w-full rounded-2xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 cursor-pointer"
                     >
                       Continuar para salvar
@@ -3928,6 +4017,179 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {advanceModalOpen && (
+          <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">
+            <div
+              onClick={() => setAdvanceModalOpen(false)}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+              className="relative z-10 w-full max-w-md space-y-4 rounded-t-3xl border border-rose-100 bg-white p-5 shadow-2xl sm:rounded-3xl"
+            >
+              <div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-rose-700">
+                  Antecipação de Salário
+                </span>
+                <h4 className="mt-1.5 text-base font-black text-slate-900">
+                  Detalhes da antecipação ({formatCurrency(totalDraftDeductionAmount, job.currency)})
+                </h4>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">
+                  Informe o motivo obrigatório e escolha como deseja registrar esse valor no SisFinz.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10.5px] font-black uppercase tracking-wider text-slate-600">
+                  Motivo da antecipação <span className="text-rose-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={advanceReason}
+                  onChange={(e) => setAdvanceReason(e.target.value)}
+                  placeholder="Ex: Emergência médica, aluguel, gastos extras..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-900 outline-none focus:border-rose-500 focus:bg-white"
+                  autoFocus
+                />
+                {!advanceReason.trim() && (
+                  <p className="text-[10px] font-bold text-rose-600">
+                    O motivo é obrigatório para continuar.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="block text-[10.5px] font-black uppercase tracking-wider text-slate-600">
+                  Lançar valor como entrada na sua conta do SisFinz?
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceCreateIncome(true)}
+                    className={`rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
+                      advanceCreateIncome
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    <div className="text-xs font-black">Sim, lançar entrada</div>
+                    <div className="text-[10px] font-medium opacity-80">Registrar como receita</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceCreateIncome(false)}
+                    className={`rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
+                      !advanceCreateIncome
+                        ? 'border-slate-800 bg-slate-100 text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    <div className="text-xs font-black">Não, só descontar</div>
+                    <div className="text-[10px] font-medium opacity-80">Apenas no salário</div>
+                  </button>
+                </div>
+              </div>
+
+              {advanceCreateIncome && (
+                <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                  <div className="space-y-1.5">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                      Quando o dinheiro vai cair / caiu na conta?
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAdvanceWhen('today')}
+                        className={`rounded-xl border px-2.5 py-2 text-left text-xs font-black cursor-pointer ${
+                          advanceWhen === 'today'
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        Hoje (já recebido)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdvanceWhen('scheduled')}
+                        className={`rounded-xl border px-2.5 py-2 text-left text-xs font-black cursor-pointer ${
+                          advanceWhen === 'scheduled'
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        Agendar outra data
+                      </button>
+                    </div>
+                  </div>
+
+                  {advanceWhen === 'scheduled' && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black uppercase text-slate-600">
+                        Data prevista do depósito
+                      </label>
+                      <input
+                        type="date"
+                        value={advanceDate}
+                        min={todayStr}
+                        onChange={(e) => setAdvanceDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                  )}
+
+                  {accounts.length > 0 && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black uppercase text-slate-600">
+                        Conta de destino
+                      </label>
+                      <select
+                        value={advanceAccountId}
+                        onChange={(e) => setAdvanceAccountId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900"
+                      >
+                        {accounts.map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} ({acc.currency})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAdvanceModalOpen(false)}
+                  className="rounded-xl px-3.5 py-2 text-xs font-black text-slate-500 hover:bg-slate-100 cursor-pointer"
+                >
+                  Voltar e editar
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !advanceReason.trim() ||
+                    (advanceCreateIncome && advanceWhen === 'scheduled' && !advanceDate)
+                  }
+                  onClick={() => {
+                    setAdvanceModalOpen(false);
+                    setScopeConfirmOpen(true);
+                  }}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  Continuar e escolher meses
+                </button>
               </div>
             </motion.div>
           </div>
