@@ -82,6 +82,22 @@ export function useAccounts() {
 
   const [loadingAccounts, setLoadingAccounts] = useState<boolean>(true);
 
+  const refreshAccounts = useCallback(async () => {
+    if (!user) return;
+    const snapshot = await getDocs(collection(db, 'users', user.uid, 'accounts'));
+    const list: AccountItem[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as Partial<AccountItem>;
+      list.push({ ...data, id: data.id || docSnap.id } as AccountItem);
+    });
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    setAccounts(list);
+    try {
+      localStorage.setItem(getLocalKey('accounts'), JSON.stringify(list));
+      localStorage.setItem('mc_acc_last_accounts', JSON.stringify(list));
+    } catch {}
+  }, [user, getLocalKey]);
+
   // 1. Realtime listener for user's accounts
   useEffect(() => {
     if (!user) {
@@ -542,6 +558,7 @@ export function useAccounts() {
     accounts,
     transfers,
     totalBalance,
+    refreshAccounts,
     loadingAccounts,
     addAccount,
     updateAccount,
