@@ -539,16 +539,10 @@ export function getEffectiveSalarySnapshot(job: LaborJob, targetMonth: string): 
 }
 
 /**
- * Pure calculation for a single month's salary & benefits:
- * 1. Base salary & baseline benefits come from `salaryHistory` active at `targetMonth`.
- * 2. Any single-month override (`monthOverrides[targetMonth]`) applies ONLY to `targetMonth`:
- *    - `baseSalary` override
- *    - `disabledBenefitIds` / `enabledBenefitIds`
- *    - `benefitValueOverrides` / `benefitTypeOverrides`
- *    - `singleMonthBenefits` (benefits created for `targetMonth` only)
- *    - `extraAmount`
- * 3. Single-month benefits from OTHER months NEVER leak into `targetMonth`'s total;
- *    for months after `mKey`, they appear as unchecked (`enabled: false`, `calculatedAmount: 0`).
+ * Pure calculation for a single month's salary, benefits, and deductions (e.g. Adelanto):
+ * - Percentage benefits are always calculated on the full `baseSalary`.
+ * - Deduction items (`isDeduction: true`) subtract from the total while keeping percentage benefits intact.
+ * - Single-month overrides (`monthOverrides[targetMonth]`) apply ONLY to `targetMonth`.
  */
 function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<MonthlySalaryCalculation, 'aguinaldoAmount' | 'totalWithAguinaldo'> {
   const snap = getEffectiveSalarySnapshot(job, targetMonth);
@@ -582,6 +576,10 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
         ? true
         : b.enabled && !disabledIds.has(b.id);
       const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
+      const isDeduction =
+        override?.benefitDeductionOverrides?.[b.id] !== undefined
+          ? Boolean(override.benefitDeductionOverrides[b.id])
+          : Boolean(b.isDeduction);
       const rawValue =
         override?.benefitValueOverrides?.[b.id] !== undefined
           ? override.benefitValueOverrides[b.id]
@@ -598,6 +596,7 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
         rawValue,
         calculatedAmount,
         enabled,
+        isDeduction,
       };
     });
 
@@ -607,6 +606,10 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       ? true
       : !disabledIds.has(b.id) && b.enabled !== false;
     const effectiveType = override?.benefitTypeOverrides?.[b.id] || b.type;
+    const isDeduction =
+      override?.benefitDeductionOverrides?.[b.id] !== undefined
+        ? Boolean(override.benefitDeductionOverrides[b.id])
+        : Boolean(b.isDeduction);
     const rawValue =
       override?.benefitValueOverrides?.[b.id] !== undefined
         ? override.benefitValueOverrides[b.id]
@@ -623,10 +626,11 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
       rawValue,
       calculatedAmount,
       enabled,
+      isDeduction,
     };
   });
 
-  // For subsequent months (> mKey), display that single-month benefit as unchecked (`enabled: false`, `calculatedAmount: 0`)
+  // For subsequent months (> mKey), keep that single-month benefit unchecked (`enabled: false`, `calculatedAmount: 0`)
   const uncheckedLaterPlaceholders: typeof activeSingleMonthBenefits = [];
   for (const [mKey, singleList] of singleMonthOnlyByMonth.entries()) {
     if (mKey >= targetMonth) continue;
@@ -639,6 +643,7 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
         rawValue: Number(sb.value) || 0,
         calculatedAmount: 0,
         enabled: false,
+        isDeduction: Boolean(sb.isDeduction),
       });
     }
   }
@@ -646,8 +651,11 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
   const benefits = [...baseBenefits, ...activeSingleMonthBenefits, ...uncheckedLaterPlaceholders];
 
   const extraAmount = override?.extraAmount || 0;
-  const benefitsTotal = benefits.reduce((acc, item) => acc + item.calculatedAmount, 0);
-  const grossTotal = baseSalary + benefitsTotal + extraAmount;
+  const benefitsNetTotal = benefits.reduce(
+    (acc, item) => acc + (item.isDeduction ? -item.calculatedAmount : item.calculatedAmount),
+    0
+  );
+  const grossTotal = Math.max(0, baseSalary + benefitsNetTotal + extraAmount);
   const deductionAmount = deductionPercent > 0 ? Math.round((grossTotal * deductionPercent) / 100) : 0;
   const netTotal = Math.max(0, grossTotal - deductionAmount);
   const monthlyHoursRef = Math.max(1, (job.weeklyTargetHours || 48) * 4.33);

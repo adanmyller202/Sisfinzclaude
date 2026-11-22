@@ -129,9 +129,11 @@ function renderSalaryBreakdownOverlay(job: LaborJob, initialMonth: string) {
 
   const renderContent = () => {
     const calc = calculateMonthSalary(job, currentMonth);
-    const enabledBenefits = calc.benefits.filter((b) => b.enabled);
+    const enabledItems = calc.benefits.filter((b) => b.enabled);
+    const additions = enabledItems.filter((b) => !b.isDeduction);
+    const deductions = enabledItems.filter((b) => Boolean(b.isDeduction));
 
-    const benefitRowsHtml = enabledBenefits
+    const benefitRowsHtml = additions
       .map((b) => {
         const pctTag =
           b.type === 'percent'
@@ -141,6 +143,24 @@ function renderSalaryBreakdownOverlay(job: LaborJob, initialMonth: string) {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;">
             <span style="font-weight:700;color:#334155;">${escapeHtml(b.name)}${pctTag}</span>
             <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#059669;white-space:nowrap;">+${escapeHtml(formatCurrency(b.calculatedAmount, job.currency))}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    const deductionRowsHtml = deductions
+      .map((b) => {
+        const pctTag =
+          b.type === 'percent'
+            ? `<span style="font-size:10.5px;font-weight:800;color:#be123c;margin-left:4px;">(${b.rawValue}%)</span>`
+            : '';
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed #fecdd3;font-size:13px;">
+            <span style="font-weight:700;color:#be123c;display:inline-flex;align-items:center;gap:6px;">
+              ${escapeHtml(b.name)}${pctTag}
+              <span style="font-size:9px;font-weight:900;text-transform:uppercase;background:#ffe4e6;color:#be123c;padding:1px 6px;border-radius:9999px;">Desconto</span>
+            </span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#e11d48;white-space:nowrap;">-${escapeHtml(formatCurrency(b.calculatedAmount, job.currency))}</span>
           </div>
         `;
       })
@@ -157,9 +177,16 @@ function renderSalaryBreakdownOverlay(job: LaborJob, initialMonth: string) {
         : '';
 
     const emptyBenefitsHtml =
-      enabledBenefits.length === 0 && calc.extraAmount <= 0
-        ? `<div style="padding:8px 0;font-size:12px;color:#64748b;font-weight:600;">Nenhum benefício adicional ativo neste mês.</div>`
+      additions.length === 0 && deductions.length === 0 && calc.extraAmount <= 0
+        ? `<div style="padding:8px 0;font-size:12px;color:#64748b;font-weight:600;">Nenhum benefício ou desconto ativo neste mês.</div>`
         : '';
+
+    const footerCounts = [
+      `${additions.length} benefício${additions.length === 1 ? '' : 's'}`,
+      ...(deductions.length > 0
+        ? [`${deductions.length} desconto${deductions.length === 1 ? '' : 's'}`]
+        : []),
+    ].join(' • ');
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;">
@@ -187,6 +214,7 @@ function renderSalaryBreakdownOverlay(job: LaborJob, initialMonth: string) {
           <div style="padding:4px 0;">
             ${benefitRowsHtml}
             ${extraRowHtml}
+            ${deductionRowsHtml}
             ${emptyBenefitsHtml}
           </div>
 
@@ -198,7 +226,7 @@ function renderSalaryBreakdownOverlay(job: LaborJob, initialMonth: string) {
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;color:#64748b;padding:0 2px;">
           <span>Sincronizado pela Jornada Laboral</span>
-          <span>${enabledBenefits.length} benefício${enabledBenefits.length === 1 ? '' : 's'} ativo${enabledBenefits.length === 1 ? '' : 's'}</span>
+          <span>${escapeHtml(footerCounts)}</span>
         </div>
 
         <button type="button" data-close-breakdown style="width:100%;padding:12px;border-radius:14px;border:none;background:#059669;color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;">
@@ -257,7 +285,6 @@ function decorateSalaryIncomeRows() {
 
     const parent = node.parentElement;
     if (!parent) continue;
-    // Skip inputs, textareas, dialogs (like Jornada Laboral itself or our overlay)
     if (
       parent.closest(`#${OVERLAY_ID}`) ||
       parent.closest('input, textarea, select') ||
@@ -279,7 +306,6 @@ function decorateSalaryIncomeRows() {
     el.dataset.sisfinzSalaryCompany = job.companyName;
     el.style.cursor = 'pointer';
 
-    // Avoid duplicate chip in same container
     const container = el.parentElement;
     if (container && !container.querySelector(`.${BADGE_CLASS}`)) {
       const chip = document.createElement('button');
@@ -324,7 +350,6 @@ export function initSalaryBreakdownViewer() {
     const target = event.target as HTMLElement | null;
     if (!target || target.closest(`#${OVERLAY_ID}`)) return;
 
-    // 1. Direct click on the "Ver composição salarial" chip
     const chip = target.closest(`.${BADGE_CLASS}`) as HTMLElement | null;
     if (chip) {
       event.preventDefault();
@@ -337,7 +362,6 @@ export function initSalaryBreakdownViewer() {
       return;
     }
 
-    // 2. Click on the "Salário • Empresa" title itself (ignore other action buttons like Edit/Delete/Check)
     if (target.closest('button, a, input, select, textarea')) return;
     const decorated = target.closest('[data-sisfinz-salary-decorated="1"]') as HTMLElement | null;
     if (decorated) {

@@ -30,6 +30,8 @@ export interface LaborBenefit {
   type: BenefitCalcType;
   value: number; // percentage (0-100) if 'percent', currency amount if 'fixed' or 'variable'
   enabled: boolean;
+  /** When true (e.g. Adelanto), subtracts from the monthly salary instead of adding */
+  isDeduction?: boolean;
 }
 
 export interface LaborSalarySnapshot {
@@ -43,8 +45,11 @@ export interface LaborMonthOverride {
   baseSalary?: number;
   deductionPercent?: number;
   disabledBenefitIds?: string[];
+  enabledBenefitIds?: string[];
   benefitValueOverrides?: Record<string, number>;
   benefitTypeOverrides?: Record<string, BenefitCalcType>;
+  benefitDeductionOverrides?: Record<string, boolean>;
+  singleMonthBenefits?: LaborBenefit[];
   extraBenefits?: LaborBenefit[];
   extraAmount?: number;
   extraNote?: string;
@@ -118,6 +123,7 @@ export interface MonthlySalaryCalculation {
     rawValue: number;
     calculatedAmount: number;
     enabled: boolean;
+    isDeduction?: boolean;
   }[];
   extraAmount: number;
   grossTotal: number;

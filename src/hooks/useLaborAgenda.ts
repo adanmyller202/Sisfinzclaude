@@ -39,7 +39,8 @@ function buildSalaryBreakdownData(job: LaborJob, targetMonth: string) {
   ];
   for (const b of activeBenefits) {
     const pct = b.type === 'percent' ? ` (${b.rawValue}%)` : '';
-    lines.push(`${b.name}${pct}: +${formatCurrency(b.calculatedAmount, job.currency)}`);
+    const sign = b.isDeduction ? '-' : '+';
+    lines.push(`${b.name}${pct}: ${sign}${formatCurrency(b.calculatedAmount, job.currency)}`);
   }
   if (calc.extraAmount > 0) {
     lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, job.currency)}`);
@@ -60,6 +61,7 @@ function buildSalaryBreakdownData(job: LaborJob, targetMonth: string) {
         type: b.type,
         rawValue: b.rawValue,
         calculatedAmount: b.calculatedAmount,
+        isDeduction: Boolean(b.isDeduction),
       })),
       extraAmount: calc.extraAmount,
       netTotal: calc.netTotal,
@@ -278,7 +280,7 @@ export function useLaborAgenda() {
   );
 
   /**
-   * Sync the calculated monthly salary AND its full salary/benefits composition
+   * Sync the calculated monthly salary AND its full salary/benefits/deductions composition
    * to a recurring Income item in SisFinz.
    */
   const syncSalaryToSisFinz = useCallback(

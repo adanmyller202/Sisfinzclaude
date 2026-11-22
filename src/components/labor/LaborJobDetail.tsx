@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Sparkles,
   Plus,
+  Minus,
   Trash2,
   Check,
   Upload,
@@ -189,6 +190,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [newBenefitName, setNewBenefitName] = useState('');
   const [newBenefitType, setNewBenefitType] = useState<BenefitCalcType>('percent');
   const [newBenefitValue, setNewBenefitValue] = useState('');
+  const [newBenefitIsDeduction, setNewBenefitIsDeduction] = useState(false);
   const [syncSalaryWithFinance, setSyncSalaryWithFinance] = useState(true);
   const [scopeConfirmOpen, setScopeConfirmOpen] = useState(false);
   const [salarySavedToast, setSalarySavedToast] = useState<string | null>(null);
@@ -844,9 +846,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         type: cb.type,
         value: cb.rawValue,
         enabled: cb.enabled,
+        isDeduction: Boolean(cb.isDeduction),
       }))
     );
     setDraftExtraAmount(String(calc.extraAmount || 0));
+    setNewBenefitIsDeduction(false);
     setSalaryEditorOpen(true);
   };
 
@@ -872,6 +876,21 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         type: 'percent',
         value: 0,
         enabled: true,
+        isDeduction: false,
+      },
+    ]);
+  };
+
+  const handleQuickAddAdelanto = () => {
+    setDraftBenefits((prev) => [
+      ...prev,
+      {
+        id: `ded_adelanto_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+        name: 'Adelanto',
+        type: 'fixed',
+        value: 0,
+        enabled: true,
+        isDeduction: true,
       },
     ]);
   };
@@ -882,15 +901,19 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setDraftBenefits((prev) => [
       ...prev,
       {
-        id: `ben_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        id: `${newBenefitIsDeduction ? 'ded' : 'ben'}_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 5)}`,
         name: newBenefitName.trim(),
         type: newBenefitType,
         value: val,
         enabled: true,
+        isDeduction: newBenefitIsDeduction,
       },
     ]);
     setNewBenefitName('');
     setNewBenefitValue('');
+    setNewBenefitIsDeduction(false);
   };
 
   const applySalaryChanges = async (scope: 'single' | 'future') => {
@@ -907,14 +930,20 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       const enabledBenefitIds = draftBenefits.filter((b) => b.enabled).map((b) => b.id);
       const benefitValueOverrides: Record<string, number> = {};
       const benefitTypeOverrides: Record<string, BenefitCalcType> = {};
+      const benefitDeductionOverrides: Record<string, boolean> = {};
       const singleMonthOnlyBenefits: LaborBenefit[] = [];
       const newlyEnabledOrAddedIds: string[] = [];
 
       draftBenefits.forEach((b) => {
         benefitValueOverrides[b.id] = b.value;
         benefitTypeOverrides[b.id] = b.type;
+        benefitDeductionOverrides[b.id] = Boolean(b.isDeduction);
         if (!baseSnapIds.has(b.id)) {
-          singleMonthOnlyBenefits.push({ ...b, enabled: b.enabled });
+          singleMonthOnlyBenefits.push({
+            ...b,
+            enabled: b.enabled,
+            isDeduction: Boolean(b.isDeduction),
+          });
           if (b.enabled) newlyEnabledOrAddedIds.push(b.id);
         } else {
           const origSnapBenefit = (baseSnap.benefits || []).find((sb) => sb.id === b.id);
@@ -936,6 +965,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         enabledBenefitIds,
         benefitValueOverrides,
         benefitTypeOverrides,
+        benefitDeductionOverrides,
         singleMonthBenefits: singleMonthOnlyBenefits,
         extraAmount: newExtra,
       };
@@ -968,7 +998,10 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       const newSnapshot = {
         effectiveFromMonth: selectedSalaryMonth,
         baseSalary: newBase,
-        benefits: draftBenefits,
+        benefits: draftBenefits.map((b) => ({
+          ...b,
+          isDeduction: Boolean(b.isDeduction),
+        })),
         deductionPercent: 0,
       };
       const nextOverrides: Record<string, any> = { ...(job.monthOverrides || {}) };
@@ -1006,8 +1039,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     setSalaryEditorOpen(false);
     setSalarySavedToast(
       scope === 'future'
-        ? 'Salário, benefícios e projeção atualizados deste mês em diante!'
-        : 'Benefício aplicado somente neste mês — próximos meses mantidos!'
+        ? 'Salário, benefícios, descontos e projeção atualizados deste mês em diante!'
+        : 'Alteração aplicada somente neste mês — próximos meses mantidos!'
     );
     window.setTimeout(() => setSalarySavedToast(null), 3200);
   };
@@ -1220,7 +1253,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     {
       id: 'salary',
       title: 'Salário, Benefícios & Projeção 12M',
-      subtitle: 'Básico + benefícios e projeção mensal',
+      subtitle: 'Básico, benefícios, adelantos e projeção',
       badge: formatCurrency(currentMonthSalary.netTotal, job.currency),
       icon: DollarSign,
       theme: {
@@ -1274,6 +1307,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   ];
 
   const draftBaseNum = Math.max(0, Number(draftBaseSalary.replace(',', '.')) || 0);
+  const enabledAdditions = currentMonthSalary.benefits.filter((b) => b.enabled && !b.isDeduction);
+  const enabledDeductions = currentMonthSalary.benefits.filter((b) => b.enabled && b.isDeduction);
 
   return (
     <div className="space-y-4 pb-16">
@@ -2422,7 +2457,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         </>
                       )}
 
-                      {/* 3. SALÁRIO BÁSICO, BENEFÍCIOS & PROJEÇÃO 12 MESES */}
+                      {/* 3. SALÁRIO BÁSICO, BENEFÍCIOS, ADELANTOS & PROJEÇÃO 12 MESES */}
                       {item.id === 'salary' && (
                         <>
                           {salarySavedToast && (
@@ -2475,26 +2510,24 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                               </span>
                             </div>
 
-                            {currentMonthSalary.benefits
-                              .filter((b) => b.enabled)
-                              .map((b) => (
-                                <div
-                                  key={b.id}
-                                  className="flex items-center justify-between text-xs font-bold text-slate-700"
-                                >
-                                  <span>
-                                    {b.name}{' '}
-                                    {b.type === 'percent' && (
-                                      <span className="text-[10px] text-emerald-700">
-                                        ({b.rawValue}%)
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span className="font-mono">
-                                    +{formatCurrency(b.calculatedAmount, job.currency)}
-                                  </span>
-                                </div>
-                              ))}
+                            {enabledAdditions.map((b) => (
+                              <div
+                                key={b.id}
+                                className="flex items-center justify-between text-xs font-bold text-slate-700"
+                              >
+                                <span>
+                                  {b.name}{' '}
+                                  {b.type === 'percent' && (
+                                    <span className="text-[10px] text-emerald-700">
+                                      ({b.rawValue}%)
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="font-mono text-emerald-700">
+                                  +{formatCurrency(b.calculatedAmount, job.currency)}
+                                </span>
+                              </div>
+                            ))}
 
                             {currentMonthSalary.extraAmount > 0 && (
                               <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
@@ -2502,6 +2535,34 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 <span className="font-mono">
                                   +{formatCurrency(currentMonthSalary.extraAmount, job.currency)}
                                 </span>
+                              </div>
+                            )}
+
+                            {enabledDeductions.length > 0 && (
+                              <div className="space-y-1.5 border-t border-rose-200/80 pt-2">
+                                {enabledDeductions.map((b) => (
+                                  <div
+                                    key={b.id}
+                                    className="flex items-center justify-between text-xs font-bold text-rose-700"
+                                  >
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span>
+                                        {b.name}
+                                        {b.type === 'percent' && (
+                                          <span className="ml-1 text-[10px] text-rose-600">
+                                            ({b.rawValue}%)
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-rose-700">
+                                        Desconto
+                                      </span>
+                                    </span>
+                                    <span className="font-mono text-rose-600">
+                                      -{formatCurrency(b.calculatedAmount, job.currency)}
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
                             )}
 
@@ -3386,7 +3447,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Salary & Benefits Editor Modal */}
+      {/* Salary, Benefits & Deductions (Adelanto) Editor Modal */}
       <AnimatePresence>
         {salaryEditorOpen && (
           <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -3408,7 +3469,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
             >
               <div className="flex items-center justify-between border-b border-slate-100 bg-emerald-600 px-5 py-4 text-white">
                 <div>
-                  <h3 className="text-sm font-black">Salário Básico & Benefícios</h3>
+                  <h3 className="text-sm font-black">Salário, Benefícios & Descontos</h3>
                   <p className="text-[10px] font-semibold capitalize text-emerald-100">
                     {formatMonthTitle(selectedSalaryMonth)} • Valores líquidos que você recebe
                   </p>
@@ -3442,24 +3503,35 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          Benefícios & Adicionais (% ou Valor Direto)
+                          Benefícios (+) & Adelantos / Descontos (-)
                         </span>
-                        {!hasAntiguidadeInDraft && (
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={handleQuickAddAntiguidade}
-                            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                            onClick={handleQuickAddAdelanto}
+                            className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-200 cursor-pointer"
                           >
-                            <Plus className="h-3 w-3" />
-                            Antiguidade
+                            <Minus className="h-3 w-3" />
+                            Adelanto
                           </button>
-                        )}
+                          {!hasAntiguidadeInDraft && (
+                            <button
+                              type="button"
+                              onClick={handleQuickAddAntiguidade}
+                              className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-800 hover:bg-emerald-200 cursor-pointer"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Antiguidade
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {draftBenefits.map((b) => {
                         const isPercent = b.type === 'percent';
+                        const isDed = Boolean(b.isDeduction);
                         const previewAmt = !b.enabled
                           ? 0
                           : isPercent
@@ -3469,7 +3541,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         return (
                           <div
                             key={b.id}
-                            className="rounded-2xl border border-slate-200 bg-white p-2.5 space-y-2"
+                            className={`rounded-2xl border p-2.5 space-y-2 transition-colors ${
+                              isDed
+                                ? 'border-rose-200 bg-rose-50/45'
+                                : 'border-slate-200 bg-white'
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
@@ -3485,16 +3561,38 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       )
                                     )
                                   }
-                                  className="h-4 w-4 accent-emerald-600 cursor-pointer shrink-0"
+                                  className={`h-4 w-4 cursor-pointer shrink-0 ${
+                                    isDed ? 'accent-rose-600' : 'accent-emerald-600'
+                                  }`}
                                 />
                                 <div className="min-w-0">
-                                  <div className="truncate text-xs font-black text-slate-800">
-                                    {b.name}
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className={`truncate text-xs font-black ${
+                                        isDed ? 'text-rose-900' : 'text-slate-800'
+                                      }`}
+                                    >
+                                      {b.name}
+                                    </span>
+                                    {isDed && (
+                                      <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-rose-700 shrink-0">
+                                        Desconto
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="text-[9.5px] font-bold text-emerald-700">
+                                  <div
+                                    className={`text-[9.5px] font-bold ${
+                                      isDed ? 'text-rose-600' : 'text-emerald-700'
+                                    }`}
+                                  >
                                     {isPercent
-                                      ? `% sobre o básico → ${formatCurrency(previewAmt, job.currency)}`
-                                      : `Valor direto (${job.currency})`}
+                                      ? `% sobre o básico → ${isDed ? '-' : '+'}${formatCurrency(
+                                          previewAmt,
+                                          job.currency
+                                        )}`
+                                      : `${isDed ? 'Subtrai do básico' : 'Soma ao salário'} (${
+                                          isDed ? '-' : '+'
+                                        }${formatCurrency(previewAmt, job.currency)})`}
                                   </div>
                                 </div>
                               </div>
@@ -3506,49 +3604,100 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                     prev.filter((item) => item.id !== b.id)
                                   )
                                 }
-                                className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer shrink-0"
+                                className="rounded-lg p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-600 cursor-pointer shrink-0"
                                 aria-label={`Remover ${b.name}`}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
 
-                            <div className="flex items-center justify-between gap-2 pl-6">
-                              <div className="inline-flex rounded-xl bg-slate-100 p-0.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDraftBenefits((prev) =>
-                                      prev.map((item) =>
-                                        item.id === b.id ? { ...item, type: 'percent' } : item
+                            <div className="flex flex-wrap items-center justify-between gap-2 pl-6">
+                              <div className="flex items-center gap-1.5">
+                                {/* Add / Subtract Toggle */}
+                                <div className="inline-flex rounded-xl bg-slate-100 p-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraftBenefits((prev) =>
+                                        prev.map((item) =>
+                                          item.id === b.id
+                                            ? { ...item, isDeduction: false }
+                                            : item
+                                        )
                                       )
-                                    )
-                                  }
-                                  className={`rounded-lg px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
-                                    isPercent
-                                      ? 'bg-emerald-600 text-white shadow-2xs'
-                                      : 'text-slate-500 hover:text-slate-800'
-                                  }`}
-                                >
-                                  % Básico
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDraftBenefits((prev) =>
-                                      prev.map((item) =>
-                                        item.id === b.id ? { ...item, type: 'fixed' } : item
+                                    }
+                                    className={`rounded-lg px-2 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                      !isDed
+                                        ? 'bg-emerald-600 text-white shadow-2xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                    title="Soma ao salário"
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraftBenefits((prev) =>
+                                        prev.map((item) =>
+                                          item.id === b.id
+                                            ? { ...item, isDeduction: true }
+                                            : item
+                                        )
                                       )
-                                    )
-                                  }
-                                  className={`rounded-lg px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
-                                    !isPercent
-                                      ? 'bg-emerald-600 text-white shadow-2xs'
-                                      : 'text-slate-500 hover:text-slate-800'
-                                  }`}
-                                >
-                                  Valor ({job.currency})
-                                </button>
+                                    }
+                                    className={`rounded-lg px-2 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                      isDed
+                                        ? 'bg-rose-600 text-white shadow-2xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                    title="Desconta do salário"
+                                  >
+                                    -
+                                  </button>
+                                </div>
+
+                                {/* Percent / Fixed Toggle */}
+                                <div className="inline-flex rounded-xl bg-slate-100 p-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraftBenefits((prev) =>
+                                        prev.map((item) =>
+                                          item.id === b.id ? { ...item, type: 'percent' } : item
+                                        )
+                                      )
+                                    }
+                                    className={`rounded-lg px-2 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                      isPercent
+                                        ? isDed
+                                          ? 'bg-rose-600 text-white shadow-2xs'
+                                          : 'bg-emerald-600 text-white shadow-2xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    % Básico
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraftBenefits((prev) =>
+                                        prev.map((item) =>
+                                          item.id === b.id ? { ...item, type: 'fixed' } : item
+                                        )
+                                      )
+                                    }
+                                    className={`rounded-lg px-2 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                      !isPercent
+                                        ? isDed
+                                          ? 'bg-rose-600 text-white shadow-2xs'
+                                          : 'bg-emerald-600 text-white shadow-2xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    {job.currency}
+                                  </button>
+                                </div>
                               </div>
 
                               <div className="flex items-center gap-1.5">
@@ -3565,9 +3714,17 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                       )
                                     );
                                   }}
-                                  className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-right font-mono text-xs font-black text-slate-900 outline-none focus:border-emerald-500 focus:bg-white"
+                                  className={`w-28 rounded-xl border px-2.5 py-1.5 text-right font-mono text-xs font-black outline-none focus:bg-white ${
+                                    isDed
+                                      ? 'border-rose-200 bg-white text-rose-800 focus:border-rose-500'
+                                      : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-emerald-500'
+                                  }`}
                                 />
-                                <span className="w-7 text-[10px] font-black text-slate-400">
+                                <span
+                                  className={`w-7 text-[10px] font-black ${
+                                    isDed ? 'text-rose-500' : 'text-slate-400'
+                                  }`}
+                                >
                                   {isPercent ? '%' : job.currency}
                                 </span>
                               </div>
@@ -3576,16 +3733,63 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         );
                       })}
 
-                      <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-3 space-y-2">
-                        <div className="text-[10px] font-black uppercase text-emerald-800">
-                          + Adicionar Benefício / Adicional
+                      <div
+                        className={`rounded-2xl border border-dashed p-3 space-y-2.5 transition-colors ${
+                          newBenefitIsDeduction
+                            ? 'border-rose-300 bg-rose-50/45'
+                            : 'border-emerald-300 bg-emerald-50/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`text-[10px] font-black uppercase ${
+                              newBenefitIsDeduction ? 'text-rose-800' : 'text-emerald-800'
+                            }`}
+                          >
+                            {newBenefitIsDeduction
+                              ? '- Adicionar Adelanto / Desconto'
+                              : '+ Adicionar Benefício / Adicional'}
+                          </span>
+                          <div className="inline-flex rounded-xl bg-white p-0.5 border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewBenefitIsDeduction(false);
+                              }}
+                              className={`rounded-lg px-2 py-0.5 text-[9.5px] font-black cursor-pointer ${
+                                !newBenefitIsDeduction
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'text-slate-500'
+                              }`}
+                            >
+                              + Soma
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewBenefitIsDeduction(true);
+                                setNewBenefitType('fixed');
+                              }}
+                              className={`rounded-lg px-2 py-0.5 text-[9.5px] font-black cursor-pointer ${
+                                newBenefitIsDeduction
+                                  ? 'bg-rose-600 text-white'
+                                  : 'text-slate-500'
+                              }`}
+                            >
+                              - Desconta
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-12 gap-1.5">
                           <input
                             type="text"
                             value={newBenefitName}
                             onChange={(e) => setNewBenefitName(e.target.value)}
-                            placeholder="Ex: Aguinaldo / Antiguidade"
+                            placeholder={
+                              newBenefitIsDeduction
+                                ? 'Ex: Adelanto / Vale'
+                                : 'Ex: Aguinaldo / Antiguidade'
+                            }
                             className="col-span-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold"
                           />
                           <select
@@ -3609,9 +3813,21 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         <button
                           type="button"
                           onClick={handleAddBenefitToDraft}
-                          className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[10.5px] font-black text-white cursor-pointer"
+                          className={`inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[10.5px] font-black text-white cursor-pointer ${
+                            newBenefitIsDeduction
+                              ? 'bg-rose-600 hover:bg-rose-700'
+                              : 'bg-emerald-600 hover:bg-emerald-700'
+                          }`}
                         >
-                          <Plus className="h-3 w-3" /> Incluir benefício
+                          {newBenefitIsDeduction ? (
+                            <>
+                              <Minus className="h-3 w-3" /> Incluir desconto
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-3 w-3" /> Incluir benefício
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -3645,7 +3861,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         Como aplicar este novo valor?
                       </h4>
                       <p className="mt-1 text-xs font-medium text-slate-500">
-                        Escolha se o reajuste vale só para{' '}
+                        Escolha se a alteração vale só para{' '}
                         <strong className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</strong>{' '}
                         ou para todos os próximos meses.
                       </p>
@@ -3671,7 +3887,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Atualizar deste mês em diante
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-emerald-50">
-                          Aplica o benefício e o reajuste neste mês e nos próximos 12 meses (meses passados ficam intactos).
+                          Aplica os benefícios, descontos e reajuste neste mês e nos próximos 12 meses (meses passados ficam intactos).
                         </div>
                       </button>
 
@@ -3684,8 +3900,8 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                           Manter valor original nos próximos meses
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-slate-500">
-                          Aplica o benefício somente em{' '}
-                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — nos próximos meses o benefício não é aplicado e o valor original é mantido.
+                          Aplica somente em{' '}
+                          <span className="capitalize">{formatMonthTitle(selectedSalaryMonth)}</span> — nos próximos meses o valor original é mantido.
                         </div>
                       </button>
                     </div>
