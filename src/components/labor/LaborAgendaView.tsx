@@ -44,6 +44,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
     deleteJob,
     recordTipToSisFinz,
     syncSalaryToSisFinz,
+    registerSalaryAdvanceIncome,
   } = useLaborAgenda();
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -180,6 +181,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                       }}
                       onRecordTipToSisFinz={recordTipToSisFinz}
                       onSyncSalaryToSisFinz={syncSalaryToSisFinz}
+                      onRegisterSalaryAdvanceIncome={registerSalaryAdvanceIncome}
                     />
                   </motion.div>
                 ) : (
