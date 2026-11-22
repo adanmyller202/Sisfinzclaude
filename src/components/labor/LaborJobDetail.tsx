@@ -882,17 +882,29 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   };
 
   const handleQuickAddAdelanto = () => {
+    const newId = `ded_adelanto_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`;
     setDraftBenefits((prev) => [
       ...prev,
       {
-        id: `ded_adelanto_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
-        name: 'Adelanto',
+        id: newId,
+        name: 'Antecipação de salário',
         type: 'fixed',
         value: 0,
         enabled: true,
         isDeduction: true,
       },
     ]);
+    window.setTimeout(() => {
+      const cardEl = document.querySelector(`[data-draft-benefit-id="${newId}"]`) as HTMLElement | null;
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const inputEl = cardEl.querySelector('input[type="number"], input[inputmode="decimal"]') as HTMLInputElement | null;
+        if (inputEl) {
+          inputEl.focus();
+          inputEl.select();
+        }
+      }
+    }, 80);
   };
 
   const handleAddBenefitToDraft = () => {
@@ -3505,7 +3517,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          Benefícios (+) & Adelantos / Descontos (-)
+                          Benefícios (+) &amp; Antecipações / Descontos (-)
                         </span>
                         <div className="flex items-center gap-1.5">
                           <button
@@ -3514,7 +3526,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-200 cursor-pointer"
                           >
                             <Minus className="h-3 w-3" />
-                            Adelanto
+                            Registrar antecipação de salário
                           </button>
                           {!hasAntiguidadeInDraft && (
                             <button
@@ -3541,6 +3553,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         return (
                           <div
                             key={b.id}
+                            data-draft-benefit-id={b.id}
                             className={`rounded-2xl border p-2.5 space-y-2 transition-colors ${
                               isDed
                                 ? 'border-rose-200 bg-rose-50/45'
@@ -3747,7 +3760,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             }`}
                           >
                             {newBenefitIsDeduction
-                              ? '- Adicionar Adelanto / Desconto'
+                              ? '- Adicionar Antecipação / Desconto'
                               : '+ Adicionar Benefício / Adicional'}
                           </span>
                           <div className="inline-flex rounded-xl bg-white p-0.5 border border-slate-200">
@@ -3787,7 +3800,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             onChange={(e) => setNewBenefitName(e.target.value)}
                             placeholder={
                               newBenefitIsDeduction
-                                ? 'Ex: Adelanto / Vale'
+                                ? 'Ex: Antecipação / Vale'
                                 : 'Ex: Aguinaldo / Antiguidade'
                             }
                             className="col-span-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold"
