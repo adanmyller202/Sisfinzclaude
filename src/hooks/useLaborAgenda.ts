@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  runTransaction,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -362,6 +363,111 @@ export function useLaborAgenda() {
     [saveJob, userId]
   );
 
+  /**
+   * Registers a salary advance as a one-time SisFinz income.
+   * A received-today advance updates the selected account and its monthly status
+   * in one Firestore transaction; a scheduled advance stays pending.
+   */
+  const registerSalaryAdvanceIncome = useCallback(
+    async (params: {
+      id: string;
+      job: LaborJob;
+      amount: number;
+      reason: string;
+      creditNow: boolean;
+      depositDate: string;
+      accountId?: string;
+    }): Promise<boolean> => {
+      const { id, job, amount, reason, creditNow, depositDate, accountId } = params;
+      const uid = userId || auth.currentUser?.uid;
+      const cleanReason = reason.trim();
+      if (!uid || !id || amount <= 0 || !cleanReason) return false;
+
+      const safeDate = formatSafeDate(depositDate);
+      const targetMonth = safeDate.slice(0, 7);
+      const now = new Date().toISOString();
+      const selectedAcc = accounts.find((a) => a.id === accountId);
+      const incomeRef = doc(db, 'users', uid, 'incomes', id);
+      const statusId = `income_${id}_${targetMonth}`;
+      const statusRef = doc(db, 'users', uid, 'monthly_status', statusId);
+      const accountRef =
+        creditNow && selectedAcc
+          ? doc(db, 'users', uid, 'accounts', selectedAcc.id)
+          : null;
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          // Idempotency guard: a retry must never credit the account twice.
+          const existingIncome = await transaction.get(incomeRef);
+          if (existingIncome.exists()) return;
+
+          let nextBalance: number | null = null;
+          if (accountRef && selectedAcc) {
+            const accountSnap = await transaction.get(accountRef);
+            if (!accountSnap.exists()) {
+              throw new Error('A conta selecionada não foi encontrada.');
+            }
+            const accountData = accountSnap.data();
+            const currentBalance = Number(
+              accountData.currentBalance ?? accountData.initialBalance ?? 0
+            );
+            nextBalance = currentBalance + amount;
+          }
+
+          const incomeDoc = {
+            id,
+            laborJobId: job.id,
+            name: `Antecipação de Salário • ${job.companyName}`,
+            amount,
+            currency: (selectedAcc?.currency || job.currency) as CurrencyCode,
+            category: 'Salário',
+            expectedDay: Number(safeDate.slice(8, 10)) || 1,
+            expectedDate: safeDate,
+            startMonth: targetMonth,
+            recurrence: 'none',
+            accountId: selectedAcc?.id || undefined,
+            notes: `Motivo: ${cleanReason} | Cargo: ${job.role}`,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          transaction.set(incomeRef, sanitizePayload(incomeDoc));
+          transaction.set(
+            statusRef,
+            sanitizePayload({
+              id: statusId,
+              itemId: id,
+              itemType: 'income',
+              month: targetMonth,
+              status: creditNow ? 'received' : 'pending',
+              isCompleted: creditNow,
+              ...(creditNow ? { completedAt: now, paidDate: safeDate } : {}),
+              accountId: selectedAcc?.id || undefined,
+              amount,
+              expectedDate: safeDate,
+              updatedAt: now,
+            }),
+            { merge: true }
+          );
+
+          if (accountRef && nextBalance !== null) {
+            transaction.update(accountRef, {
+              currentBalance: nextBalance,
+              updatedAt: now,
+            });
+          }
+        });
+
+        if (creditNow && selectedAcc) await refreshAccounts();
+        return true;
+      } catch (err) {
+        console.error('[useLaborAgenda] salary advance income sync failed:', err);
+        return false;
+      }
+    },
+    [accounts, refreshAccounts, userId]
+  );
+
   return {
     jobs,
     accounts,
@@ -370,5 +476,6 @@ export function useLaborAgenda() {
     deleteJob,
     recordTipToSisFinz,
     syncSalaryToSisFinz,
+    registerSalaryAdvanceIncome,
   };
 }
