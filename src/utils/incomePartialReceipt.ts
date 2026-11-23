@@ -634,44 +634,42 @@ function openReceiptChoiceModal(params: {
     partialValue: number;
   };
 
-  // Show remaining unpaid balance of each item (deducting any partial or full separate receipts!)
+  // Subtract any amount already received separately for each item so it can NEVER be double-counted!
   let compItems: CompDraftItem[] = [];
   if (salaryCalc) {
-    const baseRec = alreadyReceivedItems['__base__']?.amount || 0;
-    const baseRem = Math.max(0, Math.round((salaryCalc.baseSalary - baseRec) * 100) / 100);
+    const basePaid = Number(alreadyReceivedItems['__base__']?.amount) || 0;
+    const baseRem = Math.max(0, Math.round((salaryCalc.baseSalary - basePaid) * 100) / 100);
     if (baseRem > 0) {
       compItems.push({
         id: '__base__',
-        name: baseRec > 0 ? 'Salário Básico (restante)' : 'Salário Básico',
+        name: basePaid > 0 ? 'Salário Básico (Restante)' : 'Salário Básico',
         fullAmount: baseRem,
         checked: false,
         partialValue: baseRem,
       });
     }
-    for (const b of salaryCalc.benefits.filter(
-      (x) => x.enabled && !x.isDeduction && x.calculatedAmount > 0
-    )) {
-      const bRec = alreadyReceivedItems[b.id]?.amount || 0;
-      const bRem = Math.max(0, Math.round((b.calculatedAmount - bRec) * 100) / 100);
-      if (bRem > 0) {
+    for (const b of salaryCalc.benefits.filter((x) => x.enabled && !x.isDeduction && x.calculatedAmount > 0)) {
+      const itemPaid = Number(alreadyReceivedItems[b.id]?.amount) || 0;
+      const itemRem = Math.max(0, Math.round((b.calculatedAmount - itemPaid) * 100) / 100);
+      if (itemRem > 0) {
         compItems.push({
           id: b.id,
-          name: bRec > 0 ? `${b.name} (restante)` : b.name,
-          fullAmount: bRem,
+          name: itemPaid > 0 ? `${b.name} (Restante)` : b.name,
+          fullAmount: itemRem,
           checked: false,
-          partialValue: bRem,
+          partialValue: itemRem,
         });
       }
     }
-    const extRec = alreadyReceivedItems['__extra__']?.amount || 0;
-    const extRem = Math.max(0, Math.round((salaryCalc.extraAmount - extRec) * 100) / 100);
-    if (extRem > 0) {
+    const extraPaid = Number(alreadyReceivedItems['__extra__']?.amount) || 0;
+    const extraRem = Math.max(0, Math.round((salaryCalc.extraAmount - extraPaid) * 100) / 100);
+    if (extraRem > 0) {
       compItems.push({
         id: '__extra__',
-        name: extRec > 0 ? 'Extras / Bônus (restante)' : 'Extras / Bônus do mês',
-        fullAmount: extRem,
+        name: extraPaid > 0 ? 'Extras / Bônus (Restante)' : 'Extras / Bônus do mês',
+        fullAmount: extraRem,
         checked: false,
-        partialValue: extRem,
+        partialValue: extraRem,
       });
     }
   }
@@ -887,7 +885,7 @@ function openReceiptChoiceModal(params: {
     const compBodyHtml = `
       <div style="display:flex;flex-direction:column;gap:8px;max-height:210px;overflow-y:auto;overflow-x:hidden;padding-right:2px;">
         <div style="font-size:10.5px;font-weight:800;color:#475569;">
-          Itens ainda pendentes (valores já recebidos separadamente já foram abatidos):
+          Itens ainda pendentes (valores já recebidos separadamente foram descontados):
         </div>
         ${compItems
           .map(

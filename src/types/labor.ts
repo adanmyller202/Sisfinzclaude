@@ -41,10 +41,10 @@ export interface LaborSalarySnapshot {
   deductionPercent: number; // optional payroll deduction % (0 = net directly)
 }
 
-export interface ReceivedSalaryItemTranche {
+export interface ReceivedSalaryItemInstallment {
   id: string;
-  amount: number;
   linkedIncomeId: string;
+  amount: number;
   creditNow: boolean;
   depositDate: string; // YYYY-MM-DD
   accountId?: string;
@@ -55,7 +55,7 @@ export interface ReceivedSalaryItemTranche {
 export interface ReceivedSalaryItemEntry {
   itemId: string;
   itemName: string;
-  /** Cumulative amount received or scheduled separately across all tranches for this item */
+  /** Cumulative amount received or scheduled separately so far for this item */
   amount: number;
   linkedIncomeId: string;
   creditNow: boolean;
@@ -63,7 +63,7 @@ export interface ReceivedSalaryItemEntry {
   accountId?: string;
   accountName?: string;
   receivedAt: string;
-  tranches?: ReceivedSalaryItemTranche[];
+  installments?: ReceivedSalaryItemInstallment[];
 }
 
 export interface LaborMonthOverride {
