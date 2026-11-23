@@ -11,6 +11,7 @@ import {
 } from '../components/ErrorBoundary';
 import { initSalaryBreakdownViewer } from './salaryBreakdownViewer';
 import { initBrandLogoSync } from './brandLogoSync';
+import { initIncomePartialReceipt } from './incomePartialReceipt';
 
 let pendingTimers: number[] = [];
 
@@ -101,8 +102,11 @@ export function initTabBarAutoScroll() {
   repairCachedIncomesSynchronously();
   repairMissingIncomeExpectedDates().catch(() => {});
 
-  // Enable interactive salary composition breakdown viewer on synced salary incomes in Receitas
+  // Enable interactive salary composition breakdown viewer & inline editor on synced salary incomes
   initSalaryBreakdownViewer();
+
+  // Enable animated Total vs. Partial receipt modal & orange clock status on pending incomes
+  initIncomePartialReceipt();
 
   // Apply the new SisFinz vector logo across all screens & legacy logo slots
   initBrandLogoSync();
