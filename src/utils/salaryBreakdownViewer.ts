@@ -10,6 +10,8 @@ const BADGE_CLASS = 'sisfinz-salary-breakdown-chip';
 const OVERLAY_ID = 'sisfinz-salary-breakdown-overlay';
 const EDITOR_OVERLAY_ID = 'sisfinz-salary-editor-overlay';
 
+const TRASH_ICON_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+
 const MONTH_NAME_MAP: Record<string, number> = {
   jan: 1, janeiro: 1, enero: 1, january: 1,
   fev: 2, fevereiro: 2, feb: 2, febrero: 2, february: 2,
@@ -250,9 +252,7 @@ function closeBreakdownOverlay() {
 
 /**
  * Stacked Salary & Benefits Editor overlay rendered ON TOP of the Composição Salarial modal.
- * Uses the exact same single-month vs. future-months scope flow as Meus Trabalhos,
- * saves to Firestore + localStorage (updating all screens), closes itself,
- * and triggers `onSaved(updatedJob)` so the underlying Composição Salarial updates live!
+ * Strictly locked horizontally (vertical scroll only) with crisp red trash icon matching the app.
  */
 function openStackedSalaryEditor(params: {
   job: LaborJob;
@@ -289,11 +289,11 @@ function openStackedSalaryEditor(params: {
   editorOverlay.setAttribute('role', 'dialog');
   editorOverlay.setAttribute('aria-modal', 'true');
   editorOverlay.style.cssText =
-    'position:fixed;inset:0;z-index:10065;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.52);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+    'position:fixed;inset:0;z-index:10065;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.52);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow:hidden;overscroll-behavior:contain;touch-action:none;';
 
   const card = document.createElement('div');
   card.style.cssText =
-    'width:100%;max-width:480px;max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 28px 70px rgba(15,23,42,0.34);border:1px solid #a7f3d0;font-family:inherit;';
+    'width:100%;max-width:min(100vw,480px);max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 28px 70px rgba(15,23,42,0.34);border:1px solid #a7f3d0;font-family:inherit;';
 
   if (window.innerWidth >= 640) {
     editorOverlay.style.alignItems = 'center';
@@ -327,7 +327,11 @@ function openStackedSalaryEditor(params: {
         benefitTypeOverrides[b.id] = b.type;
         benefitDeductionOverrides[b.id] = Boolean(b.isDeduction);
         if (!baseSnapIds.has(b.id)) {
-          singleMonthOnlyBenefits.push({ ...b, enabled: b.enabled, isDeduction: Boolean(b.isDeduction) });
+          singleMonthOnlyBenefits.push({
+            ...b,
+            enabled: b.enabled,
+            isDeduction: Boolean(b.isDeduction),
+          });
           if (b.enabled) newlyEnabledOrAddedIds.push(b.id);
         } else {
           const origSnapBenefit = (baseSnap.benefits || []).find((sb) => sb.id === b.id);
@@ -419,17 +423,17 @@ function openStackedSalaryEditor(params: {
 
     if (scopeStep) {
       card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#059669;color:#ffffff;">
-          <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#059669;color:#ffffff;flex-shrink:0;">
+          <div style="min-width:0;">
             <div style="font-size:14px;font-weight:900;">Salvar Alterações</div>
             <div style="font-size:10.5px;font-weight:600;color:#d1fae5;text-transform:capitalize;">${escapeHtml(
               formatMonthLabel(targetMonth)
             )}</div>
           </div>
-          <button type="button" data-close-ed style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.18);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;">✕</button>
+          <button type="button" data-close-ed style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.18);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
         </div>
 
-        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;touch-action:pan-y;box-sizing:border-box;width:100%;">
           <div style="text-align:center;">
             <div style="font-size:26px;margin-bottom:4px;">✨</div>
             <div style="font-size:15px;font-weight:900;color:#0f172a;">Como aplicar este novo valor?</div>
@@ -440,12 +444,12 @@ function openStackedSalaryEditor(params: {
             </div>
           </div>
 
-          <label style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;border:1px solid #a7f3d0;background:#ecfdf5;font-size:12px;font-weight:700;color:#064e3b;cursor:pointer;">
-            <input type="checkbox" data-sync-fin ${syncWithFinance ? 'checked' : ''} style="width:16px;height:16px;accent-color:#059669;" />
+          <label style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;border:1px solid #a7f3d0;background:#ecfdf5;font-size:12px;font-weight:700;color:#064e3b;cursor:pointer;box-sizing:border-box;">
+            <input type="checkbox" data-sync-fin ${syncWithFinance ? 'checked' : ''} style="width:16px;height:16px;accent-color:#059669;flex-shrink:0;" />
             <span>Sincronizar automaticamente com minhas Receitas do SisFinz</span>
           </label>
 
-          <button type="button" data-save-future ${isSaving ? 'disabled' : ''} style="width:100%;text-align:left;padding:15px;border-radius:16px;border:none;background:linear-gradient(90deg,#059669,#0d9488);color:#ffffff;cursor:pointer;box-shadow:0 6px 16px rgba(5,150,105,0.25);">
+          <button type="button" data-save-future ${isSaving ? 'disabled' : ''} style="width:100%;text-align:left;padding:15px;border-radius:16px;border:none;background:linear-gradient(90deg,#059669,#0d9488);color:#ffffff;cursor:pointer;box-shadow:0 6px 16px rgba(5,150,105,0.25);box-sizing:border-box;">
             <div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;">
               ${isSaving ? 'Salvando...' : 'Atualizar deste mês em diante'}
             </div>
@@ -454,7 +458,7 @@ function openStackedSalaryEditor(params: {
             </div>
           </button>
 
-          <button type="button" data-save-single ${isSaving ? 'disabled' : ''} style="width:100%;text-align:left;padding:15px;border-radius:16px;border:1px solid #cbd5e1;background:#ffffff;color:#1e293b;cursor:pointer;">
+          <button type="button" data-save-single ${isSaving ? 'disabled' : ''} style="width:100%;text-align:left;padding:15px;border-radius:16px;border:1px solid #cbd5e1;background:#ffffff;color:#1e293b;cursor:pointer;box-sizing:border-box;">
             <div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;">
               ${isSaving ? 'Salvando...' : 'Manter valor original nos próximos meses'}
             </div>
@@ -497,15 +501,15 @@ function openStackedSalaryEditor(params: {
         const isFocused = focusItemId === b.id;
 
         return `
-          <div data-item-row="${escapeHtml(b.id)}" style="border-radius:16px;border:${
+          <div data-item-row="${escapeHtml(b.id)}" style="width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;border-radius:16px;border:${
           isFocused ? '2px solid #059669' : isDed ? '1px solid #fecdd3' : '1px solid #e2e8f0'
         };background:${isDed ? '#fff1f2' : '#ffffff'};padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;width:100%;">
               <label style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;cursor:pointer;">
                 <input type="checkbox" data-ed-check="${escapeHtml(b.id)}" ${
           b.enabled ? 'checked' : ''
-        } style="width:16px;height:16px;accent-color:${isDed ? '#e11d48' : '#059669'};cursor:pointer;" />
-                <div style="min-width:0;">
+        } style="width:16px;height:16px;accent-color:${isDed ? '#e11d48' : '#059669'};cursor:pointer;flex-shrink:0;" />
+                <div style="min-width:0;flex:1;">
                   <div style="font-size:12px;font-weight:900;color:${
                     isDed ? '#881337' : '#0f172a'
                   };white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
@@ -523,11 +527,11 @@ function openStackedSalaryEditor(params: {
               </label>
               <button type="button" data-ed-del="${escapeHtml(
                 b.id
-              )}" style="border:none;background:transparent;color:#94a3b8;font-size:14px;cursor:pointer;padding:4px;" title="Remover">🗑️</button>
+              )}" aria-label="Remover ${escapeHtml(b.name)}" title="Remover" style="width:30px;height:30px;border-radius:10px;border:1px solid #fecdd3;background:#fff1f2;color:#f43f5e;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">${TRASH_ICON_SVG}</button>
             </div>
 
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:24px;flex-wrap:wrap;">
-              <div style="display:flex;gap:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:24px;min-width:0;width:100%;box-sizing:border-box;">
+              <div style="display:flex;gap:4px;flex-shrink:0;">
                 <button type="button" data-ed-sign="${escapeHtml(b.id)}" data-val="add" style="padding:4px 8px;border-radius:8px;border:none;font-size:10px;font-weight:900;cursor:pointer;${
           !isDed ? 'background:#059669;color:#ffffff;' : 'background:#e2e8f0;color:#475569;'
         }">+</button>
@@ -551,7 +555,7 @@ function openStackedSalaryEditor(params: {
               </div>
               <input type="number" inputmode="decimal" step="any" data-ed-val="${escapeHtml(
                 b.id
-              )}" value="${b.value}" style="width:105px;padding:6px 8px;border-radius:10px;border:1px solid ${
+              )}" value="${b.value}" style="width:96px;min-width:0;max-width:42%;box-sizing:border-box;padding:6px 8px;border-radius:10px;border:1px solid ${
           isDed ? '#fda4af' : '#cbd5e1'
         };background:#ffffff;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:900;color:${
           isDed ? '#9f1239' : '#0f172a'
@@ -563,18 +567,18 @@ function openStackedSalaryEditor(params: {
       .join('');
 
     card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#059669;color:#ffffff;">
-        <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#059669;color:#ffffff;flex-shrink:0;">
+        <div style="min-width:0;">
           <div style="font-size:14px;font-weight:900;">Editar Composição Salarial</div>
           <div style="font-size:10.5px;font-weight:600;color:#d1fae5;text-transform:capitalize;">${escapeHtml(
             formatMonthLabel(targetMonth)
           )} • Sincroniza com Meus Trabalhos</div>
         </div>
-        <button type="button" data-close-ed style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.18);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;">✕</button>
+        <button type="button" data-close-ed style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.18);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
       </div>
 
-      <div data-ed-scroll style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;">
-        <div>
+      <div data-ed-scroll style="padding:16px 16px 20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;overscroll-behavior-y:contain;touch-action:pan-y;width:100%;max-width:100%;box-sizing:border-box;">
+        <div style="width:100%;box-sizing:border-box;">
           <label style="display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:5px;">
             Salário Básico (${escapeHtml(job.currency)})
           </label>
@@ -583,7 +587,7 @@ function openStackedSalaryEditor(params: {
           )}" style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:14px;border:1px solid #a7f3d0;background:#ecfdf5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px;font-weight:900;color:#0f172a;" />
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;width:100%;box-sizing:border-box;">
           <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">
             Benefícios (+) & Descontos (-)
           </span>
@@ -592,19 +596,19 @@ function openStackedSalaryEditor(params: {
           </button>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;flex-direction:column;gap:8px;width:100%;box-sizing:border-box;">
           ${benefitsHtml}
         </div>
 
-        <!-- Add New Benefit / Deduction Box -->
-        <div data-add-box style="border-radius:16px;border:1px dashed ${
+        <!-- Add New Benefit / Deduction Box (strictly contained, zero horizontal overflow) -->
+        <div data-add-box style="width:100%;max-width:100%;box-sizing:border-box;border-radius:16px;border:1px dashed ${
           newIsDeduction ? '#fda4af' : '#6ee7b7'
         };background:${newIsDeduction ? '#fff1f2' : '#ecfdf5'};padding:12px;display:flex;flex-direction:column;gap:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <span style="font-size:10px;font-weight:900;text-transform:uppercase;color:${
               newIsDeduction ? '#9f1239' : '#065f46'
             };">${newIsDeduction ? '- Novo Desconto / Adelanto' : '+ Novo Benefício / Adicional'}</span>
-            <div style="display:flex;gap:4px;background:#ffffff;padding:2px;border-radius:10px;border:1px solid #e2e8f0;">
+            <div style="display:flex;gap:4px;background:#ffffff;padding:2px;border-radius:10px;border:1px solid #e2e8f0;flex-shrink:0;">
               <button type="button" data-new-mode="add" style="padding:3px 8px;border-radius:8px;border:none;font-size:9.5px;font-weight:900;cursor:pointer;${
                 !newIsDeduction ? 'background:#059669;color:#ffffff;' : 'background:transparent;color:#64748b;'
               }">+ Soma</button>
@@ -614,28 +618,28 @@ function openStackedSalaryEditor(params: {
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:5fr 4fr 3fr;gap:6px;">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;width:100%;box-sizing:border-box;">
             <input type="text" data-new-name value="${escapeHtml(newName)}" placeholder="${
-      newIsDeduction ? 'Ex: Adelanto' : 'Ex: Bônus'
-    }" style="padding:7px 9px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:11.5px;font-weight:700;" />
-            <select data-new-type style="padding:7px 6px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:11px;font-weight:700;">
+      newIsDeduction ? 'Ex: Adelanto / Vale' : 'Ex: Bônus / Antiguidade'
+    }" style="grid-column:1 / -1;width:100%;min-width:0;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:12px;font-weight:700;" />
+            <select data-new-type style="width:100%;min-width:0;box-sizing:border-box;padding:8px 8px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:11.5px;font-weight:700;">
               <option value="percent" ${newType === 'percent' ? 'selected' : ''}>% Básico</option>
               <option value="fixed" ${newType === 'fixed' ? 'selected' : ''}>Valor Fixo</option>
               <option value="variable" ${newType === 'variable' ? 'selected' : ''}>Variável</option>
             </select>
             <input type="number" inputmode="decimal" data-new-val value="${escapeHtml(
               newValue
-            )}" placeholder="Valor" style="padding:7px 8px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:11.5px;font-weight:700;" />
+            )}" placeholder="Valor" style="width:100%;min-width:0;box-sizing:border-box;padding:8px 10px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;font-size:12px;font-weight:700;" />
           </div>
 
-          <button type="button" data-add-item style="align-self:flex-start;padding:6px 12px;border-radius:10px;border:none;background:${
+          <button type="button" data-add-item style="align-self:flex-start;padding:7px 12px;border-radius:10px;border:none;background:${
             newIsDeduction ? '#e11d48' : '#059669'
           };color:#ffffff;font-size:10.5px;font-weight:900;cursor:pointer;">
             ${newIsDeduction ? '- Incluir desconto' : '+ Incluir benefício'}
           </button>
         </div>
 
-        <button type="button" data-go-scope style="width:100%;padding:13px;border-radius:16px;border:none;background:#059669;color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 18px rgba(5,150,105,0.24);">
+        <button type="button" data-go-scope style="width:100%;box-sizing:border-box;padding:13px;border-radius:16px;border:none;background:#059669;color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 18px rgba(5,150,105,0.24);">
           Continuar para salvar
         </button>
       </div>
@@ -767,10 +771,10 @@ function openStackedSalaryEditor(params: {
 
   if (scrollToAdd) {
     const addBox = card.querySelector('[data-add-box]');
-    addBox?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    addBox?.scrollIntoView({ behavior: 'auto', block: 'center' });
   } else if (focusItemId) {
     const targetRow = card.querySelector(`[data-item-row="${focusItemId}"]`);
-    targetRow?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    targetRow?.scrollIntoView({ behavior: 'auto', block: 'center' });
   }
 }
 
@@ -786,11 +790,11 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
   overlay.style.cssText =
-    'position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+    'position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow:hidden;overscroll-behavior:contain;touch-action:none;';
 
   const card = document.createElement('div');
   card.style.cssText =
-    'width:100%;max-width:440px;max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 24px 60px rgba(15,23,42,0.28);border:1px solid #d1fae5;font-family:inherit;margin-bottom:0;';
+    'width:100%;max-width:min(100vw,440px);max-height:88dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 24px 60px rgba(15,23,42,0.28);border:1px solid #d1fae5;font-family:inherit;margin-bottom:0;';
 
   if (window.innerWidth >= 640) {
     overlay.style.alignItems = 'center';
@@ -890,7 +894,7 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
       : '';
 
     card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
         <div style="min-width:0;">
           <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Composição Salarial</div>
           <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Salário • ${escapeHtml(activeJob.companyName)}</div>
@@ -904,7 +908,7 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
         </div>
       </div>
 
-      <div style="padding:16px 20px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:13px;">
+      <div style="padding:16px 20px 20px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;overscroll-behavior-y:contain;touch-action:pan-y;display:flex;flex-direction:column;gap:13px;width:100%;box-sizing:border-box;">
         ${flashHtml}
 
         <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:6px 8px;">
@@ -987,7 +991,7 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
 function extractSalaryCompany(text: string): string | null {
   const m = text.match(/Sal[aá]rio\s*[•·-]\s*(.+)/i);
   if (!m) return null;
-  return m[1].replace(/\(Parcial\)/i, '').trim();
+  return m[1].replace(/\(Parcial(?:\s*\d+)?\)/i, '').trim();
 }
 
 /** Decorate visible "Salário • Company" income rows in Receitas with a subtle "Ver composição" chip */
