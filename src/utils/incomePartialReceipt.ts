@@ -634,36 +634,44 @@ function openReceiptChoiceModal(params: {
     partialValue: number;
   };
 
-  // Exclude items already marked as separately received so they can NEVER be double-counted!
+  // Show remaining unpaid balance of each item (deducting any partial or full separate receipts!)
   let compItems: CompDraftItem[] = [];
   if (salaryCalc) {
-    if (!alreadyReceivedItems['__base__'] && salaryCalc.baseSalary > 0) {
+    const baseRec = alreadyReceivedItems['__base__']?.amount || 0;
+    const baseRem = Math.max(0, Math.round((salaryCalc.baseSalary - baseRec) * 100) / 100);
+    if (baseRem > 0) {
       compItems.push({
         id: '__base__',
-        name: 'Salário Básico',
-        fullAmount: salaryCalc.baseSalary,
+        name: baseRec > 0 ? 'Salário Básico (restante)' : 'Salário Básico',
+        fullAmount: baseRem,
         checked: false,
-        partialValue: salaryCalc.baseSalary,
+        partialValue: baseRem,
       });
     }
     for (const b of salaryCalc.benefits.filter(
-      (x) => x.enabled && !x.isDeduction && x.calculatedAmount > 0 && !alreadyReceivedItems[x.id]
+      (x) => x.enabled && !x.isDeduction && x.calculatedAmount > 0
     )) {
-      compItems.push({
-        id: b.id,
-        name: b.name,
-        fullAmount: b.calculatedAmount,
-        checked: false,
-        partialValue: b.calculatedAmount,
-      });
+      const bRec = alreadyReceivedItems[b.id]?.amount || 0;
+      const bRem = Math.max(0, Math.round((b.calculatedAmount - bRec) * 100) / 100);
+      if (bRem > 0) {
+        compItems.push({
+          id: b.id,
+          name: bRec > 0 ? `${b.name} (restante)` : b.name,
+          fullAmount: bRem,
+          checked: false,
+          partialValue: bRem,
+        });
+      }
     }
-    if (!alreadyReceivedItems['__extra__'] && salaryCalc.extraAmount > 0) {
+    const extRec = alreadyReceivedItems['__extra__']?.amount || 0;
+    const extRem = Math.max(0, Math.round((salaryCalc.extraAmount - extRec) * 100) / 100);
+    if (extRem > 0) {
       compItems.push({
         id: '__extra__',
-        name: 'Extras / Bônus do mês',
-        fullAmount: salaryCalc.extraAmount,
+        name: extRec > 0 ? 'Extras / Bônus (restante)' : 'Extras / Bônus do mês',
+        fullAmount: extRem,
         checked: false,
-        partialValue: salaryCalc.extraAmount,
+        partialValue: extRem,
       });
     }
   }
@@ -879,7 +887,7 @@ function openReceiptChoiceModal(params: {
     const compBodyHtml = `
       <div style="display:flex;flex-direction:column;gap:8px;max-height:210px;overflow-y:auto;overflow-x:hidden;padding-right:2px;">
         <div style="font-size:10.5px;font-weight:800;color:#475569;">
-          Itens ainda pendentes (itens já recebidos separadamente foram ocultados):
+          Itens ainda pendentes (valores já recebidos separadamente já foram abatidos):
         </div>
         ${compItems
           .map(

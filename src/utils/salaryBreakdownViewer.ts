@@ -6,6 +6,7 @@ import {
   LaborBenefit,
   LaborJob,
   ReceivedSalaryItemEntry,
+  ReceivedSalaryItemTranche,
 } from '../types/labor';
 import {
   calculateMonthSalary,
@@ -101,6 +102,28 @@ function loadCachedAccounts(): AccountItem[] {
   return [];
 }
 
+function normalizeItemTranches(entry?: ReceivedSalaryItemEntry): ReceivedSalaryItemTranche[] {
+  if (!entry) return [];
+  if (Array.isArray(entry.tranches) && entry.tranches.length > 0) {
+    return entry.tranches;
+  }
+  if (entry.amount > 0) {
+    return [
+      {
+        id: entry.linkedIncomeId || `tr_${entry.itemId}_1`,
+        amount: entry.amount,
+        linkedIncomeId: entry.linkedIncomeId,
+        creditNow: entry.creditNow,
+        depositDate: entry.depositDate,
+        accountId: entry.accountId,
+        accountName: entry.accountName,
+        receivedAt: entry.receivedAt,
+      },
+    ];
+  }
+  return [];
+}
+
 function savePartialIndicatorLocally(params: {
   incomeId: string;
   incomeName: string;
@@ -145,7 +168,6 @@ async function persistUpdatedJobAndSyncIncome(params: {
   const now = new Date().toISOString();
   const stamped: LaborJob = { ...updatedJob, updatedAt: now };
 
-  // 1. Update localStorage cache so all screens reflect immediately
   const existing = loadCachedLaborJobs();
   const nextList = existing.some((j) => j.id === stamped.id)
     ? existing.map((j) => (j.id === stamped.id ? stamped : j))
@@ -158,14 +180,12 @@ async function persistUpdatedJobAndSyncIncome(params: {
 
   const uid = auth.currentUser?.uid;
   if (uid) {
-    // 2. Sync LaborJob to Firestore (Meus Trabalhos updates in real time via onSnapshot)
     await setDoc(
       doc(db, 'users', uid, 'labor_jobs', stamped.id),
       sanitizePayload(stamped),
       { merge: true }
     );
 
-    // 3. Sync Income in Receitas if enabled — ALWAYS using remainingToReceive for targetMonth!
     const calc = calculateMonthSalary(stamped, targetMonth);
     if (syncWithFinance && calc.netTotal > 0) {
       const activeBenefits = calc.benefits.filter((b) => b.enabled);
@@ -283,7 +303,6 @@ async function persistUpdatedJobAndSyncIncome(params: {
         );
       }
 
-      // If all items were marked separately received (remaining == 0), mark main salary status complete with amount 0
       if (calc.separatelyReceivedTotal > 0 && calc.remainingToReceive <= 0) {
         const statusId = `income_${incomeId}_${targetMonth}`;
         await setDoc(
@@ -318,23 +337,36 @@ async function persistUpdatedJobAndSyncIncome(params: {
 }
 
 /**
- * Mark an individual salary composition item as received immediately OR scheduled for a date.
- * - Creates a separate one-time income (with atomic account credit if immediate, idempotent).
- * - Saves `receivedItems[itemId]` in `job.monthOverrides[salaryMonth]`.
- * - Deducts the item's exact value from the month's main salary income (`remainingToReceive`)
- *   so clicking "Marcar total" on the salary later NEVER double-credits!
+ * Mark an individual salary composition item (full OR partial tranche) as received immediately
+ * OR scheduled for a future date:
+ * - Creates a separate one-time income (atomically crediting the account if immediate, idempotent).
+ * - Appends the tranche to `job.monthOverrides[salaryMonth].receivedItems[itemId]`.
+ * - Deducts the exact cumulative received/scheduled amount from the month's main salary
+ *   (`remainingToReceive`) so there is ZERO duplication.
  */
-async function markCompositionItemReceivedSeparately(params: {
+async function markCompositionItemTranche(params: {
   job: LaborJob;
   salaryMonth: string;
   itemId: string;
   itemName: string;
-  amount: number;
+  fullItemAmount: number;
+  trancheAmount: number;
   creditNow: boolean;
   depositDate: string;
   accountId?: string;
 }): Promise<LaborJob> {
-  const { job, salaryMonth, itemId, itemName, amount, creditNow, depositDate, accountId } = params;
+  const {
+    job,
+    salaryMonth,
+    itemId,
+    itemName,
+    fullItemAmount,
+    trancheAmount,
+    creditNow,
+    depositDate,
+    accountId,
+  } = params;
+
   const uid = auth.currentUser?.uid;
   const now = new Date().toISOString();
   const safeDate =
@@ -347,11 +379,21 @@ async function markCompositionItemReceivedSeparately(params: {
   const selectedAcc = accounts.find((a) => a.id === accountId) || accounts[0];
   const effectiveCurrency = (selectedAcc?.currency || job.currency) as CurrencyCode;
 
-  // Deterministic idempotency ID per job + month + item so retries can NEVER double-credit
-  const safeItemSlug = itemId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const linkedIncomeId = `inc_salitem_${job.id}_${salaryMonth}_${safeItemSlug}`;
+  const prevReceivedMap = getMonthReceivedItemsMap(job, salaryMonth);
+  const existingEntry = prevReceivedMap[itemId];
+  const prevTranches = normalizeItemTranches(existingEntry);
+  const trancheIndex = prevTranches.length + 1;
+  const prevCumulative = prevTranches.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const newCumulative = Math.round((prevCumulative + trancheAmount) * 100) / 100;
+  const isPartialOfItem = newCumulative < fullItemAmount || prevTranches.length > 0;
 
-  if (uid && amount > 0) {
+  const safeItemSlug = itemId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const linkedIncomeId = `inc_salitem_${job.id}_${salaryMonth}_${safeItemSlug}_t${trancheIndex}`;
+  const incomeTitle = isPartialOfItem
+    ? `${itemName} (Parcial ${trancheIndex}) • ${job.companyName}`
+    : `${itemName} • ${job.companyName}`;
+
+  if (uid && trancheAmount > 0) {
     const incomeRef = doc(db, 'users', uid, 'incomes', linkedIncomeId);
     const statusId = `income_${linkedIncomeId}_${depositMonth}`;
     const statusRef = doc(db, 'users', uid, 'monthly_status', statusId);
@@ -360,10 +402,7 @@ async function markCompositionItemReceivedSeparately(params: {
 
     await runTransaction(db, async (transaction) => {
       const existingInc = await transaction.get(incomeRef);
-      if (existingInc.exists()) {
-        // Idempotency guard: already registered, do not double credit
-        return;
-      }
+      if (existingInc.exists()) return;
 
       let nextBal: number | null = null;
       if (accountRef && selectedAcc) {
@@ -371,11 +410,20 @@ async function markCompositionItemReceivedSeparately(params: {
         if (accSnap.exists()) {
           const data = accSnap.data();
           const cur = Number(data.currentBalance ?? data.initialBalance ?? 0);
-          nextBal = Math.round((cur + amount) * 100) / 100;
+          nextBal = Math.round((cur + trancheAmount) * 100) / 100;
         }
       }
 
       const monthRefLabel = formatMonthLabel(salaryMonth);
+      const itemRem = Math.max(0, Math.round((fullItemAmount - newCumulative) * 100) / 100);
+      const noteText =
+        itemRem > 0
+          ? `Recebimento parcial (${trancheIndex}ª parte) de ${itemName} (${monthRefLabel}) • Resta do item: ${formatCurrency(
+              itemRem,
+              effectiveCurrency
+            )}`
+          : `Item da composição salarial (${monthRefLabel}) recebido separadamente`;
+
       transaction.set(
         incomeRef,
         sanitizePayload({
@@ -384,8 +432,8 @@ async function markCompositionItemReceivedSeparately(params: {
           parentSalaryIncomeId: job.linkedSalaryIncomeId || `inc_salary_${job.id}`,
           salaryItemId: itemId,
           salaryRefMonth: salaryMonth,
-          name: `${itemName} • ${job.companyName}`,
-          amount,
+          name: incomeTitle,
+          amount: trancheAmount,
           currency: effectiveCurrency,
           category: 'Salário',
           expectedDay: depositDay,
@@ -393,7 +441,7 @@ async function markCompositionItemReceivedSeparately(params: {
           startMonth: depositMonth,
           recurrence: 'none',
           accountId: selectedAcc?.id || undefined,
-          notes: `Benefício/item da composição salarial (${monthRefLabel}) recebido separadamente`,
+          notes: noteText,
           createdAt: now,
           updatedAt: now,
         })
@@ -410,7 +458,7 @@ async function markCompositionItemReceivedSeparately(params: {
           isCompleted: creditNow,
           ...(creditNow ? { completedAt: now, paidDate: safeDate } : {}),
           accountId: selectedAcc?.id || undefined,
-          amount,
+          amount: trancheAmount,
           expectedDate: safeDate,
           updatedAt: now,
         }),
@@ -425,7 +473,6 @@ async function markCompositionItemReceivedSeparately(params: {
       }
     });
 
-    // Update cached accounts in localStorage so home balance refreshes immediately
     if (creditNow && selectedAcc) {
       try {
         const updatedAccs = accounts.map((a) =>
@@ -434,7 +481,8 @@ async function markCompositionItemReceivedSeparately(params: {
                 ...a,
                 currentBalance:
                   Math.round(
-                    ((Number(a.currentBalance ?? a.initialBalance ?? 0) || 0) + amount) * 100
+                    ((Number(a.currentBalance ?? a.initialBalance ?? 0) || 0) + trancheAmount) *
+                      100
                   ) / 100,
                 updatedAt: now,
               }
@@ -448,13 +496,9 @@ async function markCompositionItemReceivedSeparately(params: {
     }
   }
 
-  // Record this item as received/scheduled separately in `job.monthOverrides[salaryMonth].receivedItems`
-  const prevMonthOv = job.monthOverrides?.[salaryMonth] || {};
-  const prevReceivedMap = getMonthReceivedItemsMap(job, salaryMonth);
-  const newEntry: ReceivedSalaryItemEntry = {
-    itemId,
-    itemName,
-    amount,
+  const newTranche: ReceivedSalaryItemTranche = {
+    id: linkedIncomeId,
+    amount: trancheAmount,
     linkedIncomeId,
     creditNow,
     depositDate: safeDate,
@@ -463,6 +507,21 @@ async function markCompositionItemReceivedSeparately(params: {
     receivedAt: now,
   };
 
+  const nextTranches = [...prevTranches, newTranche];
+  const newEntry: ReceivedSalaryItemEntry = {
+    itemId,
+    itemName,
+    amount: newCumulative,
+    linkedIncomeId,
+    creditNow,
+    depositDate: safeDate,
+    accountId: selectedAcc?.id,
+    accountName: selectedAcc?.name,
+    receivedAt: now,
+    tranches: nextTranches,
+  };
+
+  const prevMonthOv = job.monthOverrides?.[salaryMonth] || {};
   const updatedJob: LaborJob = {
     ...job,
     monthOverrides: {
@@ -486,28 +545,29 @@ async function markCompositionItemReceivedSeparately(params: {
 }
 
 /**
- * Safely undo a separately-received composition item:
- * - Reverses account balance if it had already been credited.
+ * Undo a specific tranche of a separately-received composition item:
+ * - Reverses account balance if that tranche had already been credited.
  * - Deletes the linked one-time income and its monthly status.
- * - Removes it from `receivedItems` and restores the full remaining amount on the salary income.
+ * - Updates (or deletes) `receivedItems[itemId]` and restores the main salary's pending balance.
  */
-async function undoCompositionItemReceived(params: {
+async function undoCompositionItemTranche(params: {
   job: LaborJob;
   salaryMonth: string;
-  entry: ReceivedSalaryItemEntry;
+  itemId: string;
+  tranche: ReceivedSalaryItemTranche;
 }): Promise<LaborJob> {
-  const { job, salaryMonth, entry } = params;
+  const { job, salaryMonth, itemId, tranche } = params;
   const uid = auth.currentUser?.uid;
   const now = new Date().toISOString();
-  const depositMonth = (entry.depositDate || '').slice(0, 7) || salaryMonth;
+  const depositMonth = (tranche.depositDate || '').slice(0, 7) || salaryMonth;
 
-  if (uid && entry.linkedIncomeId) {
-    const incomeRef = doc(db, 'users', uid, 'incomes', entry.linkedIncomeId);
-    const statusId = `income_${entry.linkedIncomeId}_${depositMonth}`;
+  if (uid && tranche.linkedIncomeId) {
+    const incomeRef = doc(db, 'users', uid, 'incomes', tranche.linkedIncomeId);
+    const statusId = `income_${tranche.linkedIncomeId}_${depositMonth}`;
     const statusRef = doc(db, 'users', uid, 'monthly_status', statusId);
     const accountRef =
-      entry.creditNow && entry.accountId
-        ? doc(db, 'users', uid, 'accounts', entry.accountId)
+      tranche.creditNow && tranche.accountId
+        ? doc(db, 'users', uid, 'accounts', tranche.accountId)
         : null;
 
     try {
@@ -516,13 +576,13 @@ async function undoCompositionItemReceived(params: {
         const statusSnap = await transaction.get(statusRef);
         const wasCredited = Boolean(statusSnap.exists() && statusSnap.data()?.isCompleted);
 
-        if (accountRef && wasCredited && entry.amount > 0) {
+        if (accountRef && wasCredited && tranche.amount > 0) {
           const accSnap = await transaction.get(accountRef);
           if (accSnap.exists()) {
             const data = accSnap.data();
             const cur = Number(data.currentBalance ?? data.initialBalance ?? 0);
             transaction.update(accountRef, {
-              currentBalance: Math.round((cur - entry.amount) * 100) / 100,
+              currentBalance: Math.round((cur - tranche.amount) * 100) / 100,
               updatedAt: now,
             });
           }
@@ -538,7 +598,32 @@ async function undoCompositionItemReceived(params: {
 
   const prevMonthOv = job.monthOverrides?.[salaryMonth] || {};
   const nextReceivedMap = { ...getMonthReceivedItemsMap(job, salaryMonth) };
-  delete nextReceivedMap[entry.itemId];
+  const existingEntry = nextReceivedMap[itemId];
+
+  if (existingEntry) {
+    const remainingTranches = normalizeItemTranches(existingEntry).filter(
+      (t) => t.id !== tranche.id && t.linkedIncomeId !== tranche.linkedIncomeId
+    );
+    if (remainingTranches.length === 0) {
+      delete nextReceivedMap[itemId];
+    } else {
+      const last = remainingTranches[remainingTranches.length - 1];
+      const newSum =
+        Math.round(remainingTranches.reduce((s, t) => s + (Number(t.amount) || 0), 0) * 100) /
+        100;
+      nextReceivedMap[itemId] = {
+        ...existingEntry,
+        amount: newSum,
+        linkedIncomeId: last.linkedIncomeId,
+        creditNow: last.creditNow,
+        depositDate: last.depositDate,
+        accountId: last.accountId,
+        accountName: last.accountName,
+        receivedAt: last.receivedAt,
+        tranches: remainingTranches,
+      };
+    }
+  }
 
   const updatedJob: LaborJob = {
     ...job,
@@ -636,30 +721,41 @@ function closeBreakdownOverlay() {
 /**
  * Interactive modal opened when the user taps on an individual item inside Composição Salarial
  * (e.g., Bônus asistencia, Aguinaldo, Turnos Cortados, Salário Básico).
- * Lets the user either credit it immediately OR schedule a deposit date — automatically deducting
- * it from the month's pending salary so there is ZERO duplication.
+ * Supports BOTH:
+ *  - Valor total (remaining balance of this item)
+ *  - Valor parcial (e.g. half of Bônus asistencia = $158.000, leaving $158.676 pending)
+ * And lets the user credit immediately OR schedule a deposit date — automatically deducting
+ * it from the month's pending salary with ZERO duplication.
  */
 function openItemSeparateReceiveModal(params: {
   job: LaborJob;
   salaryMonth: string;
   itemId: string;
   itemName: string;
-  itemAmount: number;
+  fullItemAmount: number;
   existingEntry?: ReceivedSalaryItemEntry;
   onUpdated: (updatedJob: LaborJob, toastMsg: string) => void;
 }) {
   closeItemReceiveOverlay();
 
-  const { job, salaryMonth, itemId, itemName, itemAmount, existingEntry, onUpdated } = params;
+  const { job, salaryMonth, itemId, itemName, fullItemAmount, existingEntry, onUpdated } = params;
   const accounts = loadCachedAccounts();
   const todayStr = formatLocalDateYYYYMMDD(new Date());
   const calc = calculateMonthSalary(job, salaryMonth);
-  const nextRemainingPreview = Math.max(
+
+  const tranches = normalizeItemTranches(existingEntry);
+  const alreadyReceivedOnItem =
+    Math.round(tranches.reduce((s, t) => s + (Number(t.amount) || 0), 0) * 100) / 100;
+  const remainingOnItem = Math.max(
     0,
-    Math.round((calc.remainingToReceive - itemAmount) * 100) / 100
+    Math.round((fullItemAmount - alreadyReceivedOnItem) * 100) / 100
   );
 
-  let mode: 'now' | 'schedule' = 'now';
+  // Step 1 = choose Total vs Partial (when remainingOnItem > 0), Step 2 = configure amount/timing/account
+  let step: 'choose' | 'configure' = remainingOnItem > 0 ? 'choose' : 'configure';
+  let amountMode: 'total' | 'partial' = 'total';
+  let partialInputStr = '';
+  let deliveryMode: 'now' | 'schedule' = 'now';
   let depositDate = todayStr;
   let selectedAccountId = job.defaultAccountId || accounts[0]?.id || '';
   let isProcessing = false;
@@ -681,57 +777,103 @@ function openItemSeparateReceiveModal(params: {
     card.style.borderRadius = '28px';
   }
 
-  const renderModal = () => {
-    // If already marked as received/scheduled separately -> show status & Undo option
-    if (existingEntry) {
-      const statusTitle = existingEntry.creditNow
-        ? 'Já creditado na sua conta'
-        : `Agendado para ${formatShortDateBR(existingEntry.depositDate)}`;
-      const statusSub = existingEntry.creditNow
-        ? `Entrou em ${formatShortDateBR(existingEntry.depositDate)}${
-            existingEntry.accountName ? ` • ${existingEntry.accountName}` : ''
-          } e já foi abatido da previsão do salário.`
-        : `Criado como receita separada para ${formatShortDateBR(existingEntry.depositDate)}${
-            existingEntry.accountName ? ` • ${existingEntry.accountName}` : ''
-          } e já abatido da previsão do salário.`;
+  const renderTranchesHistoryHtml = () => {
+    if (tranches.length === 0) return '';
+    return `
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0;">
+        <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">
+          Lançamentos já feitos deste item (${tranches.length})
+        </div>
+        ${tranches
+          .map(
+            (t, idx) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:10px;background:#ffffff;border:1px solid #e2e8f0;font-size:11.5px;">
+            <div style="min-width:0;">
+              <div style="font-weight:800;color:#0f172a;">
+                ${tranches.length > 1 ? `${idx + 1}ª parte • ` : ''}${
+              t.creditNow
+                ? `✓ Creditado (${formatShortDateBR(t.depositDate)})`
+                : `📅 Agendado (${formatShortDateBR(t.depositDate)})`
+            }
+              </div>
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:#059669;">
+                +${escapeHtml(formatCurrency(t.amount, job.currency))}
+              </div>
+            </div>
+            <button type="button" data-undo-tranche="${escapeHtml(t.id)}" ${
+              isProcessing ? 'disabled' : ''
+            } style="padding:5px 9px;border-radius:8px;border:1px solid #fecdd3;background:#fff1f2;color:#be123c;font-size:10px;font-weight:900;cursor:pointer;flex-shrink:0;">
+              Desfazer
+            </button>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `;
+  };
 
+  const bindUndoTrancheHandlers = () => {
+    card.querySelectorAll<HTMLButtonElement>('[data-undo-tranche]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (isProcessing) return;
+        const tid = btn.dataset.undoTranche;
+        const targetTranche = tranches.find((t) => t.id === tid);
+        if (!targetTranche) return;
+        isProcessing = true;
+        renderModal();
+        try {
+          const updated = await undoCompositionItemTranche({
+            job,
+            salaryMonth,
+            itemId,
+            tranche: targetTranche,
+          });
+          closeItemReceiveOverlay();
+          onUpdated(
+            updated,
+            `Lançamento de ${formatCurrency(
+              targetTranche.amount,
+              job.currency
+            )} desfeito e devolvido ao salário.`
+          );
+        } catch {
+          isProcessing = false;
+          renderModal();
+        }
+      });
+    });
+  };
+
+  const renderModal = () => {
+    // Case A: 100% of this item has already been received/scheduled separately
+    if (remainingOnItem <= 0) {
       card.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
           <div style="min-width:0;">
-            <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Item Recebido Separadamente</div>
+            <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Item 100% Recebido Separadamente</div>
             <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
-              existingEntry.itemName
+              itemName
             )}</div>
           </div>
           <button type="button" data-close-ir style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
         </div>
 
-        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
-          <div style="padding:14px 16px;border-radius:18px;background:#ecfdf5;border:1px solid #a7f3d0;display:flex;flex-direction:column;gap:6px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <span style="font-size:12px;font-weight:900;color:#065f46;">✓ ${escapeHtml(
-                statusTitle
-              )}</span>
-              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:900;color:#059669;">${escapeHtml(
-                formatCurrency(existingEntry.amount, job.currency)
-              )}</span>
-            </div>
-            <div style="font-size:11.5px;font-weight:600;color:#047857;line-height:1.4;">${escapeHtml(
-              statusSub
-            )}</div>
+        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
+          <div style="padding:13px 15px;border-radius:16px;background:#ecfdf5;border:1px solid #a7f3d0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span style="font-size:12px;font-weight:900;color:#065f46;">✓ Total já abatido do salário</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:900;color:#059669;">${escapeHtml(
+              formatCurrency(alreadyReceivedOnItem, job.currency)
+            )}</span>
           </div>
+
+          ${renderTranchesHistoryHtml()}
 
           <div style="font-size:11px;font-weight:600;color:#64748b;line-height:1.4;">
             Quando você marcar o salário de <strong style="text-transform:capitalize;">${escapeHtml(
               formatMonthLabel(salaryMonth)
-            )}</strong> como recebido, este valor <strong>não será somado de novo</strong>.
+            )}</strong> como recebido, este item <strong>não será somado de novo</strong>.
           </div>
-
-          <button type="button" data-undo-ir ${
-            isProcessing ? 'disabled' : ''
-          } style="width:100%;padding:12px;border-radius:14px;border:1px solid #fecdd3;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">
-            ${isProcessing ? 'Desfazendo...' : 'Desfazer recebimento separado'}
-          </button>
 
           <button type="button" data-close-ir style="width:100%;padding:12px;border-radius:14px;border:none;background:#059669;color:#ffffff;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;">
             Fechar
@@ -742,25 +884,131 @@ function openItemSeparateReceiveModal(params: {
       card
         .querySelectorAll('[data-close-ir]')
         .forEach((b) => b.addEventListener('click', closeItemReceiveOverlay));
-      card.querySelector('[data-undo-ir]')?.addEventListener('click', async () => {
-        if (isProcessing) return;
-        isProcessing = true;
+      bindUndoTrancheHandlers();
+      return;
+    }
+
+    // Case B: Step 1 — Choose Total vs. Partial for this benefit/item
+    if (step === 'choose') {
+      const hasPriorPartial = alreadyReceivedOnItem > 0;
+      const pctDone = Math.min(
+        100,
+        Math.round((alreadyReceivedOnItem / Math.max(1, fullItemAmount)) * 100)
+      );
+
+      const partialProgressHtml = hasPriorPartial
+        ? `
+          <div style="padding:11px 13px;border-radius:15px;background:#fff7ed;border:1px solid #fdba74;display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#9a3412;">
+              <span>⏳ Item parcialmente recebido</span>
+              <span>${pctDone}%</span>
+            </div>
+            <div style="height:6px;border-radius:9999px;background:#ffedd5;overflow:hidden;">
+              <div style="height:100%;width:${pctDone}%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:9999px;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:#c2410c;">
+              <span>Já recebido: ${escapeHtml(
+                formatCurrency(alreadyReceivedOnItem, job.currency)
+              )}</span>
+              <span>Resta: ${escapeHtml(formatCurrency(remainingOnItem, job.currency))}</span>
+            </div>
+          </div>
+        `
+        : '';
+
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
+          <div style="min-width:0;">
+            <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Receber Item Separadamente</div>
+            <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
+              itemName
+            )}</div>
+            <div style="font-size:12px;font-weight:800;color:#d1fae5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:2px;">
+              Disponível: ${escapeHtml(formatCurrency(remainingOnItem, job.currency))}
+            </div>
+          </div>
+          <button type="button" data-close-ir style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="padding:16px 18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
+          ${partialProgressHtml}
+
+          <div style="font-size:12px;font-weight:700;color:#475569;text-align:center;">
+            Quanto deste item você recebeu?
+          </div>
+
+          <!-- Option 1: Total of this item -->
+          <button type="button" data-pick-item-total style="width:100%;text-align:left;padding:14px 15px;border-radius:18px;border:2px solid #a7f3d0;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);cursor:pointer;display:flex;align-items:center;gap:12px;box-sizing:border-box;">
+            <div style="width:42px;height:42px;border-radius:14px;background:#059669;color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;flex-shrink:0;">✓</div>
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:13.5px;font-weight:900;color:#064e3b;">
+                ${hasPriorPartial ? 'Marcar restante total do item' : 'Marcar como recebido valor total'}
+              </div>
+              <div style="font-size:11px;font-weight:600;color:#047857;margin-top:2px;">
+                Lança ${escapeHtml(
+                  formatCurrency(remainingOnItem, job.currency)
+                )} inteiros e abate do salário.
+              </div>
+            </div>
+          </button>
+
+          <!-- Option 2: Partial of this item -->
+          <button type="button" data-pick-item-partial style="width:100%;text-align:left;padding:14px 15px;border-radius:18px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:12px;box-sizing:border-box;">
+            <div style="width:42px;height:42px;border-radius:14px;background:#ea580c;color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;flex-shrink:0;">⏳</div>
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:13.5px;font-weight:900;color:#7c2d12;">
+                Marcar como recebido valor parcial
+              </div>
+              <div style="font-size:11px;font-weight:600;color:#c2410c;margin-top:2px;">
+                Recebeu só uma parte (ex.: metade)? Informe o valor e mantenha o restante pendente.
+              </div>
+            </div>
+          </button>
+
+          ${renderTranchesHistoryHtml()}
+
+          <button type="button" data-close-ir style="width:100%;padding:11px;border-radius:14px;border:1px solid #e2e8f0;background:#ffffff;color:#64748b;font-size:12px;font-weight:800;cursor:pointer;">
+            Cancelar
+          </button>
+        </div>
+      `;
+
+      card
+        .querySelectorAll('[data-close-ir]')
+        .forEach((b) => b.addEventListener('click', closeItemReceiveOverlay));
+      bindUndoTrancheHandlers();
+
+      card.querySelector('[data-pick-item-total]')?.addEventListener('click', () => {
+        amountMode = 'total';
+        step = 'configure';
         renderModal();
-        try {
-          const updated = await undoCompositionItemReceived({
-            job,
-            salaryMonth,
-            entry: existingEntry,
-          });
-          closeItemReceiveOverlay();
-          onUpdated(updated, `${existingEntry.itemName} voltou para o salário previsto.`);
-        } catch {
-          isProcessing = false;
-          renderModal();
-        }
+      });
+      card.querySelector('[data-pick-item-partial]')?.addEventListener('click', () => {
+        amountMode = 'partial';
+        partialInputStr = '';
+        step = 'configure';
+        renderModal();
       });
       return;
     }
+
+    // Case C: Step 2 — Configure amount (if partial), immediate vs scheduled date, and account
+    const trancheVal =
+      amountMode === 'total'
+        ? remainingOnItem
+        : Math.max(0, Number(partialInputStr.replace(',', '.')) || 0);
+    const itemRemainingAfter = Math.max(
+      0,
+      Math.round((remainingOnItem - trancheVal) * 100) / 100
+    );
+    const salaryRemainingAfter = Math.max(
+      0,
+      Math.round((calc.remainingToReceive - trancheVal) * 100) / 100
+    );
+    const isValidAmount =
+      amountMode === 'total'
+        ? remainingOnItem > 0
+        : trancheVal > 0 && trancheVal < remainingOnItem;
 
     const accOptionsHtml =
       accounts.length > 0
@@ -774,67 +1022,98 @@ function openItemSeparateReceiveModal(params: {
             .join('')
         : `<option value="">Conta padrão</option>`;
 
+    const partialAmountBoxHtml =
+      amountMode === 'partial'
+        ? `
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            <label style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#9a3412;">
+              Quanto de ${escapeHtml(itemName)} você recebeu? (${escapeHtml(job.currency)})
+            </label>
+            <input type="number" inputmode="decimal" step="any" data-ir-partial-val value="${escapeHtml(
+              partialInputStr
+            )}" placeholder="Ex: ${Math.round(
+              remainingOnItem / 2
+            )}" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:14px;border:2px solid #fdba74;background:#fffbeb;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:900;color:#0f172a;outline:none;" />
+            <div style="display:flex;gap:6px;">
+              ${[
+                { pct: 25, label: '25%' },
+                { pct: 50, label: '50% (Metade)' },
+                { pct: 75, label: '75%' },
+              ]
+                .map(
+                  (opt) =>
+                    `<button type="button" data-ir-pct="${opt.pct}" style="flex:1;padding:7px 4px;border-radius:10px;border:1px solid #fed7aa;background:#ffffff;color:#c2410c;font-size:10.5px;font-weight:900;cursor:pointer;">${opt.label}</button>`
+                )
+                .join('')}
+            </div>
+          </div>
+        `
+        : '';
+
+    const headerBg =
+      amountMode === 'partial'
+        ? 'linear-gradient(135deg,#f59e0b,#ea580c)'
+        : 'linear-gradient(135deg,#059669,#0d9488)';
+
     card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:${headerBg};color:#ffffff;flex-shrink:0;">
         <div style="min-width:0;">
-          <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Marcar Item como Recebido</div>
+          <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.85);">
+            ${amountMode === 'partial' ? 'Recebimento Parcial do Item' : 'Receber Item Total'}
+          </div>
           <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
             itemName
           )}</div>
-          <div style="font-size:12px;font-weight:800;color:#d1fae5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:2px;">
-            ${escapeHtml(formatCurrency(itemAmount, job.currency))}
+          <div style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,0.9);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">
+            Disponível do item: ${escapeHtml(formatCurrency(remainingOnItem, job.currency))}
           </div>
         </div>
         <button type="button" data-close-ir style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
       </div>
 
       <div style="padding:16px 18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
-        <div style="font-size:11.5px;font-weight:700;color:#475569;">
-          Como deseja lançar este item separado do salário?
-        </div>
+        ${partialAmountBoxHtml}
 
         <!-- Option 1: Credit immediately -->
-        <button type="button" data-ir-mode="now" style="width:100%;text-align:left;padding:13px 14px;border-radius:16px;border:2px solid ${
-          mode === 'now' ? '#059669' : '#e2e8f0'
-        };background:${mode === 'now' ? '#ecfdf5' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
+        <button type="button" data-ir-mode="now" style="width:100%;text-align:left;padding:12px 14px;border-radius:15px;border:2px solid ${
+          deliveryMode === 'now' ? '#059669' : '#e2e8f0'
+        };background:${deliveryMode === 'now' ? '#ecfdf5' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span style="font-size:13px;font-weight:900;color:#064e3b;">⚡ Agregar imediato na conta agora</span>
+            <span style="font-size:12.5px;font-weight:900;color:#064e3b;">⚡ Agregar imediato na conta agora</span>
             <span style="width:18px;height:18px;border-radius:9999px;border:2px solid ${
-              mode === 'now' ? '#059669' : '#cbd5e1'
+              deliveryMode === 'now' ? '#059669' : '#cbd5e1'
             };background:${
-      mode === 'now' ? '#059669' : 'transparent'
+      deliveryMode === 'now' ? '#059669' : 'transparent'
     };display:inline-flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:900;">${
-      mode === 'now' ? '✓' : ''
+      deliveryMode === 'now' ? '✓' : ''
     }</span>
           </div>
-          <div style="font-size:11px;font-weight:600;color:#047857;margin-top:3px;">
-            Soma ${escapeHtml(
-              formatCurrency(itemAmount, job.currency)
-            )} direto no seu saldo hoje e cria o ingresso já marcado como recebido.
+          <div style="font-size:10.5px;font-weight:600;color:#047857;margin-top:2px;">
+            Soma direto no saldo hoje e cria o ingresso marcado como recebido.
           </div>
         </button>
 
         <!-- Option 2: Schedule date -->
-        <button type="button" data-ir-mode="schedule" style="width:100%;text-align:left;padding:13px 14px;border-radius:16px;border:2px solid ${
-          mode === 'schedule' ? '#0284c7' : '#e2e8f0'
-        };background:${mode === 'schedule' ? '#f0f9ff' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
+        <button type="button" data-ir-mode="schedule" style="width:100%;text-align:left;padding:12px 14px;border-radius:15px;border:2px solid ${
+          deliveryMode === 'schedule' ? '#0284c7' : '#e2e8f0'
+        };background:${deliveryMode === 'schedule' ? '#f0f9ff' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span style="font-size:13px;font-weight:900;color:#0c4a6e;">📅 Agendar data que vai cair</span>
+            <span style="font-size:12.5px;font-weight:900;color:#0c4a6e;">📅 Agendar data que vai cair</span>
             <span style="width:18px;height:18px;border-radius:9999px;border:2px solid ${
-              mode === 'schedule' ? '#0284c7' : '#cbd5e1'
+              deliveryMode === 'schedule' ? '#0284c7' : '#cbd5e1'
             };background:${
-      mode === 'schedule' ? '#0284c7' : 'transparent'
+      deliveryMode === 'schedule' ? '#0284c7' : 'transparent'
     };display:inline-flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:900;">${
-      mode === 'schedule' ? '✓' : ''
+      deliveryMode === 'schedule' ? '✓' : ''
     }</span>
           </div>
-          <div style="font-size:11px;font-weight:600;color:#0369a1;margin-top:3px;">
-            Cria um ingresso separado pendente para a data escolhida, integrado ao seu salário.
+          <div style="font-size:10.5px;font-weight:600;color:#0369a1;margin-top:2px;">
+            Cria ingresso separado pendente para a data escolhida, integrado ao salário.
           </div>
         </button>
 
         ${
-          mode === 'schedule'
+          deliveryMode === 'schedule'
             ? `
           <div>
             <label style="display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:5px;">
@@ -857,44 +1136,52 @@ function openItemSeparateReceiveModal(params: {
           </select>
         </div>
 
-        <!-- Zero-duplication impact summary -->
+        <!-- Live Zero-Duplication Impact Box -->
         <div style="padding:12px 14px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:5px;">
           <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">
-            Ajuste automático sem duplicação
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#334155;">
-            <span>Salário pendente antes:</span>
-            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(
-              formatCurrency(calc.remainingToReceive, job.currency)
-            )}</span>
+            Resumo sem duplicação
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:800;color:#059669;">
-            <span>Abatendo ${escapeHtml(itemName)}:</span>
-            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">-${escapeHtml(
-              formatCurrency(itemAmount, job.currency)
+            <span>${deliveryMode === 'now' ? 'Cai agora na conta:' : 'Agendado separado:'}</span>
+            <span data-ir-prev-now style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">+${escapeHtml(
+              formatCurrency(trancheVal, job.currency)
+            )}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#c2410c;">
+            <span>Restante deste item no salário:</span>
+            <span data-ir-prev-itemrem style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(
+              formatCurrency(itemRemainingAfter, job.currency)
             )}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:900;color:#0f172a;padding-top:5px;border-top:1px dashed #cbd5e1;">
-            <span>Novo restante do salário:</span>
-            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#047857;">${escapeHtml(
-              formatCurrency(nextRemainingPreview, job.currency)
+            <span>Novo restante do salário do mês:</span>
+            <span data-ir-prev-salrem style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#047857;">${escapeHtml(
+              formatCurrency(salaryRemainingAfter, job.currency)
             )}</span>
           </div>
         </div>
 
+        <div data-ir-err style="display:none;padding:9px 12px;border-radius:12px;background:#fff1f2;border:1px solid #fecdd3;color:#be123c;font-size:11px;font-weight:700;"></div>
+
         <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:2px;">
-          <button type="button" data-close-ir style="padding:12px;border-radius:14px;border:1px solid #e2e8f0;background:#ffffff;color:#475569;font-size:12px;font-weight:800;cursor:pointer;">
-            Cancelar
+          <button type="button" data-ir-back style="padding:12px;border-radius:14px;border:1px solid #e2e8f0;background:#ffffff;color:#475569;font-size:12px;font-weight:800;cursor:pointer;">
+            Voltar
           </button>
           <button type="button" data-confirm-ir ${
-            isProcessing ? 'disabled' : ''
+            isValidAmount && !isProcessing ? '' : 'disabled'
           } style="padding:12px;border-radius:14px;border:none;background:${
-      mode === 'now' ? '#059669' : '#0284c7'
-    };color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;">
+      !isValidAmount
+        ? '#cbd5e1'
+        : deliveryMode === 'now'
+        ? '#059669'
+        : '#0284c7'
+    };color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:${
+      isValidAmount ? 'pointer' : 'not-allowed'
+    };">
             ${
               isProcessing
                 ? 'Salvando...'
-                : mode === 'now'
+                : deliveryMode === 'now'
                 ? 'Confirmar e Creditar'
                 : 'Agendar Ingresso'
             }
@@ -907,9 +1194,55 @@ function openItemSeparateReceiveModal(params: {
       .querySelectorAll('[data-close-ir]')
       .forEach((b) => b.addEventListener('click', closeItemReceiveOverlay));
 
+    card.querySelector('[data-ir-back]')?.addEventListener('click', () => {
+      step = 'choose';
+      renderModal();
+    });
+
+    const updateLiveNumbers = (val: number) => {
+      const iRem = Math.max(0, Math.round((remainingOnItem - val) * 100) / 100);
+      const sRem = Math.max(0, Math.round((calc.remainingToReceive - val) * 100) / 100);
+      const valid =
+        amountMode === 'total' ? remainingOnItem > 0 : val > 0 && val < remainingOnItem;
+
+      const nowEl = card.querySelector('[data-ir-prev-now]');
+      const iRemEl = card.querySelector('[data-ir-prev-itemrem]');
+      const sRemEl = card.querySelector('[data-ir-prev-salrem]');
+      const confirmBtn = card.querySelector<HTMLButtonElement>('[data-confirm-ir]');
+
+      if (nowEl) nowEl.textContent = `+${formatCurrency(val, job.currency)}`;
+      if (iRemEl) iRemEl.textContent = formatCurrency(iRem, job.currency);
+      if (sRemEl) sRemEl.textContent = formatCurrency(sRem, job.currency);
+      if (confirmBtn) {
+        confirmBtn.disabled = !valid;
+        confirmBtn.style.background = !valid
+          ? '#cbd5e1'
+          : deliveryMode === 'now'
+          ? '#059669'
+          : '#0284c7';
+        confirmBtn.style.cursor = valid ? 'pointer' : 'not-allowed';
+      }
+    };
+
+    const partialInp = card.querySelector<HTMLInputElement>('[data-ir-partial-val]');
+    partialInp?.addEventListener('input', () => {
+      partialInputStr = partialInp.value;
+      updateLiveNumbers(Math.max(0, Number(partialInputStr.replace(',', '.')) || 0));
+    });
+
+    card.querySelectorAll<HTMLButtonElement>('[data-ir-pct]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pct = Number(btn.dataset.irPct) || 50;
+        const computed = Math.round(((remainingOnItem * pct) / 100) * 100) / 100;
+        partialInputStr = String(computed);
+        if (partialInp) partialInp.value = partialInputStr;
+        updateLiveNumbers(computed);
+      });
+    });
+
     card.querySelectorAll<HTMLButtonElement>('[data-ir-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        mode = btn.dataset.irMode === 'schedule' ? 'schedule' : 'now';
+        deliveryMode = btn.dataset.irMode === 'schedule' ? 'schedule' : 'now';
         renderModal();
       });
     });
@@ -926,25 +1259,51 @@ function openItemSeparateReceiveModal(params: {
 
     card.querySelector('[data-confirm-ir]')?.addEventListener('click', async () => {
       if (isProcessing) return;
+      const finalAmt =
+        amountMode === 'total'
+          ? remainingOnItem
+          : Math.max(0, Number(partialInputStr.replace(',', '.')) || 0);
+      const errBox = card.querySelector<HTMLElement>('[data-ir-err]');
+
+      if (finalAmt <= 0) {
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.textContent = 'Informe um valor maior que zero.';
+        }
+        return;
+      }
+      if (amountMode === 'partial' && finalAmt >= remainingOnItem) {
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.textContent =
+            'O valor parcial deve ser menor que o restante do item. Use "Valor total" para quitar tudo.';
+        }
+        return;
+      }
+
       isProcessing = true;
       renderModal();
       try {
-        const updated = await markCompositionItemReceivedSeparately({
+        const updated = await markCompositionItemTranche({
           job,
           salaryMonth,
           itemId,
           itemName,
-          amount: itemAmount,
-          creditNow: mode === 'now',
-          depositDate: mode === 'now' ? todayStr : depositDate,
+          fullItemAmount,
+          trancheAmount: finalAmt,
+          creditNow: deliveryMode === 'now',
+          depositDate: deliveryMode === 'now' ? todayStr : depositDate,
           accountId: selectedAccountId,
         });
         closeItemReceiveOverlay();
+        const labelVal = formatCurrency(finalAmt, job.currency);
         onUpdated(
           updated,
-          mode === 'now'
-            ? `${itemName} creditado na conta e abatido do salário!`
-            : `${itemName} agendado para ${formatShortDateBR(depositDate)} e abatido do salário!`
+          deliveryMode === 'now'
+            ? `${itemName} (${labelVal}) creditado na conta e abatido do salário!`
+            : `${itemName} (${labelVal}) agendado para ${formatShortDateBR(
+                depositDate
+              )} e abatido do salário!`
         );
       } catch (err) {
         console.warn('[SalaryBreakdown] separate item receipt failed:', err);
@@ -964,7 +1323,6 @@ function openItemSeparateReceiveModal(params: {
 
 /**
  * Stacked Salary & Benefits Editor overlay rendered ON TOP of the Composição Salarial modal.
- * Strictly locked horizontally (vertical scroll only) with crisp red trash icon matching the app.
  */
 function openStackedSalaryEditor(params: {
   job: LaborJob;
@@ -1099,7 +1457,10 @@ function openStackedSalaryEditor(params: {
       };
       const nextOverrides: Record<string, any> = { ...(job.monthOverrides || {}) };
       const existingReceivedItems = job.monthOverrides?.[targetMonth]?.receivedItems;
-      if (newExtra > 0 || (existingReceivedItems && Object.keys(existingReceivedItems).length > 0)) {
+      if (
+        newExtra > 0 ||
+        (existingReceivedItems && Object.keys(existingReceivedItems).length > 0)
+      ) {
         nextOverrides[targetMonth] = {
           ...(newExtra > 0 ? { extraAmount: newExtra } : {}),
           ...(existingReceivedItems ? { receivedItems: existingReceivedItems } : {}),
@@ -1548,32 +1909,56 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
 
     const editIconSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
-    const baseReceived = receivedMap['__base__'];
-    const baseBadgeHtml = baseReceived
-      ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
-          baseReceived.creditNow ? '#d1fae5' : '#e0f2fe'
-        };color:${baseReceived.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;">${
-          baseReceived.creditNow
-            ? '✓ Recebido'
-            : `📅 ${formatShortDateBR(baseReceived.depositDate)}`
-        }</span>`
-      : '';
+    const buildItemStatusHtml = (rec: ReceivedSalaryItemEntry | undefined, fullAmt: number) => {
+      if (!rec || rec.amount <= 0) {
+        return {
+          badgeHtml: '',
+          amountHtml: `+${escapeHtml(formatCurrency(fullAmt, activeJob.currency))}`,
+          amountColor: '#059669',
+          strike: false,
+          nameColor: '#334155',
+        };
+      }
+      const rem = Math.max(0, Math.round((fullAmt - rec.amount) * 100) / 100);
+      if (rem > 0) {
+        // Partially received item!
+        return {
+          badgeHtml: `<span style="margin-left:5px;font-size:9px;font-weight:900;background:#ffedd5;color:#c2410c;padding:1px 6px;border-radius:9999px;white-space:nowrap;">⏳ Parcial: ${escapeHtml(
+            formatCurrency(rec.amount, activeJob.currency)
+          )}</span>`,
+          amountHtml: `+${escapeHtml(formatCurrency(rem, activeJob.currency))}`,
+          amountColor: '#d97706',
+          strike: false,
+          nameColor: '#0f172a',
+        };
+      }
+      // 100% received/scheduled separately
+      return {
+        badgeHtml: `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
+          rec.creditNow ? '#d1fae5' : '#e0f2fe'
+        };color:${
+          rec.creditNow ? '#047857' : '#0369a1'
+        };padding:1px 6px;border-radius:9999px;white-space:nowrap;">${
+          rec.creditNow ? '✓ Recebido' : `📅 ${formatShortDateBR(rec.depositDate)}`
+        }</span>`,
+        amountHtml: `+${escapeHtml(formatCurrency(fullAmt, activeJob.currency))}`,
+        amountColor: '#94a3b8',
+        strike: true,
+        nameColor: '#64748b',
+      };
+    };
+
+    const baseStatus = buildItemStatusHtml(receivedMap['__base__'], calc.baseSalary);
+    const baseAmtDisplay = baseStatus.amountHtml.replace(/^\+/, '');
 
     const benefitRowsHtml = additions
       .map((b) => {
-        const rec = receivedMap[b.id];
+        const st = buildItemStatusHtml(receivedMap[b.id], b.calculatedAmount);
         const canReceive = b.calculatedAmount > 0;
         const pctTag =
           b.type === 'percent'
             ? `<span style="font-size:10.5px;font-weight:800;color:#047857;margin-left:4px;">(${b.rawValue}%)</span>`
             : '';
-        const recBadge = rec
-          ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
-              rec.creditNow ? '#d1fae5' : '#e0f2fe'
-            };color:${rec.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;white-space:nowrap;">${
-              rec.creditNow ? '✓ Recebido' : `📅 ${formatShortDateBR(rec.depositDate)}`
-            }</span>`
-          : '';
         return `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px dashed #e2e8f0;font-size:13px;border-radius:10px;${
             canReceive ? 'cursor:pointer;' : ''
@@ -1585,17 +1970,17 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
             : ''
         }>
             <span style="font-weight:700;color:${
-              rec ? '#64748b' : '#334155'
+              st.nameColor
             };min-width:0;flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">
               <span>${escapeHtml(b.name)}${pctTag}</span>
-              ${recBadge}
+              ${st.badgeHtml}
             </span>
             <div style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
               <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:${
-                rec ? '#94a3b8' : '#059669'
-              };white-space:nowrap;${rec ? 'text-decoration:line-through;' : ''}">+${escapeHtml(
-          formatCurrency(b.calculatedAmount, activeJob.currency)
-        )}</span>
+                st.amountColor
+              };white-space:nowrap;${st.strike ? 'text-decoration:line-through;' : ''}">${
+          st.amountHtml
+        }</span>
               <button type="button" data-edit-item="${escapeHtml(b.id)}" title="Editar ${escapeHtml(
           b.name
         )}" style="width:24px;height:24px;border-radius:8px;border:1px solid #a7f3d0;background:#ffffff;color:#047857;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
@@ -1633,22 +2018,15 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
     const extraRowHtml =
       calc.extraAmount > 0
         ? (() => {
-            const rec = receivedMap['__extra__'];
-            const recBadge = rec
-              ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
-                  rec.creditNow ? '#d1fae5' : '#e0f2fe'
-                };color:${rec.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;">${
-                  rec.creditNow ? '✓ Recebido' : `📅 ${formatShortDateBR(rec.depositDate)}`
-                }</span>`
-              : '';
+            const st = buildItemStatusHtml(receivedMap['__extra__'], calc.extraAmount);
             return `
               <div data-receive-item="__extra__" data-receive-name="Extras / Bônus do mês" data-receive-amt="${calc.extraAmount}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px dashed #e2e8f0;font-size:13px;cursor:pointer;">
-                <span style="font-weight:700;color:#065f46;">Extras / Bônus do mês ${recBadge}</span>
+                <span style="font-weight:700;color:#065f46;">Extras / Bônus do mês ${st.badgeHtml}</span>
                 <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:${
-                  rec ? '#94a3b8' : '#059669'
-                };white-space:nowrap;${rec ? 'text-decoration:line-through;' : ''}">+${escapeHtml(
-              formatCurrency(calc.extraAmount, activeJob.currency)
-            )}</span>
+                  st.amountColor
+                };white-space:nowrap;${st.strike ? 'text-decoration:line-through;' : ''}">${
+              st.amountHtml
+            }</span>
               </div>
             `;
           })()
@@ -1736,7 +2114,7 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
         </div>
 
         <div style="font-size:10.5px;font-weight:700;color:#047857;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:7px 11px;text-align:center;">
-          💡 Toque em qualquer item abaixo para marcar como recebido separadamente
+          💡 Toque em qualquer item abaixo para marcar como recebido (total ou parcial)
         </div>
 
         <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:18px;padding:14px 16px;">
@@ -1746,14 +2124,14 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
               : ''
           } style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 4px 8px;border-bottom:1px solid #a7f3d0;font-size:13.5px;cursor:pointer;">
             <span style="font-weight:900;color:${
-              baseReceived ? '#64748b' : '#0f172a'
-            };">Salário Básico ${baseBadgeHtml}</span>
+              baseStatus.strike ? '#64748b' : '#0f172a'
+            };">Salário Básico ${baseStatus.badgeHtml}</span>
             <div style="display:inline-flex;align-items:center;gap:6px;">
               <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:${
-                baseReceived ? '#94a3b8' : '#0f172a'
+                baseStatus.strike ? '#94a3b8' : baseStatus.amountColor === '#d97706' ? '#d97706' : '#0f172a'
               };white-space:nowrap;${
-      baseReceived ? 'text-decoration:line-through;' : ''
-    }">${escapeHtml(formatCurrency(calc.baseSalary, activeJob.currency))}</span>
+      baseStatus.strike ? 'text-decoration:line-through;' : ''
+    }">${baseAmtDisplay}</span>
               <button type="button" data-open-full-editor title="Editar Salário Básico" style="width:24px;height:24px;border-radius:8px;border:1px solid #a7f3d0;background:#ffffff;color:#047857;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
             </div>
           </div>
@@ -1803,15 +2181,15 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
         if ((e.target as HTMLElement)?.closest('button')) return;
         const itemId = rowEl.dataset.receiveItem || '';
         const itemName = rowEl.dataset.receiveName || '';
-        const itemAmount = Number(rowEl.dataset.receiveAmt) || 0;
-        if (!itemId || itemAmount <= 0) return;
+        const fullItemAmount = Number(rowEl.dataset.receiveAmt) || 0;
+        if (!itemId || fullItemAmount <= 0) return;
 
         openItemSeparateReceiveModal({
           job: activeJob,
           salaryMonth: currentMonth,
           itemId,
           itemName,
-          itemAmount,
+          fullItemAmount,
           existingEntry: receivedMap[itemId],
           onUpdated: (updatedJob, toastMsg) => {
             activeJob = updatedJob;
