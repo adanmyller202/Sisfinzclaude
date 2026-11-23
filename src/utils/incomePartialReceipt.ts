@@ -23,6 +23,7 @@ const PARTIAL_STORE_KEY = 'sisfinz_partial_income_state_v1';
 const OVERLAY_ID = 'sisfinz-partial-receipt-overlay';
 const STYLE_ID = 'sisfinz-partial-receipt-styles';
 const PARTIAL_BADGE_CLASS = 'sisfinz-partial-income-badge';
+const ORIGIN_LINK_BADGE_CLASS = 'sisfinz-origin-link-chip';
 
 interface CachedIncome {
   id: string;
@@ -67,6 +68,17 @@ interface PartialPendingEntry {
   updatedAt: string;
 }
 
+interface OriginResolution {
+  kind: 'salary_item' | 'partial_parent';
+  originTitle: string;
+  originSubtitle: string;
+  originMonth: string;
+  job: LaborJob | null;
+  parentSalaryId: string | null;
+  parentIncomeId: string | null;
+  cleanItemName: string;
+}
+
 const MONTH_NAME_MAP: Record<string, number> = {
   jan: 1, janeiro: 1, enero: 1, january: 1,
   fev: 2, fevereiro: 2, feb: 2, febrero: 2, february: 2,
@@ -98,6 +110,14 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function normalizeStr(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 }
 
 function formatMonthLabelBR(yyyyMm: string): string {
@@ -204,6 +224,25 @@ function saveCachedLaborJobs(jobs: LaborJob[]) {
   }
 }
 
+function getEffectiveIncomesList(): CachedIncome[] {
+  if (liveIncomes.length > 0) return liveIncomes;
+  try {
+    let best: CachedIncome[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.endsWith('_incomes')) {
+        const parsed = JSON.parse(localStorage.getItem(k) || '[]');
+        if (Array.isArray(parsed) && parsed.length > best.length) {
+          best = parsed;
+        }
+      }
+    }
+    return best;
+  } catch {
+    return [];
+  }
+}
+
 function loadFallbackAccounts(): AccountItem[] {
   if (liveAccounts.length > 0) return liveAccounts;
   const uid = auth.currentUser?.uid;
@@ -221,26 +260,31 @@ function loadFallbackAccounts(): AccountItem[] {
   return [];
 }
 
+function parseMonthFromText(text: string): string | null {
+  if (!text) return null;
+  const regex =
+    /\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre|january|february|march|april|may|june|july|august|september|october|november|december|jan|fev|feb|mar|abr|apr|mai|jun|jul|ago|aug|set|sep|out|oct|nov|dez|dic|dec)\.?\s*(?:de\s*)?(20\d{2})\b/i;
+  const m = text.match(regex);
+  if (!m) return null;
+  const monthNum = MONTH_NAME_MAP[m[1].toLowerCase()];
+  const yearNum = Number(m[2]);
+  if (monthNum && yearNum >= 2020 && yearNum <= 2099) {
+    return `${yearNum}-${String(monthNum).padStart(2, '0')}`;
+  }
+  return null;
+}
+
 function detectActiveDashboardMonth(): string {
   try {
     const candidates = document.querySelectorAll(
       'header, main button, main h2, main span, [aria-current="true"]'
     );
-    const regex =
-      /\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre|january|february|march|april|may|june|july|august|september|october|november|december|jan|fev|feb|mar|abr|apr|mai|jun|jul|ago|aug|set|sep|out|oct|nov|dez|dic|dec)\.?\s*(?:de\s*)?(20\d{2})\b/i;
-
     for (const el of Array.from(candidates)) {
       if ((el as HTMLElement).closest(`#${OVERLAY_ID}`)) continue;
       const txt = (el.textContent || '').trim();
       if (!txt || txt.length > 42) continue;
-      const m = txt.match(regex);
-      if (m) {
-        const monthNum = MONTH_NAME_MAP[m[1].toLowerCase()];
-        const yearNum = Number(m[2]);
-        if (monthNum && yearNum >= 2020 && yearNum <= 2099) {
-          return `${yearNum}-${String(monthNum).padStart(2, '0')}`;
-        }
-      }
+      const parsed = parseMonthFromText(txt);
+      if (parsed) return parsed;
     }
   } catch {
     // ignore
@@ -291,67 +335,162 @@ function isCheckIconButton(btn: HTMLButtonElement): boolean {
   return true;
 }
 
-function isDerivedChildIncome(inc: CachedIncome | null): boolean {
-  if (!inc) return false;
-  if (
-    inc.salaryItemId ||
-    inc.parentSalaryIncomeId ||
-    inc.id.startsWith('inc_salitem_')
-  ) {
-    return true;
-  }
-  if (
-    inc.isPartialReceiptRecord ||
-    inc.parentIncomeId ||
-    inc.id.startsWith('inc_partial_')
-  ) {
-    return true;
-  }
-  return false;
-}
-
 /**
- * Matches either:
- *  - 'pending': an unchecked (or orange-clock partial) positive income check button
- *  - 'received_child': a green-checked positive income check button belonging to a derived split income
+ * Resolve whether an income is a derived/separated income from a Salary Composition or Parent Income,
+ * even if it was created before explicit metadata fields were added!
  */
-function classifyIncomeCheckButton(
-  btn: HTMLButtonElement
-): 'pending' | 'received_child' | null {
-  if (btn.dataset.bypassPartialCheck === '1') return null;
-  if (
-    btn.closest(`#${OVERLAY_ID}`) ||
-    btn.closest('#sisfinz-salary-breakdown-overlay') ||
-    btn.closest('#sisfinz-salary-editor-overlay') ||
-    btn.closest('#sisfinz-item-receive-overlay') ||
-    btn.closest('header, nav, [role="dialog"]')
-  ) {
+function resolveIncomeOrigin(
+  inc: CachedIncome | null,
+  fallbackMonth: string
+): OriginResolution | null {
+  if (!inc) return null;
+
+  const jobs = loadCachedLaborJobs();
+  const allIncomes = getEffectiveIncomesList();
+  const incName = (inc.name || '').trim();
+  const notes = (inc.notes || '').trim();
+
+  // Never treat the main salary or tips themselves as child items
+  if (/^Sal[aá]rio\s*[•·-]/i.test(incName) && !/\(Parcial/i.test(incName)) {
+    return null;
+  }
+  if (/^Propina\s*[•·-]/i.test(incName)) {
     return null;
   }
 
-  if (!isCheckIconButton(btn)) return null;
+  // 1. Explicit Salary Item metadata or ID prefix `inc_salitem_`
+  const idMatch = inc.id.match(/^inc_salitem_(.+?)_(\d{4}-\d{2})_(.+?)(?:_p\d+)?$/);
+  const isExplicitSalItem = Boolean(
+    inc.salaryItemId || inc.parentSalaryIncomeId || idMatch
+  );
 
-  const actionGroup = btn.parentElement;
-  if (!actionGroup) return null;
-  const groupText = (actionGroup.textContent || '').trim();
-  if (!/\+\s*(?:R\$|US\$|ARS|BRL|USD|EUR|PYG|\$|€|₲)/.test(groupText)) {
-    return null;
+  // 2. Explicit Partial Receipt record (`inc_partial_` or `parentIncomeId`)
+  const isExplicitPartial = Boolean(
+    inc.isPartialReceiptRecord || inc.parentIncomeId || inc.id.startsWith('inc_partial_')
+  );
+
+  // 3. Heuristic detection for legacy/earlier separated salary items (e.g. "Bônus asistencia (Parcial 1) • Popolo Oroño"
+  //    or "Bônus asistencia • Popolo Oroño" or notes mentioning "composição salarial" / "recebido separadamente")
+  const partsByBullet = incName.split(/\s*[•·]\s*/);
+  const leftPart = partsByBullet[0] || incName;
+  const rightCompanyPart = partsByBullet.length > 1 ? partsByBullet[partsByBullet.length - 1] : '';
+  const cleanItemName = leftPart.replace(/\s*\(Parcial(?:\s*\d+)?\)\s*$/i, '').trim();
+
+  let matchedJob: LaborJob | null = null;
+  if (inc.laborJobId) {
+    matchedJob = jobs.find((j) => j.id === inc.laborJobId) || null;
+  }
+  if (!matchedJob && idMatch) {
+    matchedJob = jobs.find((j) => j.id === idMatch[1]) || null;
+  }
+  if (!matchedJob && rightCompanyPart) {
+    const normCompany = normalizeStr(rightCompanyPart);
+    matchedJob =
+      jobs.find((j) => normalizeStr(j.companyName) === normCompany) ||
+      jobs.find((j) => normCompany.includes(normalizeStr(j.companyName))) ||
+      null;
   }
 
-  const cls = btn.className || '';
-  const isGreenChecked =
-    (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
-    btn.dataset.sfClockDecorated !== '1';
+  const notesHintSalItem = /composi[cç][aã]o\s*salarial|recebido\s*separadamente|resta\s*deste\s*item/i.test(
+    notes
+  );
 
-  if (isGreenChecked) {
-    const row = findIncomeCardRow(btn);
-    if (!row) return null;
-    const activeMonth = detectActiveDashboardMonth();
-    const { income } = matchIncomeFromRow(row, activeMonth);
-    return isDerivedChildIncome(income) ? 'received_child' : null;
+  if (isExplicitSalItem || (matchedJob && (notesHintSalItem || rightCompanyPart))) {
+    // Determine which salary month this item belongs to
+    let originMonth =
+      inc.salaryRefMonth ||
+      (idMatch ? idMatch[2] : null) ||
+      parseMonthFromText(notes) ||
+      '';
+
+    if (!originMonth && matchedJob) {
+      // Search monthOverrides for any month that has receivedItems or exceptions
+      const overrideMonths = Object.keys(matchedJob.monthOverrides || {}).sort().reverse();
+      for (const mKey of overrideMonths) {
+        const recMap = getMonthReceivedItemsMap(matchedJob, mKey);
+        const foundEntry = Object.values(recMap).find(
+          (e) =>
+            e.linkedIncomeId === inc.id ||
+            normalizeStr(e.itemName) === normalizeStr(cleanItemName) ||
+            normalizeEntryInstallments(e).some((inst) => inst.linkedIncomeId === inc.id)
+        );
+        if (foundEntry) {
+          originMonth = mKey;
+          break;
+        }
+      }
+      // If still not found (e.g., user deleted/unchecked earlier), check parent salary income exceptions
+      if (!originMonth) {
+        const parentSal = allIncomes.find(
+          (i) =>
+            i.id === (inc.parentSalaryIncomeId || `inc_salary_${matchedJob!.id}`) ||
+            i.laborJobId === matchedJob!.id
+        );
+        if (parentSal?.partialPending) {
+          const ppMonth = Object.keys(parentSal.partialPending).find(
+            (k) => parentSal.partialPending?.[k]
+          );
+          if (ppMonth) originMonth = ppMonth;
+        }
+        if (!originMonth && parentSal?.exceptions) {
+          const excMonths = Object.keys(parentSal.exceptions).sort().reverse();
+          if (excMonths.length > 0) originMonth = excMonths[0];
+        }
+      }
+    }
+
+    if (!originMonth) {
+      originMonth = inc.startMonth || fallbackMonth;
+    }
+
+    const parentSalaryId =
+      inc.parentSalaryIncomeId ||
+      (matchedJob ? matchedJob.linkedSalaryIncomeId || `inc_salary_${matchedJob.id}` : null);
+    const parentSalInc = parentSalaryId
+      ? allIncomes.find((i) => i.id === parentSalaryId)
+      : null;
+
+    const originTitle =
+      parentSalInc?.name ||
+      (matchedJob ? `Salário • ${matchedJob.companyName}` : 'Salário (Composição Salarial)');
+    const originSubtitle = matchedJob
+      ? `${matchedJob.companyName} • ${matchedJob.role}`
+      : 'Composição Salarial';
+
+    return {
+      kind: 'salary_item',
+      originTitle,
+      originSubtitle,
+      originMonth,
+      job: matchedJob,
+      parentSalaryId,
+      parentIncomeId: parentSalaryId,
+      cleanItemName,
+    };
   }
 
-  return 'pending';
+  if (isExplicitPartial) {
+    const parentInc = inc.parentIncomeId
+      ? allIncomes.find((i) => i.id === inc.parentIncomeId) || null
+      : null;
+    const originTitle =
+      parentInc?.name || incName.replace(/\s*\(Parcial(?:\s*\d+)?\)\s*$/i, '').trim();
+    const originSubtitle = parentInc?.category || inc.category || 'Receita de origem';
+    const originMonth = inc.startMonth || fallbackMonth;
+
+    return {
+      kind: 'partial_parent',
+      originTitle,
+      originSubtitle,
+      originMonth,
+      job: matchedJob,
+      parentSalaryId: null,
+      parentIncomeId: inc.parentIncomeId || parentInc?.id || null,
+      cleanItemName,
+    };
+  }
+
+  return null;
 }
 
 function matchIncomeFromRow(
@@ -368,9 +507,10 @@ function matchIncomeFromRow(
   const rowText = (rowEl.textContent || '').trim();
   const displayAmount = parseDisplayedAmount(rowText);
 
+  const incomesPool = getEffectiveIncomesList();
   let matched: CachedIncome | null = null;
-  if (liveIncomes.length > 0) {
-    const sorted = [...liveIncomes].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+  if (incomesPool.length > 0) {
+    const sorted = [...incomesPool].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
     if (h4Text) {
       matched =
         sorted.find((inc) => inc.name && inc.name.trim().toLowerCase() === h4Text.toLowerCase()) ||
@@ -442,27 +582,6 @@ function closePartialOverlay() {
   if (existing) existing.remove();
 }
 
-/** Parse fallback metadata from ID `inc_salitem_<jobId>_<YYYY-MM>_<itemSlug>_p<N>` */
-function parseSalItemMetadata(childInc: CachedIncome): {
-  jobId: string | null;
-  salaryRefMonth: string | null;
-  salaryItemId: string | null;
-} {
-  let jobId = childInc.laborJobId || null;
-  let salaryRefMonth = childInc.salaryRefMonth || null;
-  let salaryItemId = childInc.salaryItemId || null;
-
-  if (!jobId || !salaryRefMonth || !salaryItemId) {
-    const m = childInc.id.match(/^inc_salitem_(.+?)_(\d{4}-\d{2})_(.+?)(?:_p\d+)?$/);
-    if (m) {
-      jobId = jobId || m[1];
-      salaryRefMonth = salaryRefMonth || m[2];
-      salaryItemId = salaryItemId || m[3];
-    }
-  }
-  return { jobId, salaryRefMonth, salaryItemId };
-}
-
 function normalizeEntryInstallments(entry?: ReceivedSalaryItemEntry): ReceivedSalaryItemInstallment[] {
   if (!entry) return [];
   if (Array.isArray(entry.installments) && entry.installments.length > 0) {
@@ -487,14 +606,17 @@ function normalizeEntryInstallments(entry?: ReceivedSalaryItemEntry): ReceivedSa
 
 /**
  * Revert a derived child income back into its origin income:
- * 1. Atomically reverses any credited amount from the account balance and deletes the child income + its monthly_status.
- * 2. Restores the exact amount back into the origin income (either the Salary Composition / monthly salary forecast OR the parent income's pending amount).
+ * 1. Atomically reverses any credited amount from the account balance (ONLY if it was still checked/completed!)
+ *    and deletes the child income + its monthly_status so it disappears completely.
+ * 2. Restores the exact amount back into the origin income (either the Salary Composition / monthly salary forecast
+ *    OR the parent income's pending amount).
  */
 async function revertChildIncomeToOrigin(params: {
   childIncome: CachedIncome;
+  origin: OriginResolution;
   activeMonth: string;
 }) {
-  const { childIncome, activeMonth } = params;
+  const { childIncome, origin, activeMonth } = params;
   const uid = auth.currentUser?.uid;
   if (!uid) return;
 
@@ -504,7 +626,7 @@ async function revertChildIncomeToOrigin(params: {
   const childStatusId = `income_${childIncome.id}_${activeMonth}`;
   const childStatusRef = doc(db, 'users', uid, 'monthly_status', childStatusId);
 
-  // 1. Atomic transaction: reverse account credit (if completed) + delete child income & status
+  // 1. Atomic transaction: reverse account credit ONLY if currently marked completed, and delete child income
   let creditedAccountId: string | undefined = childIncome.accountId;
   let wasCredited = false;
 
@@ -532,7 +654,6 @@ async function revertChildIncomeToOrigin(params: {
     if (statusSnap.exists()) transaction.delete(childStatusRef);
   });
 
-  // Update cached accounts in localStorage so home balance reflects immediately
   if (wasCredited && creditedAccountId && childAmount > 0) {
     try {
       const accounts = loadFallbackAccounts();
@@ -555,195 +676,189 @@ async function revertChildIncomeToOrigin(params: {
     }
   }
 
-  // 2A. Case Salary Composition Item -> restore item in LaborJob + update parent Salary income in salaryRefMonth
-  const isSalItem = Boolean(
-    childIncome.salaryItemId ||
-      childIncome.parentSalaryIncomeId ||
-      childIncome.id.startsWith('inc_salitem_')
-  );
-
-  if (isSalItem) {
-    const { jobId, salaryRefMonth, salaryItemId } = parseSalItemMetadata(childIncome);
-    if (jobId && salaryRefMonth) {
-      let job: LaborJob | null =
-        loadCachedLaborJobs().find((j) => j.id === jobId) || null;
-      if (!job) {
-        const jobSnap = await getDoc(doc(db, 'users', uid, 'labor_jobs', jobId));
-        if (jobSnap.exists()) {
-          job = { id: jobSnap.id, ...(jobSnap.data() as Omit<LaborJob, 'id'>) };
-        }
-      }
-
-      if (job) {
-        const prevMonthOv = job.monthOverrides?.[salaryRefMonth] || {};
-        const nextReceivedMap = { ...getMonthReceivedItemsMap(job, salaryRefMonth) };
-
-        // Remove the specific installment matching childIncome.id (or matching itemId)
-        for (const [k, entry] of Object.entries(nextReceivedMap)) {
-          const instList = normalizeEntryInstallments(entry);
-          const hasMatchingInst = instList.some((i) => i.linkedIncomeId === childIncome.id);
-          if (hasMatchingInst || k === salaryItemId || entry.linkedIncomeId === childIncome.id) {
-            const remainingInsts = instList.filter((i) => i.linkedIncomeId !== childIncome.id);
-            if (remainingInsts.length === 0) {
-              delete nextReceivedMap[k];
-            } else {
-              const nextSum =
-                Math.round(
-                  remainingInsts.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100
-                ) / 100;
-              const latest = remainingInsts[remainingInsts.length - 1];
-              nextReceivedMap[k] = {
-                ...entry,
-                amount: nextSum,
-                linkedIncomeId: latest.linkedIncomeId,
-                creditNow: latest.creditNow,
-                depositDate: latest.depositDate,
-                accountId: latest.accountId,
-                accountName: latest.accountName,
-                receivedAt: latest.receivedAt,
-                installments: remainingInsts,
-              };
-            }
-          }
-        }
-
-        const updatedJob: LaborJob = {
-          ...job,
-          monthOverrides: {
-            ...(job.monthOverrides || {}),
-            [salaryRefMonth]: {
-              ...prevMonthOv,
-              receivedItems: nextReceivedMap,
-            },
-          },
-          updatedAt: now,
-        };
-
-        // Persist updated LaborJob to Firestore & localStorage
-        const cachedList = loadCachedLaborJobs();
-        const nextJobsList = cachedList.some((j) => j.id === updatedJob.id)
-          ? cachedList.map((j) => (j.id === updatedJob.id ? updatedJob : j))
-          : [...cachedList, updatedJob];
-        saveCachedLaborJobs(nextJobsList);
-
-        await setDoc(
-          doc(db, 'users', uid, 'labor_jobs', updatedJob.id),
-          sanitizePayload(updatedJob),
-          { merge: true }
-        );
-
-        // Recalculate parent salary for salaryRefMonth and restore the amount!
-        const calc = calculateMonthSalary(updatedJob, salaryRefMonth);
-        const activeBenefits = calc.benefits.filter((b) => b.enabled);
-        const lines: string[] = [
-          `Salário Básico: ${formatCurrency(calc.baseSalary, updatedJob.currency)}`,
-        ];
-        for (const b of activeBenefits) {
-          const pct = b.type === 'percent' ? ` (${b.rawValue}%)` : '';
-          const sign = b.isDeduction ? '-' : '+';
-          lines.push(
-            `${b.name}${pct}: ${sign}${formatCurrency(b.calculatedAmount, updatedJob.currency)}`
-          );
-        }
-        if (calc.extraAmount > 0) {
-          lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, updatedJob.currency)}`);
-        }
-        if (calc.separatelyReceivedTotal > 0) {
-          lines.push(
-            `Já recebido separadamente: -${formatCurrency(
-              calc.separatelyReceivedTotal,
-              updatedJob.currency
-            )}`
-          );
-        }
-
-        const compositionNotes = `${updatedJob.role} • ${lines.join(' | ')}`;
-        const breakdown = {
-          jobId: updatedJob.id,
-          companyName: updatedJob.companyName,
-          role: updatedJob.role,
-          currency: updatedJob.currency,
-          month: salaryRefMonth,
-          baseSalary: calc.baseSalary,
-          benefits: activeBenefits.map((b) => ({
-            id: b.id,
-            name: b.name,
-            type: b.type,
-            rawValue: b.rawValue,
-            calculatedAmount: b.calculatedAmount,
-            isDeduction: Boolean(b.isDeduction),
-          })),
-          extraAmount: calc.extraAmount,
-          netTotal: calc.netTotal,
-          separatelyReceivedTotal: calc.separatelyReceivedTotal,
-          remainingToReceive: calc.remainingToReceive,
-        };
-
-        const parentSalaryId =
-          childIncome.parentSalaryIncomeId ||
-          updatedJob.linkedSalaryIncomeId ||
-          `inc_salary_${updatedJob.id}`;
-        const partialObj =
-          calc.separatelyReceivedTotal > 0 && calc.remainingToReceive > 0
-            ? {
-                originalAmount: calc.netTotal,
-                receivedSoFar: calc.separatelyReceivedTotal,
-                remainingAmount: calc.remainingToReceive,
-                updatedAt: now,
-              }
-            : null;
-
-        await setDoc(
-          doc(db, 'users', uid, 'incomes', parentSalaryId),
-          sanitizePayload({
-            exceptions: {
-              [salaryRefMonth]: {
-                amount: calc.remainingToReceive,
-                notes: compositionNotes,
-              },
-            },
-            partialPending: {
-              [salaryRefMonth]: partialObj,
-            },
-            salaryBreakdowns: {
-              [salaryRefMonth]: breakdown,
-            },
-            updatedAt: now,
-          }),
-          { merge: true }
-        );
-
-        const pMap = loadPartialMap();
-        const pKey = getPartialKey(parentSalaryId, salaryRefMonth);
-        if (partialObj) {
-          pMap[pKey] = {
-            incomeId: parentSalaryId,
-            incomeName: `Salário • ${updatedJob.companyName}`,
-            month: salaryRefMonth,
-            originalAmount: calc.netTotal,
-            receivedSoFar: calc.separatelyReceivedTotal,
-            remainingAmount: calc.remainingToReceive,
-            installmentCount: 1,
-            currency: updatedJob.currency,
-            updatedAt: now,
-          };
-        } else {
-          delete pMap[pKey];
-        }
-        savePartialMap(pMap);
+  // 2A. Salary Composition Item -> restore item in LaborJob + update parent Salary income in origin.originMonth
+  if (origin.kind === 'salary_item') {
+    const salaryRefMonth = origin.originMonth;
+    let job: LaborJob | null = origin.job;
+    if (!job && origin.parentSalaryId) {
+      const possibleJobId = origin.parentSalaryId.replace(/^inc_salary_/, '');
+      const jobSnap = await getDoc(doc(db, 'users', uid, 'labor_jobs', possibleJobId));
+      if (jobSnap.exists()) {
+        job = { id: jobSnap.id, ...(jobSnap.data() as Omit<LaborJob, 'id'>) };
       }
     }
-    return;
+
+    if (job) {
+      const prevMonthOv = job.monthOverrides?.[salaryRefMonth] || {};
+      const nextReceivedMap = { ...getMonthReceivedItemsMap(job, salaryRefMonth) };
+      const normCleanName = normalizeStr(origin.cleanItemName);
+
+      for (const [k, entry] of Object.entries(nextReceivedMap)) {
+        const instList = normalizeEntryInstallments(entry);
+        const hasMatchingInst = instList.some((i) => i.linkedIncomeId === childIncome.id);
+        const matchesByName = normalizeStr(entry.itemName) === normCleanName;
+        const matchesById =
+          k === childIncome.salaryItemId || entry.linkedIncomeId === childIncome.id;
+
+        if (hasMatchingInst || matchesById || matchesByName) {
+          const remainingInsts = instList.filter((i) => i.linkedIncomeId !== childIncome.id);
+          if (remainingInsts.length === 0 || matchesByName) {
+            delete nextReceivedMap[k];
+          } else {
+            const nextSum =
+              Math.round(
+                remainingInsts.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100
+              ) / 100;
+            const latest = remainingInsts[remainingInsts.length - 1];
+            nextReceivedMap[k] = {
+              ...entry,
+              amount: nextSum,
+              linkedIncomeId: latest.linkedIncomeId,
+              creditNow: latest.creditNow,
+              depositDate: latest.depositDate,
+              accountId: latest.accountId,
+              accountName: latest.accountName,
+              receivedAt: latest.receivedAt,
+              installments: remainingInsts,
+            };
+          }
+        }
+      }
+
+      const updatedJob: LaborJob = {
+        ...job,
+        monthOverrides: {
+          ...(job.monthOverrides || {}),
+          [salaryRefMonth]: {
+            ...prevMonthOv,
+            receivedItems: nextReceivedMap,
+          },
+        },
+        updatedAt: now,
+      };
+
+      const cachedList = loadCachedLaborJobs();
+      const nextJobsList = cachedList.some((j) => j.id === updatedJob.id)
+        ? cachedList.map((j) => (j.id === updatedJob.id ? updatedJob : j))
+        : [...cachedList, updatedJob];
+      saveCachedLaborJobs(nextJobsList);
+
+      await setDoc(
+        doc(db, 'users', uid, 'labor_jobs', updatedJob.id),
+        sanitizePayload(updatedJob),
+        { merge: true }
+      );
+
+      const calc = calculateMonthSalary(updatedJob, salaryRefMonth);
+      const activeBenefits = calc.benefits.filter((b) => b.enabled);
+      const lines: string[] = [
+        `Salário Básico: ${formatCurrency(calc.baseSalary, updatedJob.currency)}`,
+      ];
+      for (const b of activeBenefits) {
+        const pct = b.type === 'percent' ? ` (${b.rawValue}%)` : '';
+        const sign = b.isDeduction ? '-' : '+';
+        lines.push(
+          `${b.name}${pct}: ${sign}${formatCurrency(b.calculatedAmount, updatedJob.currency)}`
+        );
+      }
+      if (calc.extraAmount > 0) {
+        lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, updatedJob.currency)}`);
+      }
+      if (calc.separatelyReceivedTotal > 0) {
+        lines.push(
+          `Já recebido separadamente: -${formatCurrency(
+            calc.separatelyReceivedTotal,
+            updatedJob.currency
+          )}`
+        );
+      }
+
+      const compositionNotes = `${updatedJob.role} • ${lines.join(' | ')}`;
+      const breakdown = {
+        jobId: updatedJob.id,
+        companyName: updatedJob.companyName,
+        role: updatedJob.role,
+        currency: updatedJob.currency,
+        month: salaryRefMonth,
+        baseSalary: calc.baseSalary,
+        benefits: activeBenefits.map((b) => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          rawValue: b.rawValue,
+          calculatedAmount: b.calculatedAmount,
+          isDeduction: Boolean(b.isDeduction),
+        })),
+        extraAmount: calc.extraAmount,
+        netTotal: calc.netTotal,
+        separatelyReceivedTotal: calc.separatelyReceivedTotal,
+        remainingToReceive: calc.remainingToReceive,
+      };
+
+      const parentSalaryId =
+        origin.parentSalaryId ||
+        updatedJob.linkedSalaryIncomeId ||
+        `inc_salary_${updatedJob.id}`;
+      const partialObj =
+        calc.separatelyReceivedTotal > 0 && calc.remainingToReceive > 0
+          ? {
+              originalAmount: calc.netTotal,
+              receivedSoFar: calc.separatelyReceivedTotal,
+              remainingAmount: calc.remainingToReceive,
+              updatedAt: now,
+            }
+          : null;
+
+      await setDoc(
+        doc(db, 'users', uid, 'incomes', parentSalaryId),
+        sanitizePayload({
+          exceptions: {
+            [salaryRefMonth]: {
+              amount: calc.remainingToReceive,
+              notes: compositionNotes,
+            },
+          },
+          partialPending: {
+            [salaryRefMonth]: partialObj,
+          },
+          salaryBreakdowns: {
+            [salaryRefMonth]: breakdown,
+          },
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
+
+      const pMap = loadPartialMap();
+      const pKey = getPartialKey(parentSalaryId, salaryRefMonth);
+      if (partialObj) {
+        pMap[pKey] = {
+          incomeId: parentSalaryId,
+          incomeName: `Salário • ${updatedJob.companyName}`,
+          month: salaryRefMonth,
+          originalAmount: calc.netTotal,
+          receivedSoFar: calc.separatelyReceivedTotal,
+          remainingAmount: calc.remainingToReceive,
+          installmentCount: 1,
+          currency: updatedJob.currency,
+          updatedAt: now,
+        };
+      } else {
+        delete pMap[pKey];
+      }
+      savePartialMap(pMap);
+      return;
+    }
   }
 
-  // 2B. Case Regular Income Partial Receipt -> restore amount back into parentIncomeId
-  const parentId = childIncome.parentIncomeId;
+  // 2B. Regular Income Partial Receipt -> restore amount back into parentIncomeId
+  const parentId = origin.parentIncomeId;
   if (parentId) {
     const parentRef = doc(db, 'users', uid, 'incomes', parentId);
     const parentSnap = await getDoc(parentRef);
     if (parentSnap.exists()) {
       const parentData = parentSnap.data() as CachedIncome;
-      const targetMonth = childIncome.startMonth || activeMonth;
+      const targetMonth = origin.originMonth;
       const currentParentAmt = getEffectiveIncomeAmount(parentData, targetMonth);
       const restoredAmount = Math.round((currentParentAmt + childAmount) * 100) / 100;
 
@@ -816,50 +931,33 @@ async function revertChildIncomeToOrigin(params: {
 }
 
 /**
- * Confirmation modal shown when unchecking a received income that was automatically split/created
- * from a larger income (such as an early/partial salary benefit or partial income receipt).
+ * Confirmation modal for any derived/separated income (whether currently checked OR unchecked):
+ * Lets the user either return the value back to the origin invoice (deleting the separated entry)
+ * or keep it as a separate income.
  */
-function openUncheckDerivedIncomeModal(params: {
-  originalButton: HTMLButtonElement;
+function openDerivedIncomeActionModal(params: {
+  originalButton?: HTMLButtonElement;
   childIncome: CachedIncome;
+  origin: OriginResolution;
   displayAmount: number;
   currency: CurrencyCode;
   activeMonth: string;
+  isCurrentlyChecked: boolean;
 }) {
   injectStyles();
   closePartialOverlay();
 
-  const { originalButton, childIncome, displayAmount, currency, activeMonth } = params;
+  const {
+    originalButton,
+    childIncome,
+    origin,
+    displayAmount,
+    currency,
+    activeMonth,
+    isCurrentlyChecked,
+  } = params;
 
-  // Build clear human-readable description of the origin income
-  const isSalItem = Boolean(
-    childIncome.salaryItemId ||
-      childIncome.parentSalaryIncomeId ||
-      childIncome.id.startsWith('inc_salitem_')
-  );
-
-  let originTitle = 'Ingresso de origem';
-  let originSubtitle = '';
-  let originMonthLabel = formatMonthLabelBR(activeMonth);
-
-  if (isSalItem) {
-    const { jobId, salaryRefMonth } = parseSalItemMetadata(childIncome);
-    const job = jobId ? loadCachedLaborJobs().find((j) => j.id === jobId) || null : null;
-    const parentSalInc = liveIncomes.find(
-      (i) => i.id === (childIncome.parentSalaryIncomeId || (jobId ? `inc_salary_${jobId}` : ''))
-    );
-    originTitle =
-      parentSalInc?.name ||
-      (job ? `Salário • ${job.companyName}` : 'Salário (Composição Salarial)');
-    originSubtitle = job ? `${job.companyName} • ${job.role}` : 'Composição Salarial';
-    if (salaryRefMonth) originMonthLabel = formatMonthLabelBR(salaryRefMonth);
-  } else if (childIncome.parentIncomeId) {
-    const parentInc = liveIncomes.find((i) => i.id === childIncome.parentIncomeId);
-    originTitle = parentInc?.name || childIncome.name.replace(/\s*\(Parcial(?:\s*\d+)?\)/i, '');
-    originSubtitle = parentInc?.category || childIncome.category || 'Receita de origem';
-    if (childIncome.startMonth) originMonthLabel = formatMonthLabelBR(childIncome.startMonth);
-  }
-
+  const originMonthLabel = formatMonthLabelBR(origin.originMonth);
   let isReverting = false;
 
   const overlay = document.createElement('div');
@@ -882,11 +980,49 @@ function openUncheckDerivedIncomeModal(params: {
   }
 
   const render = () => {
+    const secondaryOptionHtml = isCurrentlyChecked
+      ? `
+        <button type="button" data-keep-separate ${
+          isReverting ? 'disabled' : ''
+        } class="sf-pr-choice" style="width:100%;text-align:left;padding:15px;border-radius:20px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:13px;box-sizing:border-box;">
+          <div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:13.5px;font-weight:900;color:#7c2d12;">Manter o ingreso separado (como pendente)</div>
+            <div style="font-size:11px;font-weight:600;color:#c2410c;margin-top:2px;line-height:1.35;">
+              Estorna da conta e deixa este lançamento separado pendente neste mês, mantendo o abatimento em ${escapeHtml(
+                origin.originTitle
+              )}.
+            </div>
+          </div>
+        </button>
+      `
+      : originalButton
+      ? `
+        <button type="button" data-receive-separate ${
+          isReverting ? 'disabled' : ''
+        } class="sf-pr-choice" style="width:100%;text-align:left;padding:15px;border-radius:20px;border:2px solid #cbd5e1;background:#ffffff;cursor:pointer;display:flex;align-items:center;gap:13px;box-sizing:border-box;">
+          <div style="width:44px;height:44px;border-radius:15px;background:#f1f5f9;color:#0f172a;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:13.5px;font-weight:900;color:#0f172a;">Manter separado e marcar como recebido</div>
+            <div style="font-size:11px;font-weight:600;color:#64748b;margin-top:2px;line-height:1.35;">
+              Continua como lançamento separado neste mês e credita ${escapeHtml(
+                formatCurrency(displayAmount, currency)
+              )} na conta.
+            </div>
+          </div>
+        </button>
+      `
+      : '';
+
     card.innerHTML = `
       <div style="padding:18px 20px;background:linear-gradient(135deg,#ea580c 0%,#d97706 100%);color:#ffffff;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
         <div style="min-width:0;">
           <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.18);padding:3px 10px;border-radius:9999px;font-size:10px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:7px;">
-            <span>↩️</span> Desmarcar Recebimento
+            <span>↩️</span> Ingresso Antecipado / Separado
           </div>
           <div style="font-size:15.5px;font-weight:900;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
             childIncome.name
@@ -899,24 +1035,23 @@ function openUncheckDerivedIncomeModal(params: {
       </div>
 
       <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
-        <!-- Origin Invoice Card -->
         <div style="padding:13px 15px;border-radius:18px;background:#f8fafc;border:1px solid #cbd5e1;display:flex;flex-direction:column;gap:4px;">
           <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">
             Fatura / Ingresso de Origem
           </div>
           <div style="font-size:14px;font-weight:900;color:#0f172a;">${escapeHtml(
-            originTitle
+            origin.originTitle
           )}</div>
           <div style="font-size:11.5px;font-weight:700;color:#475569;text-transform:capitalize;">
-            ${escapeHtml(originSubtitle)} • ${escapeHtml(originMonthLabel)}
+            ${escapeHtml(origin.originSubtitle)} • ${escapeHtml(originMonthLabel)}
           </div>
         </div>
 
         <div style="font-size:12px;font-weight:700;color:#475569;text-align:center;">
-          O que deseja fazer com este valor ao desmarcar?
+          O que deseja fazer com este lançamento?
         </div>
 
-        <!-- Option 1: Return to origin invoice & delete separated invoice -->
+        <!-- Primary Action: Return to origin invoice & delete separated invoice -->
         <button type="button" data-revert-origin ${
           isReverting ? 'disabled' : ''
         } class="sf-pr-choice" style="width:100%;text-align:left;padding:15px;border-radius:20px;border:2px solid #6ee7b7;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);cursor:pointer;display:flex;align-items:center;gap:13px;box-shadow:0 6px 18px rgba(5,150,105,0.12);box-sizing:border-box;">
@@ -928,31 +1063,16 @@ function openUncheckDerivedIncomeModal(params: {
               ${isReverting ? 'Devolvendo ao ingresso de origem...' : 'Voltar a fazer parte do ingresso de origem'}
             </div>
             <div style="font-size:11px;font-weight:600;color:#047857;margin-top:2px;line-height:1.35;">
-              Estorna da conta, apaga esta fatura separada e soma ${escapeHtml(
-                formatCurrency(displayAmount, currency)
-              )} de volta em <strong>${escapeHtml(originTitle)}</strong> (${escapeHtml(
-      originMonthLabel
-    )}).
+              ${
+                isCurrentlyChecked ? 'Estorna da conta, apaga' : 'Apaga'
+              } esta fatura separada e devolve ${escapeHtml(
+      formatCurrency(displayAmount, currency)
+    )} para <strong>${escapeHtml(origin.originTitle)}</strong> (${escapeHtml(originMonthLabel)}).
             </div>
           </div>
         </button>
 
-        <!-- Option 2: Keep separate income as pending -->
-        <button type="button" data-keep-separate ${
-          isReverting ? 'disabled' : ''
-        } class="sf-pr-choice" style="width:100%;text-align:left;padding:15px;border-radius:20px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:13px;box-sizing:border-box;">
-          <div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div style="min-width:0;flex:1;">
-            <div style="font-size:13.5px;font-weight:900;color:#7c2d12;">Manter o ingreso separado (como pendente)</div>
-            <div style="font-size:11px;font-weight:600;color:#c2410c;margin-top:2px;line-height:1.35;">
-              Estorna da conta e deixa este lançamento separado pendente neste mês, mantendo o abatimento em ${escapeHtml(
-                originTitle
-              )}.
-            </div>
-          </div>
-        </button>
+        ${secondaryOptionHtml}
 
         <button type="button" data-close-uncheck style="width:100%;padding:11px;border-radius:14px;border:1px solid #e2e8f0;background:#ffffff;color:#64748b;font-size:12px;font-weight:800;cursor:pointer;margin-top:2px;">
           Cancelar
@@ -971,6 +1091,7 @@ function openUncheckDerivedIncomeModal(params: {
       try {
         await revertChildIncomeToOrigin({
           childIncome,
+          origin,
           activeMonth,
         });
         closePartialOverlay();
@@ -983,11 +1104,29 @@ function openUncheckDerivedIncomeModal(params: {
 
     card.querySelector('[data-keep-separate]')?.addEventListener('click', () => {
       closePartialOverlay();
-      originalButton.dataset.bypassPartialCheck = '1';
-      originalButton.click();
-      window.setTimeout(() => {
-        delete originalButton.dataset.bypassPartialCheck;
-      }, 300);
+      if (originalButton) {
+        originalButton.dataset.bypassPartialCheck = '1';
+        originalButton.click();
+        window.setTimeout(() => {
+          delete originalButton.dataset.bypassPartialCheck;
+        }, 300);
+      }
+    });
+
+    card.querySelector('[data-receive-separate]')?.addEventListener('click', () => {
+      if (!originalButton) {
+        closePartialOverlay();
+        return;
+      }
+      openReceiptChoiceModal({
+        originalButton,
+        income: childIncome,
+        displayName: childIncome.name,
+        displayAmount,
+        currency,
+        activeMonth,
+        existingPartial: null,
+      });
     });
   };
 
@@ -1188,7 +1327,7 @@ async function applyPartialReceipt(params: {
     savePartialMap(pMap);
   }
 
-  window.setTimeout(() => decoratePartialPendingButtons(), 120);
+  window.setTimeout(() => decorateIncomeCards(), 120);
 }
 
 function clearPartialPendingState(incomeId: string | undefined, activeMonth: string) {
@@ -1731,13 +1870,19 @@ function openReceiptChoiceModal(params: {
   document.body.appendChild(overlay);
 }
 
-/** Visually turn pending partial incomes' right-side check button into an orange pulsing clock + remaining badge */
-function decoratePartialPendingButtons() {
+/**
+ * Decorate income cards in Receitas & Visão Geral:
+ * 1. Turns partial-pending check buttons into an orange pulsing clock + badge.
+ * 2. Adds a clickable "↩️ Voltar ao ingresso de origem" chip on any derived/separated income
+ *    so the user can return it to the origin salary/income with a single tap!
+ */
+function decorateIncomeCards() {
   if (typeof document === 'undefined') return;
   const activeMonth = detectActiveDashboardMonth();
   const pMap = loadPartialMap();
+  const incomesPool = getEffectiveIncomesList();
 
-  for (const inc of liveIncomes) {
+  for (const inc of incomesPool) {
     const pp = inc.partialPending?.[activeMonth];
     const key = getPartialKey(inc.id, activeMonth);
     if (pp && pp.remainingAmount > 0) {
@@ -1773,9 +1918,44 @@ function decoratePartialPendingButtons() {
 
     const row = findIncomeCardRow(btn);
     if (!row) continue;
+
+    const { income, displayAmount, currency } = matchIncomeFromRow(row, activeMonth);
+    const origin = resolveIncomeOrigin(income, activeMonth);
+    const cls = btn.className || '';
+    const isGreenChecked =
+      (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
+      btn.dataset.sfClockDecorated !== '1';
+
+    // A. Decorate derived/separated child income with a direct "Voltar ao ingresso de origem" button
+    if (income && origin) {
+      if (!row.querySelector(`.${ORIGIN_LINK_BADGE_CLASS}`)) {
+        const originChip = document.createElement('button');
+        originChip.type = 'button';
+        originChip.className = ORIGIN_LINK_BADGE_CLASS;
+        originChip.textContent = `↩️ Voltar ao ingresso de origem`;
+        originChip.style.cssText =
+          'display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 9px;border-radius:9999px;background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:10px;font-weight:800;cursor:pointer;line-height:1.4;';
+        originChip.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openDerivedIncomeActionModal({
+            originalButton: btn,
+            childIncome: income,
+            origin,
+            displayAmount,
+            currency,
+            activeMonth,
+            isCurrentlyChecked: isGreenChecked,
+          });
+        });
+        const h4 = row.querySelector('h4');
+        h4?.parentElement?.insertAdjacentElement('afterend', originChip);
+      }
+    }
+
+    // B. Decorate partial-pending parent income with pulsing orange clock
     const h4Text = (row.querySelector('h4')?.textContent || '').trim().toLowerCase();
     const rowText = (row.textContent || '').toLowerCase();
-
     const matchedPartial = activePartials.find(
       (p) =>
         p.incomeName &&
@@ -1796,13 +1976,7 @@ function decoratePartialPendingButtons() {
       continue;
     }
 
-    const cls = btn.className || '';
-    if (
-      (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
-      btn.dataset.sfClockDecorated !== '1'
-    ) {
-      continue;
-    }
+    if (isGreenChecked) continue;
 
     if (btn.dataset.sfClockDecorated !== '1') {
       btn.dataset.sfClockDecorated = '1';
@@ -1862,7 +2036,7 @@ function subscribeUserData(uid: string | null) {
         list.push({ id: d.id, ...(d.data() as Omit<CachedIncome, 'id'>) });
       });
       liveIncomes = list;
-      decoratePartialPendingButtons();
+      decorateIncomeCards();
     },
     () => {}
   );
@@ -1903,7 +2077,7 @@ export function initIncomePartialReceipt() {
     if (decorateTimer !== null) window.clearTimeout(decorateTimer);
     decorateTimer = window.setTimeout(() => {
       decorateTimer = null;
-      decoratePartialPendingButtons();
+      decorateIncomeCards();
     }, 150);
   };
 
@@ -1924,8 +2098,24 @@ export function initIncomePartialReceipt() {
       const btn = target.closest('button') as HTMLButtonElement | null;
       if (!btn) return;
 
-      const btnKind = classifyIncomeCheckButton(btn);
-      if (!btnKind) return;
+      if (btn.dataset.bypassPartialCheck === '1') return;
+      if (
+        btn.closest(`#${OVERLAY_ID}`) ||
+        btn.closest('#sisfinz-salary-breakdown-overlay') ||
+        btn.closest('#sisfinz-salary-editor-overlay') ||
+        btn.closest('#sisfinz-item-receive-overlay') ||
+        btn.closest('header, nav, [role="dialog"]')
+      ) {
+        return;
+      }
+
+      if (!isCheckIconButton(btn)) return;
+
+      const actionGroup = btn.parentElement;
+      if (!actionGroup) return;
+      if (!/\+\s*(?:R\$|US\$|ARS|BRL|USD|EUR|PYG|\$|€|₲)/.test(actionGroup.textContent || '')) {
+        return;
+      }
 
       const row = findIncomeCardRow(btn);
       if (!row) return;
@@ -1937,20 +2127,39 @@ export function initIncomePartialReceipt() {
       );
       if (displayAmount <= 0) return;
 
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+      const cls = btn.className || '';
+      const isGreenChecked =
+        (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
+        btn.dataset.sfClockDecorated !== '1';
 
-      if (btnKind === 'received_child' && income) {
-        openUncheckDerivedIncomeModal({
+      const origin = resolveIncomeOrigin(income, activeMonth);
+
+      // If this income is a derived/separated entry (whether currently checked OR unchecked from before),
+      // always offer the origin-return confirmation modal!
+      if (income && origin) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        openDerivedIncomeActionModal({
           originalButton: btn,
           childIncome: income,
+          origin,
           displayAmount,
           currency,
           activeMonth,
+          isCurrentlyChecked: isGreenChecked,
         });
         return;
       }
+
+      // For normal green-checked incomes (not derived), let native uncheck work normally
+      if (isGreenChecked) return;
+
+      // For normal pending incomes, open Total vs. Partial receipt modal
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
 
       openReceiptChoiceModal({
         originalButton: btn,
