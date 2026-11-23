@@ -5,6 +5,7 @@ import {
   LaborJob,
   LaborSalarySnapshot,
   MonthlySalaryCalculation,
+  ReceivedSalaryItemEntry,
   ShiftPartKey,
   WeeklySchedule,
 } from '../types/labor';
@@ -202,7 +203,6 @@ function getCircularMinuteDiff(actualTime: string, scheduledTime: string): numbe
 
 /**
  * Evaluate entry AND optional exit punctuality against the day's scheduled shift(s).
- * When `forcedShiftPart` (1 or 2) is provided on a split shift day, evaluates explicitly against that part.
  */
 export function evaluatePunchPunctuality(
   actualStartTime: string,
@@ -538,13 +538,33 @@ export function getEffectiveSalarySnapshot(job: LaborJob, targetMonth: string): 
   return active;
 }
 
+/** Return the map of items already received/scheduled separately for targetMonth */
+export function getMonthReceivedItemsMap(
+  job: LaborJob,
+  targetMonth: string
+): Record<string, ReceivedSalaryItemEntry> {
+  const raw = job.monthOverrides?.[targetMonth]?.receivedItems;
+  if (!raw || typeof raw !== 'object') return {};
+  return raw;
+}
+
+/** Sum of all individual salary composition items already received or scheduled separately for targetMonth */
+export function getMonthSeparatelyReceivedTotal(job: LaborJob, targetMonth: string): number {
+  const map = getMonthReceivedItemsMap(job, targetMonth);
+  const sum = Object.values(map).reduce((acc, entry) => acc + (Number(entry?.amount) || 0), 0);
+  return Math.max(0, Math.round(sum * 100) / 100);
+}
+
 /**
  * Pure calculation for a single month's salary, benefits, and deductions (e.g. Adelanto):
  * - Percentage benefits are always calculated on the full `baseSalary`.
  * - Deduction items (`isDeduction: true`) subtract from the total while keeping percentage benefits intact.
- * - Single-month overrides (`monthOverrides[targetMonth]`) apply ONLY to `targetMonth`.
+ * - `separatelyReceivedTotal` tracks items already received/scheduled separately so `remainingToReceive` never double-counts.
  */
-function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<MonthlySalaryCalculation, 'aguinaldoAmount' | 'totalWithAguinaldo'> {
+function calculateRawMonthSalary(
+  job: LaborJob,
+  targetMonth: string
+): Omit<MonthlySalaryCalculation, 'aguinaldoAmount' | 'totalWithAguinaldo'> {
   const snap = getEffectiveSalarySnapshot(job, targetMonth);
   const override = job.monthOverrides?.[targetMonth];
 
@@ -655,9 +675,11 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     (acc, item) => acc + (item.isDeduction ? -item.calculatedAmount : item.calculatedAmount),
     0
   );
-  const grossTotal = Math.max(0, baseSalary + benefitsNetTotal + extraAmount);
+  const grossTotal = Math.max(0, Math.round((baseSalary + benefitsNetTotal + extraAmount) * 100) / 100);
   const deductionAmount = deductionPercent > 0 ? Math.round((grossTotal * deductionPercent) / 100) : 0;
-  const netTotal = Math.max(0, grossTotal - deductionAmount);
+  const netTotal = Math.max(0, Math.round((grossTotal - deductionAmount) * 100) / 100);
+  const separatelyReceivedTotal = getMonthSeparatelyReceivedTotal(job, targetMonth);
+  const remainingToReceive = Math.max(0, Math.round((netTotal - separatelyReceivedTotal) * 100) / 100);
   const monthlyHoursRef = Math.max(1, (job.weeklyTargetHours || 48) * 4.33);
   const hourlyRateRef = baseSalary / monthlyHoursRef;
 
@@ -670,6 +692,8 @@ function calculateRawMonthSalary(job: LaborJob, targetMonth: string): Omit<Month
     deductionPercent,
     deductionAmount,
     netTotal,
+    separatelyReceivedTotal,
+    remainingToReceive,
     hourlyRateRef,
   };
 }

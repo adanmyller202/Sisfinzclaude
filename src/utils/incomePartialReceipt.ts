@@ -2,7 +2,11 @@ import { collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firesto
 import { auth, db } from '../firebase/config';
 import { AccountItem, CurrencyCode } from '../types';
 import { LaborJob } from '../types/labor';
-import { calculateMonthSalary, formatLocalDateYYYYMMDD } from './laborCalculations';
+import {
+  calculateMonthSalary,
+  formatLocalDateYYYYMMDD,
+  getMonthReceivedItemsMap,
+} from './laborCalculations';
 import { formatCurrency } from './currency';
 import { getCurrentMonthStr } from './finance';
 
@@ -231,17 +235,6 @@ function parseDisplayedAmount(text: string): number {
   return Number.isFinite(num) ? num : 0;
 }
 
-/**
- * In FinanceDashboard.tsx, both Timeline and Receitas rows have a right-side action wrapper:
- *   <div class="flex items-center gap-3 ...">
- *     <div class="text-right"><span class="...">+ $ 1.000.000</span></div>
- *     <button class="w-9 h-9 rounded-2xl ..."><CheckCircle2 /></button>
- *     [<button class="w-9 h-9 rounded-2xl bg-rose-500/10 ..."><Trash2 /></button>]
- *   </div>
- *
- * Notice ONLY income rows have a `+` sign before the formatted currency!
- * Bills have no `+` (or `-` in timeline), and expenses have `-` (and no check button).
- */
 function findIncomeCardRow(btn: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = btn.parentElement;
   let depth = 0;
@@ -256,12 +249,10 @@ function findIncomeCardRow(btn: HTMLElement): HTMLElement | null {
 
 function isCheckIconButton(btn: HTMLButtonElement): boolean {
   const cls = btn.className || '';
-  // Must be the 36x36 rounded-2xl action button with an SVG and no text
   const txt = (btn.textContent || '').trim();
   if (txt.length > 0) return false;
   if (!btn.querySelector('svg')) return false;
   if (!cls.includes('w-9') || !cls.includes('h-9')) return false;
-  // Exclude delete/trash button
   if (cls.includes('text-rose-500') || cls.includes('bg-rose-500/10')) return false;
   const svg = btn.querySelector('svg');
   const svgCls = (svg?.getAttribute('class') || '').toLowerCase();
@@ -277,6 +268,7 @@ function isPositiveIncomeCheckButton(btn: HTMLButtonElement): boolean {
     btn.closest(`#${OVERLAY_ID}`) ||
     btn.closest('#sisfinz-salary-breakdown-overlay') ||
     btn.closest('#sisfinz-salary-editor-overlay') ||
+    btn.closest('#sisfinz-item-receive-overlay') ||
     btn.closest('header, nav, [role="dialog"]')
   ) {
     return false;
@@ -284,7 +276,6 @@ function isPositiveIncomeCheckButton(btn: HTMLButtonElement): boolean {
 
   if (!isCheckIconButton(btn)) return false;
 
-  // Already fully received (solid emerald-500) -> let user uncheck normally
   const cls = btn.className || '';
   if (
     (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
@@ -293,11 +284,9 @@ function isPositiveIncomeCheckButton(btn: HTMLButtonElement): boolean {
     return false;
   }
 
-  // Check sibling amount text inside the immediate right-side action container
   const actionGroup = btn.parentElement;
   if (!actionGroup) return false;
   const groupText = (actionGroup.textContent || '').trim();
-  // Positive income amounts always render with a leading `+` (e.g. "+$ 1.690.944,94" or "+R$ 2.500,00")
   if (/\+\s*(?:R\$|US\$|ARS|BRL|USD|EUR|PYG|\$|€|₲)/.test(groupText)) {
     return true;
   }
@@ -430,7 +419,6 @@ async function applyPartialReceipt(params: {
   const selectedAcc = accounts.find((a) => a.id === accountId) || accounts[0];
   const effectiveCurrency = (selectedAcc?.currency || currency || 'ARS') as CurrencyCode;
 
-  // 1. Credit selected account balance immediately
   if (uid && selectedAcc && partialAmount > 0) {
     const currentBal = Number(selectedAcc.currentBalance ?? selectedAcc.initialBalance ?? 0);
     const nextBal = Math.round((currentBal + partialAmount) * 100) / 100;
@@ -458,7 +446,6 @@ async function applyPartialReceipt(params: {
     }
   }
 
-  // 2. Create a one-off RECEIVED income for the partial amount that landed now
   const partialIncomeId = `inc_partial_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const partialNote = noteDetail
     ? `Recebimento parcial (${nextInstallmentNum}ª parte) • ${noteDetail} • Resta: ${formatCurrency(
@@ -510,7 +497,6 @@ async function applyPartialReceipt(params: {
     );
   }
 
-  // 3. Reduce original income for THIS month to the remaining pending balance (keeps totals 100% accurate)
   if (income && uid) {
     const originalAmount = existingPartial?.originalAmount || totalPendingAmount;
     const receivedSoFar =
@@ -632,6 +618,7 @@ function openReceiptChoiceModal(params: {
   } = params;
   const linkedJob = findLinkedLaborJob(income, displayName);
   const salaryCalc = linkedJob ? calculateMonthSalary(linkedJob, activeMonth) : null;
+  const alreadyReceivedItems = linkedJob ? getMonthReceivedItemsMap(linkedJob, activeMonth) : {};
   const accounts = loadFallbackAccounts();
 
   let step: 'choose' | 'partial' = 'choose';
@@ -647,37 +634,38 @@ function openReceiptChoiceModal(params: {
     partialValue: number;
   };
 
+  // Exclude items already marked as separately received so they can NEVER be double-counted!
   let compItems: CompDraftItem[] = [];
   if (salaryCalc) {
-    compItems = [
-      {
+    if (!alreadyReceivedItems['__base__'] && salaryCalc.baseSalary > 0) {
+      compItems.push({
         id: '__base__',
         name: 'Salário Básico',
         fullAmount: salaryCalc.baseSalary,
-        checked: true,
+        checked: false,
         partialValue: salaryCalc.baseSalary,
-      },
-      ...salaryCalc.benefits
-        .filter((b) => b.enabled && !b.isDeduction && b.calculatedAmount > 0)
-        .map((b) => ({
-          id: b.id,
-          name: b.name,
-          fullAmount: b.calculatedAmount,
-          checked: false,
-          partialValue: b.calculatedAmount,
-        })),
-      ...(salaryCalc.extraAmount > 0
-        ? [
-            {
-              id: '__extra__',
-              name: 'Extras / Bônus do mês',
-              fullAmount: salaryCalc.extraAmount,
-              checked: false,
-              partialValue: salaryCalc.extraAmount,
-            },
-          ]
-        : []),
-    ];
+      });
+    }
+    for (const b of salaryCalc.benefits.filter(
+      (x) => x.enabled && !x.isDeduction && x.calculatedAmount > 0 && !alreadyReceivedItems[x.id]
+    )) {
+      compItems.push({
+        id: b.id,
+        name: b.name,
+        fullAmount: b.calculatedAmount,
+        checked: false,
+        partialValue: b.calculatedAmount,
+      });
+    }
+    if (!alreadyReceivedItems['__extra__'] && salaryCalc.extraAmount > 0) {
+      compItems.push({
+        id: '__extra__',
+        name: 'Extras / Bônus do mês',
+        fullAmount: salaryCalc.extraAmount,
+        checked: false,
+        partialValue: salaryCalc.extraAmount,
+      });
+    }
   }
 
   const overlay = document.createElement('div');
@@ -686,12 +674,12 @@ function openReceiptChoiceModal(params: {
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
   overlay.style.cssText =
-    'position:fixed;inset:0;z-index:10055;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.58);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);';
+    'position:fixed;inset:0;z-index:10055;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.58);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:hidden;overscroll-behavior:contain;touch-action:none;';
 
   const card = document.createElement('div');
   card.className = 'sf-pr-card';
   card.style.cssText =
-    'width:100%;max-width:440px;max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 28px 65px rgba(15,23,42,0.32);border:1px solid #d1fae5;font-family:inherit;';
+    'width:100%;max-width:min(100vw,440px);max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 28px 65px rgba(15,23,42,0.32);border:1px solid #d1fae5;font-family:inherit;';
 
   if (window.innerWidth >= 640) {
     overlay.style.alignItems = 'center';
@@ -714,38 +702,49 @@ function openReceiptChoiceModal(params: {
     const isValidPartial = partialNumeric > 0 && partialNumeric < displayAmount;
 
     if (step === 'choose') {
-      const progressBannerHtml = existingPartial
+      const sepRecTotal = salaryCalc?.separatelyReceivedTotal || 0;
+      const effectiveReceivedSoFar = Math.max(existingPartial?.receivedSoFar || 0, sepRecTotal);
+      const effectiveOriginal =
+        existingPartial?.originalAmount ||
+        (sepRecTotal > 0 ? salaryCalc?.netTotal || displayAmount + sepRecTotal : displayAmount);
+      const hasProgress = effectiveReceivedSoFar > 0;
+
+      const progressBannerHtml = hasProgress
         ? (() => {
             const pct = Math.min(
               100,
-              Math.round((existingPartial.receivedSoFar / Math.max(1, existingPartial.originalAmount)) * 100)
+              Math.round((effectiveReceivedSoFar / Math.max(1, effectiveOriginal)) * 100)
             );
             return `
               <div style="padding:12px 14px;border-radius:16px;background:#fff7ed;border:1px solid #fdba74;display:flex;flex-direction:column;gap:6px;">
                 <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#9a3412;">
                   <span>⏳ Recebimento em andamento</span>
-                  <span>${pct}% recebido</span>
+                  <span>${pct}% já separado</span>
                 </div>
                 <div style="height:6px;border-radius:9999px;background:#ffedd5;overflow:hidden;">
                   <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:9999px;"></div>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:#c2410c;">
-                  <span>Já caiu: ${escapeHtml(formatCurrency(existingPartial.receivedSoFar, currency))}</span>
-                  <span>Falta: ${escapeHtml(formatCurrency(displayAmount, currency))}</span>
+                  <span>Já recebido/separado: ${escapeHtml(
+                    formatCurrency(effectiveReceivedSoFar, currency)
+                  )}</span>
+                  <span>Resta: ${escapeHtml(formatCurrency(displayAmount, currency))}</span>
                 </div>
               </div>
             `;
           })()
         : '';
 
-      const totalTitle = existingPartial
+      const totalTitle = hasProgress
         ? 'Receber valor restante total'
         : 'Marcar como recebido valor total';
-      const totalSub = existingPartial
-        ? `Quita os ${escapeHtml(formatCurrency(displayAmount, currency))} restantes na conta e muda para verde.`
+      const totalSub = hasProgress
+        ? `Quita apenas os ${escapeHtml(
+            formatCurrency(displayAmount, currency)
+          )} restantes (sem duplicar o que já caiu) e muda para verde.`
         : `Entra ${escapeHtml(formatCurrency(displayAmount, currency))} inteiro na sua conta e fica verde.`;
 
-      const partialTitle = existingPartial
+      const partialTitle = hasProgress
         ? 'Receber mais uma parte (parcial)'
         : 'Marcar como recebido valor parcial';
       const partialSub =
@@ -769,14 +768,14 @@ function openReceiptChoiceModal(params: {
           </div>
         </div>
 
-        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
           ${progressBannerHtml}
 
           <div style="font-size:12px;font-weight:700;color:#475569;text-align:center;margin-bottom:2px;">
             Como você recebeu este valor?
           </div>
 
-          <button type="button" data-choose-total class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #a7f3d0;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(5,150,105,0.12);">
+          <button type="button" data-choose-total class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #a7f3d0;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(5,150,105,0.12);box-sizing:border-box;">
             <div style="width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,#10b981,#059669);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 14px rgba(5,150,105,0.3);">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
@@ -786,7 +785,7 @@ function openReceiptChoiceModal(params: {
             </div>
           </button>
 
-          <button type="button" data-choose-partial class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(245,158,11,0.12);">
+          <button type="button" data-choose-partial class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(245,158,11,0.12);box-sizing:border-box;">
             <div style="width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 14px rgba(234,88,12,0.3);">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
@@ -851,7 +850,7 @@ function openReceiptChoiceModal(params: {
             partialMode === 'composition'
               ? 'background:#ffffff;color:#047857;box-shadow:0 1px 3px rgba(0,0,0,0.08);'
               : 'background:transparent;color:#64748b;'
-          }">Por itens do salário</button>
+          }">Por itens restantes</button>
         </div>
       `
         : '';
@@ -878,9 +877,9 @@ function openReceiptChoiceModal(params: {
     `;
 
     const compBodyHtml = `
-      <div style="display:flex;flex-direction:column;gap:8px;max-height:210px;overflow-y:auto;padding-right:2px;">
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:210px;overflow-y:auto;overflow-x:hidden;padding-right:2px;">
         <div style="font-size:10.5px;font-weight:800;color:#475569;">
-          Marque o que recebeu agora (pode ajustar o valor parcial de cada item):
+          Itens ainda pendentes (itens já recebidos separadamente foram ocultados):
         </div>
         ${compItems
           .map(
@@ -900,7 +899,7 @@ function openReceiptChoiceModal(params: {
               it.id
             )}" value="${it.partialValue}" ${
               it.checked ? '' : 'disabled'
-            } style="width:110px;padding:6px 8px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:800;color:#0f172a;opacity:${
+            } style="width:104px;padding:6px 8px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:800;color:#0f172a;opacity:${
               it.checked ? '1' : '0.45'
             };" />
           </div>
@@ -924,7 +923,7 @@ function openReceiptChoiceModal(params: {
         <button type="button" data-close-pr style="width:34px;height:34px;border-radius:12px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:17px;font-weight:900;cursor:pointer;">✕</button>
       </div>
 
-      <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;">
+      <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
         ${modeTabsHtml}
         ${partialMode === 'composition' ? compBodyHtml : freeBodyHtml}
 
@@ -1261,7 +1260,6 @@ export function initIncomePartialReceipt() {
     if (e.key === 'Escape') closePartialOverlay();
   });
 
-  // Capture-phase click interceptor for any pending positive income check button (Receitas + Visão Geral)
   document.addEventListener(
     'click',
     (event) => {

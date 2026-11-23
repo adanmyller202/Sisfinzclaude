@@ -41,6 +41,18 @@ export interface LaborSalarySnapshot {
   deductionPercent: number; // optional payroll deduction % (0 = net directly)
 }
 
+export interface ReceivedSalaryItemEntry {
+  itemId: string;
+  itemName: string;
+  amount: number;
+  linkedIncomeId: string;
+  creditNow: boolean;
+  depositDate: string; // YYYY-MM-DD
+  accountId?: string;
+  accountName?: string;
+  receivedAt: string;
+}
+
 export interface LaborMonthOverride {
   baseSalary?: number;
   deductionPercent?: number;
@@ -53,6 +65,8 @@ export interface LaborMonthOverride {
   extraBenefits?: LaborBenefit[];
   extraAmount?: number;
   extraNote?: string;
+  /** Individual salary composition items already received or scheduled separately for this month */
+  receivedItems?: Record<string, ReceivedSalaryItemEntry>;
 }
 
 export interface LaborShiftEntry {
@@ -142,6 +156,10 @@ export interface MonthlySalaryCalculation {
   deductionPercent: number;
   deductionAmount: number;
   netTotal: number;
+  /** Sum of individual composition items already received or scheduled separately for this month */
+  separatelyReceivedTotal: number;
+  /** Remaining salary amount still pending in the main salary income (netTotal - separatelyReceivedTotal) */
+  remainingToReceive: number;
   aguinaldoAmount: number;
   totalWithAguinaldo: number;
   hourlyRateRef: number;

@@ -46,8 +46,14 @@ function buildSalaryBreakdownData(job: LaborJob, targetMonth: string) {
   if (calc.extraAmount > 0) {
     lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, job.currency)}`);
   }
+  if (calc.separatelyReceivedTotal > 0) {
+    lines.push(
+      `Já recebido separadamente: -${formatCurrency(calc.separatelyReceivedTotal, job.currency)}`
+    );
+  }
 
   return {
+    calc,
     notes: `${job.role} • ${lines.join(' | ')}`,
     breakdown: {
       jobId: job.id,
@@ -66,6 +72,8 @@ function buildSalaryBreakdownData(job: LaborJob, targetMonth: string) {
       })),
       extraAmount: calc.extraAmount,
       netTotal: calc.netTotal,
+      separatelyReceivedTotal: calc.separatelyReceivedTotal,
+      remainingToReceive: calc.remainingToReceive,
     },
   };
 }
@@ -281,8 +289,9 @@ export function useLaborAgenda() {
   );
 
   /**
-   * Sync the calculated monthly salary AND its full salary/benefits/deductions composition
-   * to a recurring Income item in SisFinz.
+   * Sync the calculated monthly salary AND its full composition to SisFinz.
+   * Always deducts any items already received separately in `targetMonth`
+   * (`calc.remainingToReceive`) so editing salary never re-adds already-received items.
    */
   const syncSalaryToSisFinz = useCallback(
     async (params: {
@@ -298,7 +307,9 @@ export function useLaborAgenda() {
       const expectedDate = `${safeMonth}-05`;
       const now = new Date().toISOString();
       const incomeId = job.linkedSalaryIncomeId || `inc_salary_${job.id}`;
-      const { notes: compositionNotes, breakdown } = buildSalaryBreakdownData(job, safeMonth);
+      const { calc, notes: compositionNotes, breakdown } = buildSalaryBreakdownData(job, safeMonth);
+      const effectiveMonthAmount =
+        calc.separatelyReceivedTotal > 0 ? calc.remainingToReceive : amount;
 
       try {
         const incomeRef = doc(db, 'users', uid, 'incomes', incomeId);
@@ -316,7 +327,7 @@ export function useLaborAgenda() {
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
               exceptions: {
-                [safeMonth]: { amount, notes: compositionNotes },
+                [safeMonth]: { amount: effectiveMonthAmount, notes: compositionNotes },
               },
               salaryBreakdowns: {
                 [safeMonth]: breakdown,
@@ -341,6 +352,13 @@ export function useLaborAgenda() {
               recurrence: 'monthly',
               accountId: job.defaultAccountId || undefined,
               notes: compositionNotes,
+              ...(calc.separatelyReceivedTotal > 0
+                ? {
+                    exceptions: {
+                      [safeMonth]: { amount: effectiveMonthAmount, notes: compositionNotes },
+                    },
+                  }
+                : {}),
               salaryBreakdown: breakdown,
               salaryBreakdowns: {
                 [safeMonth]: breakdown,
@@ -397,7 +415,6 @@ export function useLaborAgenda() {
 
       try {
         await runTransaction(db, async (transaction) => {
-          // Idempotency guard: a retry must never credit the account twice.
           const existingIncome = await transaction.get(incomeRef);
           if (existingIncome.exists()) return;
 

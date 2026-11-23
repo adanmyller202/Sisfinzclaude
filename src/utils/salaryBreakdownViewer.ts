@@ -1,14 +1,27 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, runTransaction, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { BenefitCalcType, LaborBenefit, LaborJob } from '../types/labor';
-import { calculateMonthSalary, getEffectiveSalarySnapshot } from './laborCalculations';
+import { AccountItem, CurrencyCode } from '../types';
+import {
+  BenefitCalcType,
+  LaborBenefit,
+  LaborJob,
+  ReceivedSalaryItemEntry,
+} from '../types/labor';
+import {
+  calculateMonthSalary,
+  formatLocalDateYYYYMMDD,
+  getEffectiveSalarySnapshot,
+  getMonthReceivedItemsMap,
+} from './laborCalculations';
 import { formatCurrency } from './currency';
 import { getCurrentMonthStr, shiftMonthStr } from './finance';
 
 const LOCAL_JOBS_PREFIX = 'sisfinz_labor_jobs_v1_';
+const PARTIAL_STORE_KEY = 'sisfinz_partial_income_state_v1';
 const BADGE_CLASS = 'sisfinz-salary-breakdown-chip';
 const OVERLAY_ID = 'sisfinz-salary-breakdown-overlay';
 const EDITOR_OVERLAY_ID = 'sisfinz-salary-editor-overlay';
+const ITEM_RECEIVE_OVERLAY_ID = 'sisfinz-item-receive-overlay';
 
 const TRASH_ICON_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
 
@@ -70,6 +83,58 @@ function loadCachedLaborJobs(): LaborJob[] {
   return [];
 }
 
+function loadCachedAccounts(): AccountItem[] {
+  const uid = auth.currentUser?.uid;
+  try {
+    const raw =
+      (uid ? localStorage.getItem(`mc_acc_${uid}_accounts`) : null) ||
+      localStorage.getItem('mc_acc_last_accounts');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((a: AccountItem) => a && a.isActive !== false);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function savePartialIndicatorLocally(params: {
+  incomeId: string;
+  incomeName: string;
+  month: string;
+  originalAmount: number;
+  receivedSoFar: number;
+  remainingAmount: number;
+  currency: CurrencyCode;
+}) {
+  try {
+    const raw = localStorage.getItem(PARTIAL_STORE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const key = `${params.month}::${params.incomeId}`;
+    if (params.receivedSoFar > 0 && params.remainingAmount > 0) {
+      map[key] = {
+        incomeId: params.incomeId,
+        incomeName: params.incomeName,
+        month: params.month,
+        originalAmount: params.originalAmount,
+        receivedSoFar: params.receivedSoFar,
+        remainingAmount: params.remainingAmount,
+        installmentCount: 1,
+        currency: params.currency,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      delete map[key];
+    }
+    localStorage.setItem(PARTIAL_STORE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
 async function persistUpdatedJobAndSyncIncome(params: {
   updatedJob: LaborJob;
   targetMonth: string;
@@ -100,7 +165,7 @@ async function persistUpdatedJobAndSyncIncome(params: {
       { merge: true }
     );
 
-    // 3. Sync Income in Receitas if enabled
+    // 3. Sync Income in Receitas if enabled — ALWAYS using remainingToReceive for targetMonth!
     const calc = calculateMonthSalary(stamped, targetMonth);
     if (syncWithFinance && calc.netTotal > 0) {
       const activeBenefits = calc.benefits.filter((b) => b.enabled);
@@ -115,6 +180,12 @@ async function persistUpdatedJobAndSyncIncome(params: {
       if (calc.extraAmount > 0) {
         lines.push(`Extras do mês: +${formatCurrency(calc.extraAmount, stamped.currency)}`);
       }
+      if (calc.separatelyReceivedTotal > 0) {
+        lines.push(
+          `Já recebido separadamente: -${formatCurrency(calc.separatelyReceivedTotal, stamped.currency)}`
+        );
+      }
+
       const compositionNotes = `${stamped.role} • ${lines.join(' | ')}`;
       const breakdown = {
         jobId: stamped.id,
@@ -133,11 +204,22 @@ async function persistUpdatedJobAndSyncIncome(params: {
         })),
         extraAmount: calc.extraAmount,
         netTotal: calc.netTotal,
+        separatelyReceivedTotal: calc.separatelyReceivedTotal,
+        remainingToReceive: calc.remainingToReceive,
       };
 
       const incomeId = stamped.linkedSalaryIncomeId || `inc_salary_${stamped.id}`;
       const expectedDate = `${targetMonth}-05`;
       const incomeRef = doc(db, 'users', uid, 'incomes', incomeId);
+      const partialObj =
+        calc.separatelyReceivedTotal > 0 && calc.remainingToReceive > 0
+          ? {
+              originalAmount: calc.netTotal,
+              receivedSoFar: calc.separatelyReceivedTotal,
+              remainingAmount: calc.remainingToReceive,
+              updatedAt: now,
+            }
+          : null;
 
       if (scope === 'single') {
         await setDoc(
@@ -153,7 +235,10 @@ async function persistUpdatedJobAndSyncIncome(params: {
             recurrence: 'monthly',
             accountId: stamped.defaultAccountId || undefined,
             exceptions: {
-              [targetMonth]: { amount: calc.netTotal, notes: compositionNotes },
+              [targetMonth]: { amount: calc.remainingToReceive, notes: compositionNotes },
+            },
+            partialPending: {
+              [targetMonth]: partialObj,
             },
             salaryBreakdowns: {
               [targetMonth]: breakdown,
@@ -178,6 +263,16 @@ async function persistUpdatedJobAndSyncIncome(params: {
             recurrence: 'monthly',
             accountId: stamped.defaultAccountId || undefined,
             notes: compositionNotes,
+            ...(calc.separatelyReceivedTotal > 0
+              ? {
+                  exceptions: {
+                    [targetMonth]: { amount: calc.remainingToReceive, notes: compositionNotes },
+                  },
+                }
+              : {}),
+            partialPending: {
+              [targetMonth]: partialObj,
+            },
             salaryBreakdown: breakdown,
             salaryBreakdowns: {
               [targetMonth]: breakdown,
@@ -187,10 +282,281 @@ async function persistUpdatedJobAndSyncIncome(params: {
           { merge: true }
         );
       }
+
+      // If all items were marked separately received (remaining == 0), mark main salary status complete with amount 0
+      if (calc.separatelyReceivedTotal > 0 && calc.remainingToReceive <= 0) {
+        const statusId = `income_${incomeId}_${targetMonth}`;
+        await setDoc(
+          doc(db, 'users', uid, 'monthly_status', statusId),
+          sanitizePayload({
+            id: statusId,
+            month: targetMonth,
+            itemId: incomeId,
+            itemType: 'income',
+            isCompleted: true,
+            status: 'received',
+            completedAt: now,
+            amount: 0,
+          }),
+          { merge: true }
+        );
+      }
+
+      savePartialIndicatorLocally({
+        incomeId,
+        incomeName: `Salário • ${stamped.companyName}`,
+        month: targetMonth,
+        originalAmount: calc.netTotal,
+        receivedSoFar: calc.separatelyReceivedTotal,
+        remainingAmount: calc.remainingToReceive,
+        currency: stamped.currency,
+      });
     }
   }
 
   return stamped;
+}
+
+/**
+ * Mark an individual salary composition item as received immediately OR scheduled for a date.
+ * - Creates a separate one-time income (with atomic account credit if immediate, idempotent).
+ * - Saves `receivedItems[itemId]` in `job.monthOverrides[salaryMonth]`.
+ * - Deducts the item's exact value from the month's main salary income (`remainingToReceive`)
+ *   so clicking "Marcar total" on the salary later NEVER double-credits!
+ */
+async function markCompositionItemReceivedSeparately(params: {
+  job: LaborJob;
+  salaryMonth: string;
+  itemId: string;
+  itemName: string;
+  amount: number;
+  creditNow: boolean;
+  depositDate: string;
+  accountId?: string;
+}): Promise<LaborJob> {
+  const { job, salaryMonth, itemId, itemName, amount, creditNow, depositDate, accountId } = params;
+  const uid = auth.currentUser?.uid;
+  const now = new Date().toISOString();
+  const safeDate =
+    depositDate && /^\d{4}-\d{2}-\d{2}$/.test(depositDate)
+      ? depositDate
+      : formatLocalDateYYYYMMDD(new Date());
+  const depositMonth = safeDate.slice(0, 7);
+  const depositDay = Math.max(1, Math.min(31, Number(safeDate.slice(8, 10)) || 1));
+  const accounts = loadCachedAccounts();
+  const selectedAcc = accounts.find((a) => a.id === accountId) || accounts[0];
+  const effectiveCurrency = (selectedAcc?.currency || job.currency) as CurrencyCode;
+
+  // Deterministic idempotency ID per job + month + item so retries can NEVER double-credit
+  const safeItemSlug = itemId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const linkedIncomeId = `inc_salitem_${job.id}_${salaryMonth}_${safeItemSlug}`;
+
+  if (uid && amount > 0) {
+    const incomeRef = doc(db, 'users', uid, 'incomes', linkedIncomeId);
+    const statusId = `income_${linkedIncomeId}_${depositMonth}`;
+    const statusRef = doc(db, 'users', uid, 'monthly_status', statusId);
+    const accountRef =
+      creditNow && selectedAcc ? doc(db, 'users', uid, 'accounts', selectedAcc.id) : null;
+
+    await runTransaction(db, async (transaction) => {
+      const existingInc = await transaction.get(incomeRef);
+      if (existingInc.exists()) {
+        // Idempotency guard: already registered, do not double credit
+        return;
+      }
+
+      let nextBal: number | null = null;
+      if (accountRef && selectedAcc) {
+        const accSnap = await transaction.get(accountRef);
+        if (accSnap.exists()) {
+          const data = accSnap.data();
+          const cur = Number(data.currentBalance ?? data.initialBalance ?? 0);
+          nextBal = Math.round((cur + amount) * 100) / 100;
+        }
+      }
+
+      const monthRefLabel = formatMonthLabel(salaryMonth);
+      transaction.set(
+        incomeRef,
+        sanitizePayload({
+          id: linkedIncomeId,
+          laborJobId: job.id,
+          parentSalaryIncomeId: job.linkedSalaryIncomeId || `inc_salary_${job.id}`,
+          salaryItemId: itemId,
+          salaryRefMonth: salaryMonth,
+          name: `${itemName} • ${job.companyName}`,
+          amount,
+          currency: effectiveCurrency,
+          category: 'Salário',
+          expectedDay: depositDay,
+          expectedDate: safeDate,
+          startMonth: depositMonth,
+          recurrence: 'none',
+          accountId: selectedAcc?.id || undefined,
+          notes: `Benefício/item da composição salarial (${monthRefLabel}) recebido separadamente`,
+          createdAt: now,
+          updatedAt: now,
+        })
+      );
+
+      transaction.set(
+        statusRef,
+        sanitizePayload({
+          id: statusId,
+          itemId: linkedIncomeId,
+          itemType: 'income',
+          month: depositMonth,
+          status: creditNow ? 'received' : 'pending',
+          isCompleted: creditNow,
+          ...(creditNow ? { completedAt: now, paidDate: safeDate } : {}),
+          accountId: selectedAcc?.id || undefined,
+          amount,
+          expectedDate: safeDate,
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
+
+      if (accountRef && nextBal !== null) {
+        transaction.update(accountRef, {
+          currentBalance: nextBal,
+          updatedAt: now,
+        });
+      }
+    });
+
+    // Update cached accounts in localStorage so home balance refreshes immediately
+    if (creditNow && selectedAcc) {
+      try {
+        const updatedAccs = accounts.map((a) =>
+          a.id === selectedAcc.id
+            ? {
+                ...a,
+                currentBalance:
+                  Math.round(
+                    ((Number(a.currentBalance ?? a.initialBalance ?? 0) || 0) + amount) * 100
+                  ) / 100,
+                updatedAt: now,
+              }
+            : a
+        );
+        localStorage.setItem(`mc_acc_${uid}_accounts`, JSON.stringify(updatedAccs));
+        localStorage.setItem('mc_acc_last_accounts', JSON.stringify(updatedAccs));
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Record this item as received/scheduled separately in `job.monthOverrides[salaryMonth].receivedItems`
+  const prevMonthOv = job.monthOverrides?.[salaryMonth] || {};
+  const prevReceivedMap = getMonthReceivedItemsMap(job, salaryMonth);
+  const newEntry: ReceivedSalaryItemEntry = {
+    itemId,
+    itemName,
+    amount,
+    linkedIncomeId,
+    creditNow,
+    depositDate: safeDate,
+    accountId: selectedAcc?.id,
+    accountName: selectedAcc?.name,
+    receivedAt: now,
+  };
+
+  const updatedJob: LaborJob = {
+    ...job,
+    monthOverrides: {
+      ...(job.monthOverrides || {}),
+      [salaryMonth]: {
+        ...prevMonthOv,
+        receivedItems: {
+          ...prevReceivedMap,
+          [itemId]: newEntry,
+        },
+      },
+    },
+  };
+
+  return await persistUpdatedJobAndSyncIncome({
+    updatedJob,
+    targetMonth: salaryMonth,
+    scope: 'single',
+    syncWithFinance: true,
+  });
+}
+
+/**
+ * Safely undo a separately-received composition item:
+ * - Reverses account balance if it had already been credited.
+ * - Deletes the linked one-time income and its monthly status.
+ * - Removes it from `receivedItems` and restores the full remaining amount on the salary income.
+ */
+async function undoCompositionItemReceived(params: {
+  job: LaborJob;
+  salaryMonth: string;
+  entry: ReceivedSalaryItemEntry;
+}): Promise<LaborJob> {
+  const { job, salaryMonth, entry } = params;
+  const uid = auth.currentUser?.uid;
+  const now = new Date().toISOString();
+  const depositMonth = (entry.depositDate || '').slice(0, 7) || salaryMonth;
+
+  if (uid && entry.linkedIncomeId) {
+    const incomeRef = doc(db, 'users', uid, 'incomes', entry.linkedIncomeId);
+    const statusId = `income_${entry.linkedIncomeId}_${depositMonth}`;
+    const statusRef = doc(db, 'users', uid, 'monthly_status', statusId);
+    const accountRef =
+      entry.creditNow && entry.accountId
+        ? doc(db, 'users', uid, 'accounts', entry.accountId)
+        : null;
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const incSnap = await transaction.get(incomeRef);
+        const statusSnap = await transaction.get(statusRef);
+        const wasCredited = Boolean(statusSnap.exists() && statusSnap.data()?.isCompleted);
+
+        if (accountRef && wasCredited && entry.amount > 0) {
+          const accSnap = await transaction.get(accountRef);
+          if (accSnap.exists()) {
+            const data = accSnap.data();
+            const cur = Number(data.currentBalance ?? data.initialBalance ?? 0);
+            transaction.update(accountRef, {
+              currentBalance: Math.round((cur - entry.amount) * 100) / 100,
+              updatedAt: now,
+            });
+          }
+        }
+        if (incSnap.exists()) transaction.delete(incomeRef);
+        if (statusSnap.exists()) transaction.delete(statusRef);
+      });
+    } catch {
+      await deleteDoc(incomeRef).catch(() => {});
+      await deleteDoc(statusRef).catch(() => {});
+    }
+  }
+
+  const prevMonthOv = job.monthOverrides?.[salaryMonth] || {};
+  const nextReceivedMap = { ...getMonthReceivedItemsMap(job, salaryMonth) };
+  delete nextReceivedMap[entry.itemId];
+
+  const updatedJob: LaborJob = {
+    ...job,
+    monthOverrides: {
+      ...(job.monthOverrides || {}),
+      [salaryMonth]: {
+        ...prevMonthOv,
+        receivedItems: nextReceivedMap,
+      },
+    },
+  };
+
+  return await persistUpdatedJobAndSyncIncome({
+    updatedJob,
+    targetMonth: salaryMonth,
+    scope: 'single',
+    syncWithFinance: true,
+  });
 }
 
 function findJobByCompanyName(companyText: string): LaborJob | null {
@@ -215,7 +581,12 @@ function detectActiveDashboardMonth(): string {
       /\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|enero|febrero|marzo|mayo|junio|julio|septiembre|octubre|noviembre|diciembre|january|february|march|april|may|june|july|august|september|october|november|december|jan|fev|feb|mar|abr|apr|mai|jun|jul|ago|aug|set|sep|out|oct|nov|dez|dic|dec)\.?\s*(?:de\s*)?(20\d{2})\b/i;
 
     for (const el of Array.from(candidates)) {
-      if ((el as HTMLElement).closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}`)) continue;
+      if (
+        (el as HTMLElement).closest(
+          `#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}`
+        )
+      )
+        continue;
       const txt = (el.textContent || '').trim();
       if (!txt || txt.length > 42) continue;
       const m = txt.match(regex);
@@ -239,15 +610,356 @@ function formatMonthLabel(yyyyMm: string): string {
   return dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 }
 
+function formatShortDateBR(yyyyMmDd: string): string {
+  if (!yyyyMmDd || !/^\d{4}-\d{2}-\d{2}$/.test(yyyyMmDd)) return yyyyMmDd;
+  const [, m, d] = yyyyMmDd.split('-');
+  return `${d}/${m}`;
+}
+
+function closeItemReceiveOverlay() {
+  const existing = document.getElementById(ITEM_RECEIVE_OVERLAY_ID);
+  if (existing) existing.remove();
+}
+
 function closeEditorOverlay() {
   const existing = document.getElementById(EDITOR_OVERLAY_ID);
   if (existing) existing.remove();
 }
 
 function closeBreakdownOverlay() {
+  closeItemReceiveOverlay();
   closeEditorOverlay();
   const existing = document.getElementById(OVERLAY_ID);
   if (existing) existing.remove();
+}
+
+/**
+ * Interactive modal opened when the user taps on an individual item inside Composição Salarial
+ * (e.g., Bônus asistencia, Aguinaldo, Turnos Cortados, Salário Básico).
+ * Lets the user either credit it immediately OR schedule a deposit date — automatically deducting
+ * it from the month's pending salary so there is ZERO duplication.
+ */
+function openItemSeparateReceiveModal(params: {
+  job: LaborJob;
+  salaryMonth: string;
+  itemId: string;
+  itemName: string;
+  itemAmount: number;
+  existingEntry?: ReceivedSalaryItemEntry;
+  onUpdated: (updatedJob: LaborJob, toastMsg: string) => void;
+}) {
+  closeItemReceiveOverlay();
+
+  const { job, salaryMonth, itemId, itemName, itemAmount, existingEntry, onUpdated } = params;
+  const accounts = loadCachedAccounts();
+  const todayStr = formatLocalDateYYYYMMDD(new Date());
+  const calc = calculateMonthSalary(job, salaryMonth);
+  const nextRemainingPreview = Math.max(
+    0,
+    Math.round((calc.remainingToReceive - itemAmount) * 100) / 100
+  );
+
+  let mode: 'now' | 'schedule' = 'now';
+  let depositDate = todayStr;
+  let selectedAccountId = job.defaultAccountId || accounts[0]?.id || '';
+  let isProcessing = false;
+
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = ITEM_RECEIVE_OVERLAY_ID;
+  modalOverlay.setAttribute('role', 'dialog');
+  modalOverlay.setAttribute('aria-modal', 'true');
+  modalOverlay.style.cssText =
+    'position:fixed;inset:0;z-index:10070;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(15,23,42,0.58);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);overflow:hidden;overscroll-behavior:contain;touch-action:none;';
+
+  const card = document.createElement('div');
+  card.style.cssText =
+    'width:100%;max-width:min(100vw,440px);max-height:90dvh;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:#ffffff;border-radius:28px 28px 0 0;box-shadow:0 28px 70px rgba(15,23,42,0.34);border:1px solid #a7f3d0;font-family:inherit;';
+
+  if (window.innerWidth >= 640) {
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.padding = '16px';
+    card.style.borderRadius = '28px';
+  }
+
+  const renderModal = () => {
+    // If already marked as received/scheduled separately -> show status & Undo option
+    if (existingEntry) {
+      const statusTitle = existingEntry.creditNow
+        ? 'Já creditado na sua conta'
+        : `Agendado para ${formatShortDateBR(existingEntry.depositDate)}`;
+      const statusSub = existingEntry.creditNow
+        ? `Entrou em ${formatShortDateBR(existingEntry.depositDate)}${
+            existingEntry.accountName ? ` • ${existingEntry.accountName}` : ''
+          } e já foi abatido da previsão do salário.`
+        : `Criado como receita separada para ${formatShortDateBR(existingEntry.depositDate)}${
+            existingEntry.accountName ? ` • ${existingEntry.accountName}` : ''
+          } e já abatido da previsão do salário.`;
+
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
+          <div style="min-width:0;">
+            <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Item Recebido Separadamente</div>
+            <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
+              existingEntry.itemName
+            )}</div>
+          </div>
+          <button type="button" data-close-ir style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
+          <div style="padding:14px 16px;border-radius:18px;background:#ecfdf5;border:1px solid #a7f3d0;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span style="font-size:12px;font-weight:900;color:#065f46;">✓ ${escapeHtml(
+                statusTitle
+              )}</span>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:900;color:#059669;">${escapeHtml(
+                formatCurrency(existingEntry.amount, job.currency)
+              )}</span>
+            </div>
+            <div style="font-size:11.5px;font-weight:600;color:#047857;line-height:1.4;">${escapeHtml(
+              statusSub
+            )}</div>
+          </div>
+
+          <div style="font-size:11px;font-weight:600;color:#64748b;line-height:1.4;">
+            Quando você marcar o salário de <strong style="text-transform:capitalize;">${escapeHtml(
+              formatMonthLabel(salaryMonth)
+            )}</strong> como recebido, este valor <strong>não será somado de novo</strong>.
+          </div>
+
+          <button type="button" data-undo-ir ${
+            isProcessing ? 'disabled' : ''
+          } style="width:100%;padding:12px;border-radius:14px;border:1px solid #fecdd3;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">
+            ${isProcessing ? 'Desfazendo...' : 'Desfazer recebimento separado'}
+          </button>
+
+          <button type="button" data-close-ir style="width:100%;padding:12px;border-radius:14px;border:none;background:#059669;color:#ffffff;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;">
+            Fechar
+          </button>
+        </div>
+      `;
+
+      card
+        .querySelectorAll('[data-close-ir]')
+        .forEach((b) => b.addEventListener('click', closeItemReceiveOverlay));
+      card.querySelector('[data-undo-ir]')?.addEventListener('click', async () => {
+        if (isProcessing) return;
+        isProcessing = true;
+        renderModal();
+        try {
+          const updated = await undoCompositionItemReceived({
+            job,
+            salaryMonth,
+            entry: existingEntry,
+          });
+          closeItemReceiveOverlay();
+          onUpdated(updated, `${existingEntry.itemName} voltou para o salário previsto.`);
+        } catch {
+          isProcessing = false;
+          renderModal();
+        }
+      });
+      return;
+    }
+
+    const accOptionsHtml =
+      accounts.length > 0
+        ? accounts
+            .map(
+              (a) =>
+                `<option value="${escapeHtml(a.id)}" ${
+                  a.id === selectedAccountId ? 'selected' : ''
+                }>${escapeHtml(a.name)} (${escapeHtml(a.currency)})</option>`
+            )
+            .join('')
+        : `<option value="">Conta padrão</option>`;
+
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
+        <div style="min-width:0;">
+          <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Marcar Item como Recebido</div>
+          <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
+            itemName
+          )}</div>
+          <div style="font-size:12px;font-weight:800;color:#d1fae5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:2px;">
+            ${escapeHtml(formatCurrency(itemAmount, job.currency))}
+          </div>
+        </div>
+        <button type="button" data-close-ir style="width:32px;height:32px;border-radius:10px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:16px;font-weight:900;cursor:pointer;flex-shrink:0;">✕</button>
+      </div>
+
+      <div style="padding:16px 18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
+        <div style="font-size:11.5px;font-weight:700;color:#475569;">
+          Como deseja lançar este item separado do salário?
+        </div>
+
+        <!-- Option 1: Credit immediately -->
+        <button type="button" data-ir-mode="now" style="width:100%;text-align:left;padding:13px 14px;border-radius:16px;border:2px solid ${
+          mode === 'now' ? '#059669' : '#e2e8f0'
+        };background:${mode === 'now' ? '#ecfdf5' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span style="font-size:13px;font-weight:900;color:#064e3b;">⚡ Agregar imediato na conta agora</span>
+            <span style="width:18px;height:18px;border-radius:9999px;border:2px solid ${
+              mode === 'now' ? '#059669' : '#cbd5e1'
+            };background:${
+      mode === 'now' ? '#059669' : 'transparent'
+    };display:inline-flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:900;">${
+      mode === 'now' ? '✓' : ''
+    }</span>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:#047857;margin-top:3px;">
+            Soma ${escapeHtml(
+              formatCurrency(itemAmount, job.currency)
+            )} direto no seu saldo hoje e cria o ingresso já marcado como recebido.
+          </div>
+        </button>
+
+        <!-- Option 2: Schedule date -->
+        <button type="button" data-ir-mode="schedule" style="width:100%;text-align:left;padding:13px 14px;border-radius:16px;border:2px solid ${
+          mode === 'schedule' ? '#0284c7' : '#e2e8f0'
+        };background:${mode === 'schedule' ? '#f0f9ff' : '#ffffff'};cursor:pointer;box-sizing:border-box;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span style="font-size:13px;font-weight:900;color:#0c4a6e;">📅 Agendar data que vai cair</span>
+            <span style="width:18px;height:18px;border-radius:9999px;border:2px solid ${
+              mode === 'schedule' ? '#0284c7' : '#cbd5e1'
+            };background:${
+      mode === 'schedule' ? '#0284c7' : 'transparent'
+    };display:inline-flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:900;">${
+      mode === 'schedule' ? '✓' : ''
+    }</span>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:#0369a1;margin-top:3px;">
+            Cria um ingresso separado pendente para a data escolhida, integrado ao seu salário.
+          </div>
+        </button>
+
+        ${
+          mode === 'schedule'
+            ? `
+          <div>
+            <label style="display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:5px;">
+              Data prevista que vai cair na conta
+            </label>
+            <input type="date" data-ir-date value="${escapeHtml(
+              depositDate
+            )}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid #7dd3fc;background:#f0f9ff;font-size:13px;font-weight:800;color:#0f172a;" />
+          </div>
+        `
+            : ''
+        }
+
+        <div>
+          <label style="display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:5px;">
+            Conta do SisFinz
+          </label>
+          <select data-ir-acc style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid #cbd5e1;background:#f8fafc;font-size:12px;font-weight:800;color:#0f172a;">
+            ${accOptionsHtml}
+          </select>
+        </div>
+
+        <!-- Zero-duplication impact summary -->
+        <div style="padding:12px 14px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:5px;">
+          <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">
+            Ajuste automático sem duplicação
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#334155;">
+            <span>Salário pendente antes:</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(
+              formatCurrency(calc.remainingToReceive, job.currency)
+            )}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:800;color:#059669;">
+            <span>Abatendo ${escapeHtml(itemName)}:</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">-${escapeHtml(
+              formatCurrency(itemAmount, job.currency)
+            )}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:900;color:#0f172a;padding-top:5px;border-top:1px dashed #cbd5e1;">
+            <span>Novo restante do salário:</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#047857;">${escapeHtml(
+              formatCurrency(nextRemainingPreview, job.currency)
+            )}</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:2px;">
+          <button type="button" data-close-ir style="padding:12px;border-radius:14px;border:1px solid #e2e8f0;background:#ffffff;color:#475569;font-size:12px;font-weight:800;cursor:pointer;">
+            Cancelar
+          </button>
+          <button type="button" data-confirm-ir ${
+            isProcessing ? 'disabled' : ''
+          } style="padding:12px;border-radius:14px;border:none;background:${
+      mode === 'now' ? '#059669' : '#0284c7'
+    };color:#ffffff;font-size:12px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;">
+            ${
+              isProcessing
+                ? 'Salvando...'
+                : mode === 'now'
+                ? 'Confirmar e Creditar'
+                : 'Agendar Ingresso'
+            }
+          </button>
+        </div>
+      </div>
+    `;
+
+    card
+      .querySelectorAll('[data-close-ir]')
+      .forEach((b) => b.addEventListener('click', closeItemReceiveOverlay));
+
+    card.querySelectorAll<HTMLButtonElement>('[data-ir-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        mode = btn.dataset.irMode === 'schedule' ? 'schedule' : 'now';
+        renderModal();
+      });
+    });
+
+    const dateInp = card.querySelector<HTMLInputElement>('[data-ir-date]');
+    dateInp?.addEventListener('change', () => {
+      depositDate = dateInp.value || todayStr;
+    });
+
+    const accSel = card.querySelector<HTMLSelectElement>('[data-ir-acc]');
+    accSel?.addEventListener('change', () => {
+      selectedAccountId = accSel.value;
+    });
+
+    card.querySelector('[data-confirm-ir]')?.addEventListener('click', async () => {
+      if (isProcessing) return;
+      isProcessing = true;
+      renderModal();
+      try {
+        const updated = await markCompositionItemReceivedSeparately({
+          job,
+          salaryMonth,
+          itemId,
+          itemName,
+          amount: itemAmount,
+          creditNow: mode === 'now',
+          depositDate: mode === 'now' ? todayStr : depositDate,
+          accountId: selectedAccountId,
+        });
+        closeItemReceiveOverlay();
+        onUpdated(
+          updated,
+          mode === 'now'
+            ? `${itemName} creditado na conta e abatido do salário!`
+            : `${itemName} agendado para ${formatShortDateBR(depositDate)} e abatido do salário!`
+        );
+      } catch (err) {
+        console.warn('[SalaryBreakdown] separate item receipt failed:', err);
+        isProcessing = false;
+        renderModal();
+      }
+    });
+  };
+
+  renderModal();
+  modalOverlay.appendChild(card);
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) closeItemReceiveOverlay();
+  });
+  document.body.appendChild(modalOverlay);
 }
 
 /**
@@ -386,8 +1098,12 @@ function openStackedSalaryEditor(params: {
         deductionPercent: 0,
       };
       const nextOverrides: Record<string, any> = { ...(job.monthOverrides || {}) };
-      if (newExtra > 0) {
-        nextOverrides[targetMonth] = { extraAmount: newExtra };
+      const existingReceivedItems = job.monthOverrides?.[targetMonth]?.receivedItems;
+      if (newExtra > 0 || (existingReceivedItems && Object.keys(existingReceivedItems).length > 0)) {
+        nextOverrides[targetMonth] = {
+          ...(newExtra > 0 ? { extraAmount: newExtra } : {}),
+          ...(existingReceivedItems ? { receivedItems: existingReceivedItems } : {}),
+        };
       } else {
         delete nextOverrides[targetMonth];
       }
@@ -600,7 +1316,6 @@ function openStackedSalaryEditor(params: {
           ${benefitsHtml}
         </div>
 
-        <!-- Add New Benefit / Deduction Box (strictly contained, zero horizontal overflow) -->
         <div data-add-box style="width:100%;max-width:100%;box-sizing:border-box;border-radius:16px;border:1px dashed ${
           newIsDeduction ? '#fda4af' : '#6ee7b7'
         };background:${newIsDeduction ? '#fff1f2' : '#ecfdf5'};padding:12px;display:flex;flex-direction:column;gap:8px;">
@@ -802,6 +1517,15 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
     card.style.borderRadius = '28px';
   }
 
+  const showToast = (msg: string) => {
+    savedFlashMsg = msg;
+    renderContent();
+    window.setTimeout(() => {
+      savedFlashMsg = null;
+      if (document.getElementById(OVERLAY_ID)) renderContent();
+    }, 3200);
+  };
+
   const openEditorFromBreakdown = (focusItemId?: string, scrollToAdd?: boolean) => {
     openStackedSalaryEditor({
       job: activeJob,
@@ -810,36 +1534,71 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
       scrollToAdd,
       onSaved: (updatedJob) => {
         activeJob = updatedJob;
-        savedFlashMsg = 'Composição atualizada aqui e em Meus Trabalhos!';
-        renderContent();
-        window.setTimeout(() => {
-          savedFlashMsg = null;
-          if (document.getElementById(OVERLAY_ID)) renderContent();
-        }, 2800);
+        showToast('Composição atualizada aqui e em Meus Trabalhos!');
       },
     });
   };
 
   const renderContent = () => {
     const calc = calculateMonthSalary(activeJob, currentMonth);
+    const receivedMap = getMonthReceivedItemsMap(activeJob, currentMonth);
     const enabledItems = calc.benefits.filter((b) => b.enabled);
     const additions = enabledItems.filter((b) => !b.isDeduction);
     const deductions = enabledItems.filter((b) => Boolean(b.isDeduction));
 
     const editIconSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
+    const baseReceived = receivedMap['__base__'];
+    const baseBadgeHtml = baseReceived
+      ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
+          baseReceived.creditNow ? '#d1fae5' : '#e0f2fe'
+        };color:${baseReceived.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;">${
+          baseReceived.creditNow
+            ? '✓ Recebido'
+            : `📅 ${formatShortDateBR(baseReceived.depositDate)}`
+        }</span>`
+      : '';
+
     const benefitRowsHtml = additions
       .map((b) => {
+        const rec = receivedMap[b.id];
+        const canReceive = b.calculatedAmount > 0;
         const pctTag =
           b.type === 'percent'
             ? `<span style="font-size:10.5px;font-weight:800;color:#047857;margin-left:4px;">(${b.rawValue}%)</span>`
             : '';
+        const recBadge = rec
+          ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
+              rec.creditNow ? '#d1fae5' : '#e0f2fe'
+            };color:${rec.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;white-space:nowrap;">${
+              rec.creditNow ? '✓ Recebido' : `📅 ${formatShortDateBR(rec.depositDate)}`
+            }</span>`
+          : '';
         return `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;">
-            <span style="font-weight:700;color:#334155;min-width:0;flex:1;">${escapeHtml(b.name)}${pctTag}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px dashed #e2e8f0;font-size:13px;border-radius:10px;${
+            canReceive ? 'cursor:pointer;' : ''
+          }" ${
+          canReceive
+            ? `data-receive-item="${escapeHtml(b.id)}" data-receive-name="${escapeHtml(
+                b.name
+              )}" data-receive-amt="${b.calculatedAmount}"`
+            : ''
+        }>
+            <span style="font-weight:700;color:${
+              rec ? '#64748b' : '#334155'
+            };min-width:0;flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">
+              <span>${escapeHtml(b.name)}${pctTag}</span>
+              ${recBadge}
+            </span>
             <div style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
-              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#059669;white-space:nowrap;">+${escapeHtml(formatCurrency(b.calculatedAmount, activeJob.currency))}</span>
-              <button type="button" data-edit-item="${escapeHtml(b.id)}" title="Editar ${escapeHtml(b.name)}" style="width:24px;height:24px;border-radius:8px;border:1px solid #a7f3d0;background:#ffffff;color:#047857;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:${
+                rec ? '#94a3b8' : '#059669'
+              };white-space:nowrap;${rec ? 'text-decoration:line-through;' : ''}">+${escapeHtml(
+          formatCurrency(b.calculatedAmount, activeJob.currency)
+        )}</span>
+              <button type="button" data-edit-item="${escapeHtml(b.id)}" title="Editar ${escapeHtml(
+          b.name
+        )}" style="width:24px;height:24px;border-radius:8px;border:1px solid #a7f3d0;background:#ffffff;color:#047857;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
             </div>
           </div>
         `;
@@ -853,14 +1612,18 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
             ? `<span style="font-size:10.5px;font-weight:800;color:#be123c;margin-left:4px;">(${b.rawValue}%)</span>`
             : '';
         return `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px dashed #fecdd3;font-size:13px;">
-            <span style="font-weight:700;color:#be123c;display:inline-flex;align-items:center;gap:6px;min-width:0;flex:1;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px dashed #fecdd3;font-size:13px;">
+            <span style="font-weight:700;color:#be123c;display:inline-flex;align-items:center;gap:6px;min-width:0;flex:1;flex-wrap:wrap;">
               ${escapeHtml(b.name)}${pctTag}
               <span style="font-size:9px;font-weight:900;text-transform:uppercase;background:#ffe4e6;color:#be123c;padding:1px 6px;border-radius:9999px;">Desconto</span>
             </span>
             <div style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
-              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#e11d48;white-space:nowrap;">-${escapeHtml(formatCurrency(b.calculatedAmount, activeJob.currency))}</span>
-              <button type="button" data-edit-item="${escapeHtml(b.id)}" title="Editar ${escapeHtml(b.name)}" style="width:24px;height:24px;border-radius:8px;border:1px solid #fecdd3;background:#ffffff;color:#be123c;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#e11d48;white-space:nowrap;">-${escapeHtml(
+                formatCurrency(b.calculatedAmount, activeJob.currency)
+              )}</span>
+              <button type="button" data-edit-item="${escapeHtml(b.id)}" title="Editar ${escapeHtml(
+          b.name
+        )}" style="width:24px;height:24px;border-radius:8px;border:1px solid #fecdd3;background:#ffffff;color:#be123c;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
             </div>
           </div>
         `;
@@ -869,12 +1632,26 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
 
     const extraRowHtml =
       calc.extraAmount > 0
-        ? `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed #e2e8f0;font-size:13px;">
-            <span style="font-weight:700;color:#065f46;">Extras / Bônus do mês</span>
-            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#059669;white-space:nowrap;">+${escapeHtml(formatCurrency(calc.extraAmount, activeJob.currency))}</span>
-          </div>
-        `
+        ? (() => {
+            const rec = receivedMap['__extra__'];
+            const recBadge = rec
+              ? `<span style="margin-left:5px;font-size:9px;font-weight:900;background:${
+                  rec.creditNow ? '#d1fae5' : '#e0f2fe'
+                };color:${rec.creditNow ? '#047857' : '#0369a1'};padding:1px 6px;border-radius:9999px;">${
+                  rec.creditNow ? '✓ Recebido' : `📅 ${formatShortDateBR(rec.depositDate)}`
+                }</span>`
+              : '';
+            return `
+              <div data-receive-item="__extra__" data-receive-name="Extras / Bônus do mês" data-receive-amt="${calc.extraAmount}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 4px;border-bottom:1px dashed #e2e8f0;font-size:13px;cursor:pointer;">
+                <span style="font-weight:700;color:#065f46;">Extras / Bônus do mês ${recBadge}</span>
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:${
+                  rec ? '#94a3b8' : '#059669'
+                };white-space:nowrap;${rec ? 'text-decoration:line-through;' : ''}">+${escapeHtml(
+              formatCurrency(calc.extraAmount, activeJob.currency)
+            )}</span>
+              </div>
+            `;
+          })()
         : '';
 
     const emptyBenefitsHtml =
@@ -890,15 +1667,54 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
     ].join(' • ');
 
     const flashHtml = savedFlashMsg
-      ? `<div style="padding:8px 12px;border-radius:12px;background:#059669;color:#ffffff;font-size:11.5px;font-weight:800;text-align:center;">✓ ${escapeHtml(savedFlashMsg)}</div>`
+      ? `<div style="padding:8px 12px;border-radius:12px;background:#059669;color:#ffffff;font-size:11.5px;font-weight:800;text-align:center;">✓ ${escapeHtml(
+          savedFlashMsg
+        )}</div>`
       : '';
+
+    const totalsHtml =
+      calc.separatelyReceivedTotal > 0
+        ? `
+          <div style="display:flex;flex-direction:column;gap:5px;padding-top:10px;margin-top:4px;border-top:2px solid #6ee7b7;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;font-weight:700;color:#475569;">
+              <span>Total da Composição</span>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(
+                formatCurrency(calc.netTotal, activeJob.currency)
+              )}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;font-weight:800;color:#059669;">
+              <span>Já recebido / separado</span>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">-${escapeHtml(
+                formatCurrency(calc.separatelyReceivedTotal, activeJob.currency)
+              )}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:15px;padding-top:4px;border-top:1px dashed #6ee7b7;">
+              <span style="font-weight:900;color:#064e3b;">Restante a Receber</span>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:#047857;white-space:nowrap;">${escapeHtml(
+                formatCurrency(calc.remainingToReceive, activeJob.currency)
+              )}</span>
+            </div>
+          </div>
+        `
+        : `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px;margin-top:4px;border-top:2px solid #6ee7b7;font-size:15px;">
+            <span style="font-weight:900;color:#064e3b;">Total a Receber</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:#047857;white-space:nowrap;">${escapeHtml(
+              formatCurrency(calc.netTotal, activeJob.currency)
+            )}</span>
+          </div>
+        `;
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
         <div style="min-width:0;">
           <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Composição Salarial</div>
-          <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Salário • ${escapeHtml(activeJob.companyName)}</div>
-          <div style="font-size:11px;font-weight:600;color:#d1fae5;">${escapeHtml(activeJob.role)}</div>
+          <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Salário • ${escapeHtml(
+            activeJob.companyName
+          )}</div>
+          <div style="font-size:11px;font-weight:600;color:#d1fae5;">${escapeHtml(
+            activeJob.role
+          )}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
           <button type="button" data-open-full-editor title="Editar salário e benefícios" style="height:34px;padding:0 10px;border-radius:12px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:11px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
@@ -908,20 +1724,36 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
         </div>
       </div>
 
-      <div style="padding:16px 20px 20px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;overscroll-behavior-y:contain;touch-action:pan-y;display:flex;flex-direction:column;gap:13px;width:100%;box-sizing:border-box;">
+      <div style="padding:16px 20px 20px;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;overscroll-behavior-y:contain;touch-action:pan-y;display:flex;flex-direction:column;gap:12px;width:100%;box-sizing:border-box;">
         ${flashHtml}
 
         <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:6px 8px;">
           <button type="button" data-prev-month style="width:32px;height:32px;border-radius:10px;border:none;background:#ffffff;color:#334155;font-size:16px;font-weight:900;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.06);">‹</button>
-          <span style="font-size:12.5px;font-weight:900;color:#0f172a;text-transform:capitalize;">${escapeHtml(formatMonthLabel(currentMonth))}</span>
+          <span style="font-size:12.5px;font-weight:900;color:#0f172a;text-transform:capitalize;">${escapeHtml(
+            formatMonthLabel(currentMonth)
+          )}</span>
           <button type="button" data-next-month style="width:32px;height:32px;border-radius:10px;border:none;background:#ffffff;color:#334155;font-size:16px;font-weight:900;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.06);">›</button>
         </div>
 
+        <div style="font-size:10.5px;font-weight:700;color:#047857;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:7px 11px;text-align:center;">
+          💡 Toque em qualquer item abaixo para marcar como recebido separadamente
+        </div>
+
         <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:18px;padding:14px 16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:8px;border-bottom:1px solid #a7f3d0;font-size:13.5px;">
-            <span style="font-weight:900;color:#0f172a;">Salário Básico</span>
+          <div ${
+            calc.baseSalary > 0
+              ? `data-receive-item="__base__" data-receive-name="Salário Básico" data-receive-amt="${calc.baseSalary}"`
+              : ''
+          } style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 4px 8px;border-bottom:1px solid #a7f3d0;font-size:13.5px;cursor:pointer;">
+            <span style="font-weight:900;color:${
+              baseReceived ? '#64748b' : '#0f172a'
+            };">Salário Básico ${baseBadgeHtml}</span>
             <div style="display:inline-flex;align-items:center;gap:6px;">
-              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:#0f172a;white-space:nowrap;">${escapeHtml(formatCurrency(calc.baseSalary, activeJob.currency))}</span>
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:${
+                baseReceived ? '#94a3b8' : '#0f172a'
+              };white-space:nowrap;${
+      baseReceived ? 'text-decoration:line-through;' : ''
+    }">${escapeHtml(formatCurrency(calc.baseSalary, activeJob.currency))}</span>
               <button type="button" data-open-full-editor title="Editar Salário Básico" style="width:24px;height:24px;border-radius:8px;border:1px solid #a7f3d0;background:#ffffff;color:#047857;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">${editIconSvg}</button>
             </div>
           </div>
@@ -933,10 +1765,7 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
             ${emptyBenefitsHtml}
           </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px;margin-top:4px;border-top:2px solid #6ee7b7;font-size:15px;">
-            <span style="font-weight:900;color:#064e3b;">Total a Receber</span>
-            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;color:#047857;white-space:nowrap;">${escapeHtml(formatCurrency(calc.netTotal, activeJob.currency))}</span>
-          </div>
+          ${totalsHtml}
         </div>
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;color:#64748b;padding:0 2px;">
@@ -944,7 +1773,6 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
           <span>${escapeHtml(footerCounts)}</span>
         </div>
 
-        <!-- Add Benefit / Deduction button directly inside Composição Salarial -->
         <button type="button" data-add-benefit-btn style="width:100%;padding:12px;border-radius:14px;border:2px dashed #10b981;background:#ecfdf5;color:#047857;font-size:12px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
           <span>＋</span> Agregar benefício / desconto
         </button>
@@ -959,10 +1787,38 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
       btn.addEventListener('click', closeBreakdownOverlay);
     });
     card.querySelectorAll('[data-open-full-editor]').forEach((btn) => {
-      btn.addEventListener('click', () => openEditorFromBreakdown());
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditorFromBreakdown();
+      });
     });
     card.querySelectorAll<HTMLButtonElement>('[data-edit-item]').forEach((btn) => {
-      btn.addEventListener('click', () => openEditorFromBreakdown(btn.dataset.editItem));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditorFromBreakdown(btn.dataset.editItem);
+      });
+    });
+    card.querySelectorAll<HTMLElement>('[data-receive-item]').forEach((rowEl) => {
+      rowEl.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement)?.closest('button')) return;
+        const itemId = rowEl.dataset.receiveItem || '';
+        const itemName = rowEl.dataset.receiveName || '';
+        const itemAmount = Number(rowEl.dataset.receiveAmt) || 0;
+        if (!itemId || itemAmount <= 0) return;
+
+        openItemSeparateReceiveModal({
+          job: activeJob,
+          salaryMonth: currentMonth,
+          itemId,
+          itemName,
+          itemAmount,
+          existingEntry: receivedMap[itemId],
+          onUpdated: (updatedJob, toastMsg) => {
+            activeJob = updatedJob;
+            showToast(toastMsg);
+          },
+        });
+      });
     });
     card.querySelector('[data-add-benefit-btn]')?.addEventListener('click', () => {
       openEditorFromBreakdown(undefined, true);
@@ -1013,7 +1869,9 @@ function decorateSalaryIncomeRows() {
     const parent = node.parentElement;
     if (!parent) continue;
     if (
-      parent.closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #sisfinz-partial-receipt-overlay`) ||
+      parent.closest(
+        `#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}, #sisfinz-partial-receipt-overlay`
+      ) ||
       parent.closest('input, textarea, select') ||
       parent.closest('[data-labor-overlay]')
     ) {
@@ -1071,7 +1929,9 @@ export function initSalaryBreakdownViewer() {
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (document.getElementById(EDITOR_OVERLAY_ID)) {
+      if (document.getElementById(ITEM_RECEIVE_OVERLAY_ID)) {
+        closeItemReceiveOverlay();
+      } else if (document.getElementById(EDITOR_OVERLAY_ID)) {
         closeEditorOverlay();
       } else {
         closeBreakdownOverlay();
@@ -1081,7 +1941,12 @@ export function initSalaryBreakdownViewer() {
 
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
-    if (!target || target.closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}`)) return;
+    if (
+      !target ||
+      target.closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}`)
+    ) {
+      return;
+    }
 
     const chip = target.closest(`.${BADGE_CLASS}`) as HTMLElement | null;
     if (chip) {
