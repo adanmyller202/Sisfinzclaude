@@ -14,3 +14,45 @@ button.fixed.md\:hidden.bottom-4.right-4.z-40.bg-gradient-to-tr.from-emerald-600
     top: 18px !important;
   }
 }
+
+/* Prevent large currency figures in Saldo Actual, Ingresos/Gastos, Por Cobrar/Pagar, and Previsión from overlapping or truncating on mobile */
+.w-\[58\%\].min-w-0 {
+  overflow: hidden;
+}
+
+.w-\[58\%\].min-w-0 .font-mono-numbers {
+  font-size: clamp(1.05rem, 4.9vw, 1.38rem) !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.035em !important;
+}
+
+.w-\[42\%\].min-w-0 button[aria-label="Ver ingresos recibidos del mes"] .font-mono-numbers,
+.w-\[42\%\].min-w-0 button[aria-label="Ver gastos realizados del mes"] .font-mono-numbers {
+  font-size: clamp(0.78rem, 3.45vw, 0.96rem) !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.03em !important;
+}
+
+.glass-emerald .text-4xl.font-mono-numbers {
+  font-size: clamp(1.5rem, 6.8vw, 2.25rem) !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.03em !important;
+}
+
+@media (max-width: 639px) {
+  .grid.grid-cols-2 .text-xl.font-mono-numbers {
+    font-size: clamp(1rem, 4.4vw, 1.25rem) !important;
+    letter-spacing: -0.03em !important;
+  }
+}
+
+@media (min-width: 640px) {
+  .w-\[58\%\].min-w-0 .font-mono-numbers {
+    font-size: clamp(1.75rem, 3.2vw, 2.65rem) !important;
+  }
+
+  .w-\[42\%\].min-w-0 button[aria-label="Ver ingresos recibidos del mes"] .font-mono-numbers,
+  .w-\[42\%\].min-w-0 button[aria-label="Ver gastos realizados del mes"] .font-mono-numbers {
+    font-size: clamp(1rem, 1.8vw, 1.2rem) !important;
+  }
+}
