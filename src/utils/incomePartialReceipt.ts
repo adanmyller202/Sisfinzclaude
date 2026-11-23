@@ -32,6 +32,7 @@ interface CachedIncome {
       originalAmount: number;
       receivedSoFar: number;
       remainingAmount: number;
+      installmentCount?: number;
       updatedAt: string;
     }
   >;
@@ -44,6 +45,7 @@ interface PartialPendingEntry {
   originalAmount: number;
   receivedSoFar: number;
   remainingAmount: number;
+  installmentCount: number;
   currency: CurrencyCode;
   updatedAt: string;
 }
@@ -91,13 +93,13 @@ function injectStyles() {
       to { opacity: 1; }
     }
     @keyframes sfPopUp {
-      0% { opacity: 0; transform: translateY(26px) scale(0.95); }
-      70% { opacity: 1; transform: translateY(-3px) scale(1.008); }
+      0% { opacity: 0; transform: translateY(28px) scale(0.94); }
+      72% { opacity: 1; transform: translateY(-3px) scale(1.01); }
       100% { opacity: 1; transform: translateY(0) scale(1); }
     }
     @keyframes sfPulseRing {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.38); }
-      50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
+      50% { box-shadow: 0 0 0 7px rgba(245, 158, 11, 0); }
     }
     .sf-pr-overlay {
       animation: sfFadeIn 0.2s ease-out forwards;
@@ -115,7 +117,7 @@ function injectStyles() {
       transform: scale(0.97);
     }
     .sf-clock-pending {
-      animation: sfPulseRing 2.2s infinite;
+      animation: sfPulseRing 2.1s infinite;
     }
   `;
   document.head.appendChild(style);
@@ -213,29 +215,6 @@ function detectActiveDashboardMonth(): string {
   return getCurrentMonthStr();
 }
 
-function isReceitasTabActive(): boolean {
-  const buttons = document.querySelectorAll<HTMLButtonElement>('button');
-  for (const btn of Array.from(buttons)) {
-    const txt = (btn.textContent || '').trim().toLowerCase();
-    if (!txt || txt.length > 30) continue;
-    if (txt.includes('receita') || txt.includes('ingreso') || txt.includes('income')) {
-      const cls = btn.className || '';
-      const ariaSelected = btn.getAttribute('aria-selected') === 'true';
-      const ariaPressed = btn.getAttribute('aria-pressed') === 'true';
-      const looksActive =
-        ariaSelected ||
-        ariaPressed ||
-        cls.includes('bg-emerald-600') ||
-        cls.includes('bg-slate-900') ||
-        (cls.includes('bg-white') && cls.includes('shadow'));
-      if (looksActive && btn.closest('.overflow-x-auto')) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 function getEffectiveIncomeAmount(inc: CachedIncome, month: string): number {
   const excAmt = inc.exceptions?.[month]?.amount;
   if (excAmt !== undefined && Number.isFinite(Number(excAmt))) {
@@ -245,74 +224,148 @@ function getEffectiveIncomeAmount(inc: CachedIncome, month: string): number {
 }
 
 function parseDisplayedAmount(text: string): number {
-  const match = text.match(/(?:R\$|US\$|\$|€|₲)\s*([0-9.\s]+(?:,[0-9]{1,2})?)/);
+  const match = text.match(/[+-]?\s*(?:R\$|US\$|\$|€|₲)\s*([0-9.\s]+(?:,[0-9]{1,2})?)/);
   if (!match) return 0;
   const normalized = match[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
   const num = Number(normalized);
   return Number.isFinite(num) ? num : 0;
 }
 
-function findIncomeRowContainer(button: HTMLElement): HTMLElement | null {
-  let node: HTMLElement | null = button.parentElement;
+/**
+ * In FinanceDashboard.tsx, both Timeline and Receitas rows have a right-side action wrapper:
+ *   <div class="flex items-center gap-3 ...">
+ *     <div class="text-right"><span class="...">+ $ 1.000.000</span></div>
+ *     <button class="w-9 h-9 rounded-2xl ..."><CheckCircle2 /></button>
+ *     [<button class="w-9 h-9 rounded-2xl bg-rose-500/10 ..."><Trash2 /></button>]
+ *   </div>
+ *
+ * Notice ONLY income rows have a `+` sign before the formatted currency!
+ * Bills have no `+` (or `-` in timeline), and expenses have `-` (and no check button).
+ */
+function findIncomeCardRow(btn: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = btn.parentElement;
   let depth = 0;
-  while (node && depth < 6 && node !== document.body) {
-    const txt = (node.textContent || '').trim();
-    if (
-      txt.length > 8 &&
-      txt.length < 420 &&
-      /(?:R\$|US\$|\$|€|₲)\s*\d/.test(txt)
-    ) {
-      return node;
-    }
+  while (node && depth < 5 && node !== document.body) {
+    const h4 = node.querySelector('h4');
+    if (h4) return node;
     node = node.parentElement;
     depth++;
   }
-  return button.parentElement;
+  return btn.parentElement?.parentElement || btn.parentElement;
 }
 
-function matchIncomeFromRow(rowEl: HTMLElement, activeMonth: string): {
+function isCheckIconButton(btn: HTMLButtonElement): boolean {
+  const cls = btn.className || '';
+  // Must be the 36x36 rounded-2xl action button with an SVG and no text
+  const txt = (btn.textContent || '').trim();
+  if (txt.length > 0) return false;
+  if (!btn.querySelector('svg')) return false;
+  if (!cls.includes('w-9') || !cls.includes('h-9')) return false;
+  // Exclude delete/trash button
+  if (cls.includes('text-rose-500') || cls.includes('bg-rose-500/10')) return false;
+  const svg = btn.querySelector('svg');
+  const svgCls = (svg?.getAttribute('class') || '').toLowerCase();
+  if (svgCls.includes('trash') || svgCls.includes('edit') || svgCls.includes('pencil')) {
+    return false;
+  }
+  return true;
+}
+
+function isPositiveIncomeCheckButton(btn: HTMLButtonElement): boolean {
+  if (btn.dataset.bypassPartialCheck === '1') return false;
+  if (
+    btn.closest(`#${OVERLAY_ID}`) ||
+    btn.closest('#sisfinz-salary-breakdown-overlay') ||
+    btn.closest('#sisfinz-salary-editor-overlay') ||
+    btn.closest('header, nav, [role="dialog"]')
+  ) {
+    return false;
+  }
+
+  if (!isCheckIconButton(btn)) return false;
+
+  // Already fully received (solid emerald-500) -> let user uncheck normally
+  const cls = btn.className || '';
+  if (
+    (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
+    btn.dataset.sfClockDecorated !== '1'
+  ) {
+    return false;
+  }
+
+  // Check sibling amount text inside the immediate right-side action container
+  const actionGroup = btn.parentElement;
+  if (!actionGroup) return false;
+  const groupText = (actionGroup.textContent || '').trim();
+  // Positive income amounts always render with a leading `+` (e.g. "+$ 1.690.944,94" or "+R$ 2.500,00")
+  if (/\+\s*(?:R\$|US\$|ARS|BRL|USD|EUR|PYG|\$|€|₲)/.test(groupText)) {
+    return true;
+  }
+
+  return false;
+}
+
+function matchIncomeFromRow(
+  rowEl: HTMLElement,
+  activeMonth: string
+): {
   income: CachedIncome | null;
   displayName: string;
   displayAmount: number;
   currency: CurrencyCode;
+  existingPartial: PartialPendingEntry | null;
 } {
+  const h4Text = (rowEl.querySelector('h4')?.textContent || '').trim();
   const rowText = (rowEl.textContent || '').trim();
   const displayAmount = parseDisplayedAmount(rowText);
 
   let matched: CachedIncome | null = null;
   if (liveIncomes.length > 0) {
-    // Prefer exact name match (longest name first to avoid partial collisions)
     const sorted = [...liveIncomes].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
-    matched =
-      sorted.find((inc) => inc.name && rowText.toLowerCase().includes(inc.name.toLowerCase())) ||
-      null;
-  }
-
-  let displayName = matched?.name || 'Receita';
-  if (!matched) {
-    const headings = rowEl.querySelectorAll('h3, h4, p, span, div');
-    for (const h of Array.from(headings)) {
-      const t = (h.textContent || '').trim();
-      if (
-        t.length >= 3 &&
-        t.length <= 60 &&
-        !/(?:R\$|US\$|\$|€|₲)\s*\d/.test(t) &&
-        !/^(pendente|pendiente|recebido|recibido|ver composição|parcial)/i.test(t)
-      ) {
-        displayName = t;
-        break;
-      }
+    if (h4Text) {
+      matched =
+        sorted.find((inc) => inc.name && inc.name.trim().toLowerCase() === h4Text.toLowerCase()) ||
+        null;
+    }
+    if (!matched) {
+      matched =
+        sorted.find((inc) => inc.name && rowText.toLowerCase().includes(inc.name.toLowerCase())) ||
+        null;
     }
   }
 
+  const displayName = matched?.name || h4Text || 'Receita';
   const currency: CurrencyCode = matched?.currency || 'ARS';
   const effectiveAmt = matched ? getEffectiveIncomeAmount(matched, activeMonth) : displayAmount;
+
+  let existingPartial: PartialPendingEntry | null = null;
+  if (matched) {
+    const fsPartial = matched.partialPending?.[activeMonth];
+    const localMap = loadPartialMap();
+    const localPartial = localMap[getPartialKey(matched.id, activeMonth)];
+    if (fsPartial && fsPartial.remainingAmount > 0) {
+      existingPartial = {
+        incomeId: matched.id,
+        incomeName: matched.name,
+        month: activeMonth,
+        originalAmount: fsPartial.originalAmount,
+        receivedSoFar: fsPartial.receivedSoFar,
+        remainingAmount: fsPartial.remainingAmount,
+        installmentCount: fsPartial.installmentCount || 1,
+        currency,
+        updatedAt: fsPartial.updatedAt,
+      };
+    } else if (localPartial && localPartial.remainingAmount > 0) {
+      existingPartial = localPartial;
+    }
+  }
 
   return {
     income: matched,
     displayName,
     displayAmount: effectiveAmt > 0 ? effectiveAmt : displayAmount,
     currency,
+    existingPartial,
   };
 }
 
@@ -348,6 +401,7 @@ async function applyPartialReceipt(params: {
   accountId: string;
   activeMonth: string;
   currency: CurrencyCode;
+  existingPartial: PartialPendingEntry | null;
   noteDetail?: string;
 }) {
   const {
@@ -358,20 +412,25 @@ async function applyPartialReceipt(params: {
     accountId,
     activeMonth,
     currency,
+    existingPartial,
     noteDetail,
   } = params;
 
   const uid = auth.currentUser?.uid;
   const now = new Date().toISOString();
   const todayStr = formatLocalDateYYYYMMDD(new Date());
-  const dayOfMonth = Math.max(1, Math.min(31, Number(todayStr.slice(8, 10)) || new Date().getDate()));
+  const dayOfMonth = Math.max(
+    1,
+    Math.min(31, Number(todayStr.slice(8, 10)) || new Date().getDate())
+  );
   const remainingAmount = Math.max(0, Math.round((totalPendingAmount - partialAmount) * 100) / 100);
+  const nextInstallmentNum = (existingPartial?.installmentCount || 0) + 1;
 
   const accounts = loadFallbackAccounts();
   const selectedAcc = accounts.find((a) => a.id === accountId) || accounts[0];
   const effectiveCurrency = (selectedAcc?.currency || currency || 'ARS') as CurrencyCode;
 
-  // 1. Credit selected account balance
+  // 1. Credit selected account balance immediately
   if (uid && selectedAcc && partialAmount > 0) {
     const currentBal = Number(selectedAcc.currentBalance ?? selectedAcc.initialBalance ?? 0);
     const nextBal = Math.round((currentBal + partialAmount) * 100) / 100;
@@ -388,7 +447,6 @@ async function applyPartialReceipt(params: {
       );
     }
 
-    // Update localStorage cache so UI balance reflects immediately
     try {
       const updatedAccounts = accounts.map((a) =>
         a.id === selectedAcc.id ? { ...a, currentBalance: nextBal, updatedAt: now } : a
@@ -400,18 +458,24 @@ async function applyPartialReceipt(params: {
     }
   }
 
-  // 2. Create a new one-off RECEIVED income for the partial amount that landed now
+  // 2. Create a one-off RECEIVED income for the partial amount that landed now
   const partialIncomeId = `inc_partial_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const partialNote = noteDetail
-    ? `Recebimento parcial • ${noteDetail} • Resta: ${formatCurrency(remainingAmount, effectiveCurrency)}`
-    : `Recebimento parcial de ${displayName} • Restante pendente: ${formatCurrency(remainingAmount, effectiveCurrency)}`;
+    ? `Recebimento parcial (${nextInstallmentNum}ª parte) • ${noteDetail} • Resta: ${formatCurrency(
+        remainingAmount,
+        effectiveCurrency
+      )}`
+    : `Recebimento parcial (${nextInstallmentNum}ª parte) de ${displayName} • Resta: ${formatCurrency(
+        remainingAmount,
+        effectiveCurrency
+      )}`;
 
   if (uid) {
     await setDoc(
       doc(db, 'users', uid, 'incomes', partialIncomeId),
       sanitizePayload({
         id: partialIncomeId,
-        name: `${displayName} (Parcial)`,
+        name: `${displayName} (Parcial ${nextInstallmentNum})`,
         amount: partialAmount,
         currency: effectiveCurrency,
         category: income?.category || 'Receita',
@@ -446,16 +510,17 @@ async function applyPartialReceipt(params: {
     );
   }
 
-  // 3. Update original income for this month to hold ONLY the remaining pending amount
+  // 3. Reduce original income for THIS month to the remaining pending balance (keeps totals 100% accurate)
   if (income && uid) {
-    const prevPartial = income.partialPending?.[activeMonth];
-    const originalAmount = prevPartial?.originalAmount || totalPendingAmount;
-    const receivedSoFar = Math.round(((prevPartial?.receivedSoFar || 0) + partialAmount) * 100) / 100;
+    const originalAmount = existingPartial?.originalAmount || totalPendingAmount;
+    const receivedSoFar =
+      Math.round(((existingPartial?.receivedSoFar || 0) + partialAmount) * 100) / 100;
 
     const partialInfo = {
       originalAmount,
       receivedSoFar,
       remainingAmount,
+      installmentCount: nextInstallmentNum,
       updatedAt: now,
     };
 
@@ -464,7 +529,10 @@ async function applyPartialReceipt(params: {
       [activeMonth]: {
         ...(income.exceptions?.[activeMonth] || {}),
         amount: remainingAmount,
-        notes: `Restante pendente (já recebido ${formatCurrency(receivedSoFar, effectiveCurrency)} de ${formatCurrency(originalAmount, effectiveCurrency)})`,
+        notes: `Restante pendente (já recebido ${formatCurrency(
+          receivedSoFar,
+          effectiveCurrency
+        )} de ${formatCurrency(originalAmount, effectiveCurrency)})`,
       },
     };
 
@@ -497,7 +565,6 @@ async function applyPartialReceipt(params: {
       );
     }
 
-    // Persist in local partial map for instant orange-clock decoration
     const pMap = loadPartialMap();
     const pKey = getPartialKey(income.id, activeMonth);
     if (remainingAmount > 0) {
@@ -508,6 +575,7 @@ async function applyPartialReceipt(params: {
         originalAmount,
         receivedSoFar,
         remainingAmount,
+        installmentCount: nextInstallmentNum,
         currency: effectiveCurrency,
         updatedAt: now,
       };
@@ -517,7 +585,7 @@ async function applyPartialReceipt(params: {
     savePartialMap(pMap);
   }
 
-  decoratePartialPendingButtons();
+  window.setTimeout(() => decoratePartialPendingButtons(), 120);
 }
 
 function clearPartialPendingState(incomeId: string | undefined, activeMonth: string) {
@@ -548,11 +616,20 @@ function openReceiptChoiceModal(params: {
   displayAmount: number;
   currency: CurrencyCode;
   activeMonth: string;
+  existingPartial: PartialPendingEntry | null;
 }) {
   injectStyles();
   closePartialOverlay();
 
-  const { originalButton, income, displayName, displayAmount, currency, activeMonth } = params;
+  const {
+    originalButton,
+    income,
+    displayName,
+    displayAmount,
+    currency,
+    activeMonth,
+    existingPartial,
+  } = params;
   const linkedJob = findLinkedLaborJob(income, displayName);
   const salaryCalc = linkedJob ? calculateMonthSalary(linkedJob, activeMonth) : null;
   const accounts = loadFallbackAccounts();
@@ -562,14 +639,12 @@ function openReceiptChoiceModal(params: {
   let selectedAccountId = income?.accountId || linkedJob?.defaultAccountId || accounts[0]?.id || '';
   let freeAmountStr = '';
 
-  // Composition item partial drafts (when it's a salary with composition)
   type CompDraftItem = {
     id: string;
     name: string;
     fullAmount: number;
     checked: boolean;
     partialValue: number;
-    isDeduction?: boolean;
   };
 
   let compItems: CompDraftItem[] = [];
@@ -625,7 +700,10 @@ function openReceiptChoiceModal(params: {
   }
 
   const computeCompositionSum = () =>
-    compItems.reduce((acc, it) => acc + (it.checked ? Math.max(0, Number(it.partialValue) || 0) : 0), 0);
+    compItems.reduce(
+      (acc, it) => acc + (it.checked ? Math.max(0, Number(it.partialValue) || 0) : 0),
+      0
+    );
 
   const render = () => {
     const partialNumeric =
@@ -636,6 +714,43 @@ function openReceiptChoiceModal(params: {
     const isValidPartial = partialNumeric > 0 && partialNumeric < displayAmount;
 
     if (step === 'choose') {
+      const progressBannerHtml = existingPartial
+        ? (() => {
+            const pct = Math.min(
+              100,
+              Math.round((existingPartial.receivedSoFar / Math.max(1, existingPartial.originalAmount)) * 100)
+            );
+            return `
+              <div style="padding:12px 14px;border-radius:16px;background:#fff7ed;border:1px solid #fdba74;display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#9a3412;">
+                  <span>⏳ Recebimento em andamento</span>
+                  <span>${pct}% recebido</span>
+                </div>
+                <div style="height:6px;border-radius:9999px;background:#ffedd5;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f59e0b,#10b981);border-radius:9999px;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:#c2410c;">
+                  <span>Já caiu: ${escapeHtml(formatCurrency(existingPartial.receivedSoFar, currency))}</span>
+                  <span>Falta: ${escapeHtml(formatCurrency(displayAmount, currency))}</span>
+                </div>
+              </div>
+            `;
+          })()
+        : '';
+
+      const totalTitle = existingPartial
+        ? 'Receber valor restante total'
+        : 'Marcar como recebido valor total';
+      const totalSub = existingPartial
+        ? `Quita os ${escapeHtml(formatCurrency(displayAmount, currency))} restantes na conta e muda para verde.`
+        : `Entra ${escapeHtml(formatCurrency(displayAmount, currency))} inteiro na sua conta e fica verde.`;
+
+      const partialTitle = existingPartial
+        ? 'Receber mais uma parte (parcial)'
+        : 'Marcar como recebido valor parcial';
+      const partialSub =
+        'Registra o que caiu agora na conta e mantém o restante pendente com relógio laranja.';
+
       card.innerHTML = `
         <div style="padding:20px 20px 16px;background:linear-gradient(135deg,#059669 0%,#0d9488 100%);color:#ffffff;position:relative;">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
@@ -643,7 +758,9 @@ function openReceiptChoiceModal(params: {
               <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.18);padding:3px 10px;border-radius:9999px;font-size:10px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">
                 <span>✨</span> Confirmar Recebimento
               </div>
-              <div style="font-size:16px;font-weight:900;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(displayName)}</div>
+              <div style="font-size:16px;font-weight:900;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
+                displayName
+              )}</div>
               <div style="font-size:12px;font-weight:700;color:#d1fae5;margin-top:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">
                 Valor pendente: ${escapeHtml(formatCurrency(displayAmount, currency))}
               </div>
@@ -653,33 +770,29 @@ function openReceiptChoiceModal(params: {
         </div>
 
         <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+          ${progressBannerHtml}
+
           <div style="font-size:12px;font-weight:700;color:#475569;text-align:center;margin-bottom:2px;">
             Como você recebeu este valor?
           </div>
 
-          <!-- Option 1: Total -->
           <button type="button" data-choose-total class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #a7f3d0;background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(5,150,105,0.12);">
             <div style="width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,#10b981,#059669);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 14px rgba(5,150,105,0.3);">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
             <div style="min-width:0;flex:1;">
-              <div style="font-size:14px;font-weight:900;color:#064e3b;">Marcar como recebido valor total</div>
-              <div style="font-size:11.5px;font-weight:600;color:#047857;margin-top:2px;line-height:1.35;">
-                Entra ${escapeHtml(formatCurrency(displayAmount, currency))} inteiro na sua conta e fica verde.
-              </div>
+              <div style="font-size:14px;font-weight:900;color:#064e3b;">${totalTitle}</div>
+              <div style="font-size:11.5px;font-weight:600;color:#047857;margin-top:2px;line-height:1.35;">${totalSub}</div>
             </div>
           </button>
 
-          <!-- Option 2: Partial -->
           <button type="button" data-choose-partial class="sf-pr-choice" style="width:100%;text-align:left;padding:16px;border-radius:20px;border:2px solid #fed7aa;background:linear-gradient(135deg,#fffbeb 0%,#ffedd5 100%);cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(245,158,11,0.12);">
             <div style="width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,#f59e0b,#ea580c);color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 14px rgba(234,88,12,0.3);">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
             <div style="min-width:0;flex:1;">
-              <div style="font-size:14px;font-weight:900;color:#7c2d12;">Marcar como recebido valor parcial</div>
-              <div style="font-size:11.5px;font-weight:600;color:#c2410c;margin-top:2px;line-height:1.35;">
-                Registra o que caiu agora na conta e deixa o restante pendente com relógio laranja.
-              </div>
+              <div style="font-size:14px;font-weight:900;color:#7c2d12;">${partialTitle}</div>
+              <div style="font-size:11.5px;font-weight:600;color:#c2410c;margin-top:2px;line-height:1.35;">${partialSub}</div>
             </div>
           </button>
 
@@ -689,15 +802,22 @@ function openReceiptChoiceModal(params: {
         </div>
       `;
 
-      card.querySelectorAll('[data-close-pr]').forEach((b) => b.addEventListener('click', closePartialOverlay));
+      card
+        .querySelectorAll('[data-close-pr]')
+        .forEach((b) => b.addEventListener('click', closePartialOverlay));
       card.querySelector('[data-choose-total]')?.addEventListener('click', () => {
         clearPartialPendingState(income?.id, activeMonth);
         closePartialOverlay();
         originalButton.dataset.bypassPartialCheck = '1';
+        originalButton.dataset.sfClockDecorated = '0';
+        originalButton.classList.remove('sf-clock-pending');
+        originalButton.style.backgroundColor = '';
+        originalButton.style.borderColor = '';
+        originalButton.style.color = '';
         originalButton.click();
         window.setTimeout(() => {
           delete originalButton.dataset.bypassPartialCheck;
-        }, 250);
+        }, 300);
       });
       card.querySelector('[data-choose-partial]')?.addEventListener('click', () => {
         step = 'partial';
@@ -706,15 +826,14 @@ function openReceiptChoiceModal(params: {
       return;
     }
 
-    // Step 2: Partial receipt form
     const accOptionsHtml =
       accounts.length > 0
         ? accounts
             .map(
               (a) =>
-                `<option value="${escapeHtml(a.id)}" ${a.id === selectedAccountId ? 'selected' : ''}>${escapeHtml(
-                  a.name
-                )} (${escapeHtml(a.currency)})</option>`
+                `<option value="${escapeHtml(a.id)}" ${
+                  a.id === selectedAccountId ? 'selected' : ''
+                }>${escapeHtml(a.name)} (${escapeHtml(a.currency)})</option>`
             )
             .join('')
         : `<option value="">Conta padrão</option>`;
@@ -732,7 +851,7 @@ function openReceiptChoiceModal(params: {
             partialMode === 'composition'
               ? 'background:#ffffff;color:#047857;box-shadow:0 1px 3px rgba(0,0,0,0.08);'
               : 'background:transparent;color:#64748b;'
-          }">Por composição salarial</button>
+          }">Por itens do salário</button>
         </div>
       `
         : '';
@@ -744,7 +863,9 @@ function openReceiptChoiceModal(params: {
         </label>
         <input type="number" inputmode="decimal" step="any" data-free-input value="${escapeHtml(
           freeAmountStr
-        )}" placeholder="Ex: ${Math.round(displayAmount / 2)}" style="width:100%;box-sizing:border-box;padding:13px 14px;border-radius:16px;border:2px solid #fdba74;background:#fffbeb;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:900;color:#0f172a;outline:none;" />
+        )}" placeholder="Ex: ${Math.round(
+      displayAmount / 2
+    )}" style="width:100%;box-sizing:border-box;padding:13px 14px;border-radius:16px;border:2px solid #fdba74;background:#fffbeb;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:900;color:#0f172a;outline:none;" />
         <div style="display:flex;gap:6px;">
           ${[25, 50, 75]
             .map(
@@ -759,7 +880,7 @@ function openReceiptChoiceModal(params: {
     const compBodyHtml = `
       <div style="display:flex;flex-direction:column;gap:8px;max-height:210px;overflow-y:auto;padding-right:2px;">
         <div style="font-size:10.5px;font-weight:800;color:#475569;">
-          Marque os itens recebidos agora (pode ajustar o valor parcial de cada um):
+          Marque o que recebeu agora (pode ajustar o valor parcial de cada item):
         </div>
         ${compItems
           .map(
@@ -793,8 +914,12 @@ function openReceiptChoiceModal(params: {
       <div style="padding:18px 20px;background:linear-gradient(135deg,#f59e0b 0%,#ea580c 100%);color:#ffffff;display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div style="min-width:0;">
           <div style="font-size:10px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:#ffedd5;">Recebimento Parcial</div>
-          <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(displayName)}</div>
-          <div style="font-size:11px;font-weight:700;color:#fef3c7;">Total pendente: ${escapeHtml(formatCurrency(displayAmount, currency))}</div>
+          <div style="font-size:15px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(
+            displayName
+          )}</div>
+          <div style="font-size:11px;font-weight:700;color:#fef3c7;">Total pendente: ${escapeHtml(
+            formatCurrency(displayAmount, currency)
+          )}</div>
         </div>
         <button type="button" data-close-pr style="width:34px;height:34px;border-radius:12px;border:none;background:rgba(255,255,255,0.2);color:#ffffff;font-size:17px;font-weight:900;cursor:pointer;">✕</button>
       </div>
@@ -812,7 +937,6 @@ function openReceiptChoiceModal(params: {
           </select>
         </div>
 
-        <!-- Live Impact Preview -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div style="padding:10px 12px;border-radius:14px;background:#ecfdf5;border:1px solid #a7f3d0;">
             <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;color:#047857;">Cai agora na conta</div>
@@ -847,7 +971,9 @@ function openReceiptChoiceModal(params: {
       </div>
     `;
 
-    card.querySelectorAll('[data-close-pr]').forEach((b) => b.addEventListener('click', closePartialOverlay));
+    card
+      .querySelectorAll('[data-close-pr]')
+      .forEach((b) => b.addEventListener('click', closePartialOverlay));
     card.querySelector('[data-back-step]')?.addEventListener('click', () => {
       step = 'choose';
       render();
@@ -959,6 +1085,7 @@ function openReceiptChoiceModal(params: {
           accountId: selectedAccountId,
           activeMonth,
           currency,
+          existingPartial,
           noteDetail: detailParts,
         });
         closePartialOverlay();
@@ -981,13 +1108,12 @@ function openReceiptChoiceModal(params: {
   document.body.appendChild(overlay);
 }
 
-/** Visually turn pending partial incomes' check button into an orange clock icon + remaining badge */
+/** Visually turn pending partial incomes' right-side check button into an orange pulsing clock + remaining badge */
 function decoratePartialPendingButtons() {
   if (typeof document === 'undefined') return;
   const activeMonth = detectActiveDashboardMonth();
   const pMap = loadPartialMap();
 
-  // Merge Firestore partialPending entries into local map
   for (const inc of liveIncomes) {
     const pp = inc.partialPending?.[activeMonth];
     const key = getPartialKey(inc.id, activeMonth);
@@ -999,6 +1125,7 @@ function decoratePartialPendingButtons() {
         originalAmount: pp.originalAmount,
         receivedSoFar: pp.receivedSoFar,
         remainingAmount: pp.remainingAmount,
+        installmentCount: pp.installmentCount || 1,
         currency: inc.currency || 'ARS',
         updatedAt: pp.updatedAt,
       };
@@ -1010,29 +1137,21 @@ function decoratePartialPendingButtons() {
   );
   if (activePartials.length === 0) return;
 
-  const buttons = document.querySelectorAll<HTMLButtonElement>('main button');
+  const buttons = document.querySelectorAll<HTMLButtonElement>('button');
   for (const btn of Array.from(buttons)) {
-    if (btn.closest(`#${OVERLAY_ID}`) || btn.closest('[role="dialog"]')) continue;
-    const row = findIncomeRowContainer(btn);
+    if (!isPositiveIncomeCheckButton(btn)) continue;
+
+    const row = findIncomeCardRow(btn);
     if (!row) continue;
+    const h4Text = (row.querySelector('h4')?.textContent || '').trim().toLowerCase();
     const rowText = (row.textContent || '').toLowerCase();
 
     const matchedPartial = activePartials.find(
-      (p) => p.incomeName && rowText.includes(p.incomeName.toLowerCase())
+      (p) =>
+        p.incomeName &&
+        (h4Text === p.incomeName.toLowerCase() || rowText.includes(p.incomeName.toLowerCase()))
     );
     if (!matchedPartial) continue;
-
-    // Identify the check button on this row (small icon button, not edit/delete)
-    const rect = btn.getBoundingClientRect();
-    if (rect.width === 0 || rect.width > 56 || rect.height > 56) continue;
-    const title = (btn.getAttribute('title') || btn.getAttribute('aria-label') || '').toLowerCase();
-    if (/(edit|exclu|delet|remov|apag|composi)/i.test(title)) continue;
-    if (!btn.querySelector('svg')) continue;
-    // Skip if already received green check
-    if (btn.className.includes('bg-emerald-500') || btn.className.includes('bg-emerald-600')) continue;
-    // Skip if button is on the right side (edit/delete icons sit on the right)
-    const rowRect = row.getBoundingClientRect();
-    if (rect.left - rowRect.left > rowRect.width * 0.45) continue;
 
     if (btn.dataset.sfClockDecorated !== '1') {
       btn.dataset.sfClockDecorated = '1';
@@ -1047,7 +1166,7 @@ function decoratePartialPendingButtons() {
           matchedPartial.currency
         )}`
       );
-      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+      btn.innerHTML = `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
     }
 
     if (!row.querySelector(`.${PARTIAL_BADGE_CLASS}`)) {
@@ -1058,73 +1177,11 @@ function decoratePartialPendingButtons() {
         matchedPartial.currency
       )}`;
       badge.style.cssText =
-        'display:inline-flex;align-items:center;gap:4px;margin-top:4px;margin-left:4px;padding:2px 8px;border-radius:9999px;background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:10px;font-weight:800;';
-      const titleEl = row.querySelector('[data-sisfinz-salary-decorated="1"]') || btn.nextElementSibling;
-      if (titleEl) {
-        titleEl.appendChild(badge);
-      }
+        'display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:9999px;background:#fff7ed;border:1px solid #fdba74;color:#c2410c;font-size:10px;font-weight:800;';
+      const h4 = row.querySelector('h4');
+      h4?.parentElement?.insertAdjacentElement('afterend', badge);
     }
   }
-}
-
-function isIncomeCheckButton(btn: HTMLButtonElement): boolean {
-  if (btn.dataset.bypassPartialCheck === '1') return false;
-  if (
-    btn.closest(`#${OVERLAY_ID}`) ||
-    btn.closest('#sisfinz-salary-breakdown-overlay') ||
-    btn.closest('#sisfinz-salary-editor-overlay') ||
-    btn.closest('header, nav, [role="dialog"]')
-  ) {
-    return false;
-  }
-
-  const title = (btn.getAttribute('title') || btn.getAttribute('aria-label') || '').toLowerCase();
-  const txt = (btn.textContent || '').trim().toLowerCase();
-
-  // Never intercept edit, delete, add, or bill/expense payment buttons
-  if (
-    /(edit|exclu|delet|remov|apag|pagar|fatura|despesa|novo|nova|adicionar|composi|voltar|fechar|cancel)/i.test(
-      `${title} ${txt}`
-    )
-  ) {
-    return false;
-  }
-
-  // Already fully received (solid emerald green button) → let user uncheck normally
-  const cls = btn.className || '';
-  if (
-    (cls.includes('bg-emerald-500') || cls.includes('bg-emerald-600')) &&
-    btn.dataset.sfClockDecorated !== '1'
-  ) {
-    return false;
-  }
-
-  // Case 1: Explicit income receive label/title
-  if (/(receb|recib|receiv)/i.test(`${title} ${txt}`) && !/(recebido|recibido|received)/i.test(txt)) {
-    const row = findIncomeRowContainer(btn);
-    if (row && /(?:R\$|US\$|\$|€|₲)\s*\d/.test(row.textContent || '')) {
-      return true;
-    }
-  }
-
-  // Case 2: Left-side check circle/clock icon inside the Receitas tab
-  if (isReceitasTabActive() && btn.querySelector('svg') && txt.length <= 12) {
-    const row = findIncomeRowContainer(btn);
-    if (!row) return false;
-    const rect = btn.getBoundingClientRect();
-    const rowRect = row.getBoundingClientRect();
-    const isSmallLeftButton =
-      rect.width >= 20 &&
-      rect.width <= 56 &&
-      rect.height >= 20 &&
-      rect.height <= 56 &&
-      rect.left - rowRect.left <= rowRect.width * 0.38;
-    if (isSmallLeftButton) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function subscribeUserData(uid: string | null) {
@@ -1204,7 +1261,7 @@ export function initIncomePartialReceipt() {
     if (e.key === 'Escape') closePartialOverlay();
   });
 
-  // Capture-phase click interceptor for any pending income check button
+  // Capture-phase click interceptor for any pending positive income check button (Receitas + Visão Geral)
   document.addEventListener(
     'click',
     (event) => {
@@ -1212,13 +1269,16 @@ export function initIncomePartialReceipt() {
       if (!target) return;
       const btn = target.closest('button') as HTMLButtonElement | null;
       if (!btn) return;
-      if (!isIncomeCheckButton(btn)) return;
+      if (!isPositiveIncomeCheckButton(btn)) return;
 
-      const row = findIncomeRowContainer(btn);
+      const row = findIncomeCardRow(btn);
       if (!row) return;
 
       const activeMonth = detectActiveDashboardMonth();
-      const { income, displayName, displayAmount, currency } = matchIncomeFromRow(row, activeMonth);
+      const { income, displayName, displayAmount, currency, existingPartial } = matchIncomeFromRow(
+        row,
+        activeMonth
+      );
       if (displayAmount <= 0) return;
 
       event.preventDefault();
@@ -1232,6 +1292,7 @@ export function initIncomePartialReceipt() {
         displayAmount,
         currency,
         activeMonth,
+        existingPartial,
       });
     },
     true
