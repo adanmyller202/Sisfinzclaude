@@ -56,3 +56,16 @@ button.fixed.md\:hidden.bottom-4.right-4.z-40.bg-gradient-to-tr.from-emerald-600
     font-size: clamp(1rem, 1.8vw, 1.2rem) !important;
   }
 }
+
+/* General responsive sizing & anti-overlap guards for transaction/form modals on mobile */
+.glass-modal input,
+.glass-modal select,
+.glass-modal textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.glass-modal input[type="date"] {
+  min-height: 48px;
+}

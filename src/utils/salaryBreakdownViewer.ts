@@ -41,6 +41,36 @@ const MONTH_NAME_MAP: Record<string, number> = {
   dez: 12, dezembro: 12, dic: 12, diciembre: 12, dec: 12, december: 12,
 };
 
+let ghostClickBlockUntil = 0;
+
+function armGhostClickShield(ms = 420) {
+  ghostClickBlockUntil = Date.now() + ms;
+}
+
+/**
+ * If an underlying TransactionModal ("Editar Receita") was inadvertently triggered
+ * when opening or closing the Composição Salarial overlay, dismiss it cleanly so the user
+ * returns straight to the Receitas list.
+ */
+function dismissAccidentalUnderlyingTransactionModal() {
+  if (typeof document === 'undefined') return;
+  const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  for (const dlg of Array.from(dialogs)) {
+    if (
+      dlg.id === OVERLAY_ID ||
+      dlg.id === EDITOR_OVERLAY_ID ||
+      dlg.id === ITEM_RECEIVE_OVERLAY_ID ||
+      dlg.id === 'sisfinz-partial-receipt-overlay'
+    ) {
+      continue;
+    }
+    const closeBtn = dlg.querySelector<HTMLButtonElement>('button[aria-label="Fechar"]');
+    if (closeBtn) {
+      closeBtn.click();
+    }
+  }
+}
+
 function sanitizePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
   return JSON.parse(JSON.stringify(obj));
 }
@@ -338,7 +368,6 @@ async function persistUpdatedJobAndSyncIncome(params: {
 
 /**
  * Mark an individual salary composition item (full OR partial!) as received immediately or scheduled.
- * Supports multiple partial installments on the same benefit/item without ever double-counting.
  */
 async function markCompositionItemReceivedSeparately(params: {
   job: LaborJob;
@@ -539,10 +568,6 @@ async function markCompositionItemReceivedSeparately(params: {
   });
 }
 
-/**
- * Safely undo either ONE installment or ALL installments of a separately-received item,
- * reversing credited account balance, deleting linked income(s), and restoring salary remaining amount.
- */
 async function undoCompositionItemInstallment(params: {
   job: LaborJob;
   salaryMonth: string;
@@ -653,7 +678,6 @@ function findJobByCompanyName(companyText: string): LaborJob | null {
   );
 }
 
-/** Try to detect the currently selected dashboard month (YYYY-MM) from visible UI text */
 function detectActiveDashboardMonth(): string {
   try {
     const candidates = document.querySelectorAll(
@@ -708,18 +732,22 @@ function closeEditorOverlay() {
   if (existing) existing.remove();
 }
 
-function closeBreakdownOverlay() {
+function closeBreakdownOverlay(alsoCloseUnderlyingTxModal = true) {
+  armGhostClickShield(450);
   closeItemReceiveOverlay();
   closeEditorOverlay();
   const existing = document.getElementById(OVERLAY_ID);
   if (existing) existing.remove();
+  if (alsoCloseUnderlyingTxModal) {
+    dismissAccidentalUnderlyingTransactionModal();
+    window.setTimeout(dismissAccidentalUnderlyingTransactionModal, 60);
+  }
 }
 
 /**
- * Interactive modal opened when the user taps an individual item inside Composição Salarial
- * (e.g., Bônus asistencia, Aguinaldo, Turnos Cortados, Salário Básico).
- * Supports BOTH Total (remaining) AND Partial receipt (with free input + 25%/50%/75% chips),
- * plus Immediate credit vs. Scheduled date, and full/per-installment Undo.
+ * Interactive modal opened when the user taps an individual item inside Composição Salarial.
+ * After confirming save (credit now, schedule date, or undo), closes ALL composition overlays
+ * cleanly so the user lands directly back on the Receitas list without any lingering screen.
  */
 function openItemSeparateReceiveModal(params: {
   job: LaborJob;
@@ -738,9 +766,8 @@ function openItemSeparateReceiveModal(params: {
   const calc = calculateMonthSalary(job, salaryMonth);
 
   const installments = normalizeInstallments(existingEntry);
-  const alreadyPaidForItem = Math.round(
-    installments.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100
-  ) / 100;
+  const alreadyPaidForItem =
+    Math.round(installments.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100) / 100;
   const remainingForItem = Math.max(0, Math.round((itemAmount - alreadyPaidForItem) * 100) / 100);
 
   let amountType: 'total' | 'partial' = 'total';
@@ -834,7 +861,6 @@ function openItemSeparateReceiveModal(params: {
         `
         : '';
 
-    // Case A: Item is 100% received/scheduled already
     if (remainingForItem <= 0 && existingEntry) {
       card.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#059669,#0d9488);color:#ffffff;flex-shrink:0;">
@@ -878,32 +904,29 @@ function openItemSeparateReceiveModal(params: {
           if (isProcessing) return;
           isProcessing = true;
           renderModal();
-          const updated = await undoCompositionItemInstallment({
+          await undoCompositionItemInstallment({
             job,
             salaryMonth,
             entry: existingEntry,
             installmentId: btn.dataset.undoInst,
           });
-          closeItemReceiveOverlay();
-          onUpdated(updated, `Parcela de ${itemName} desfeita.`);
+          closeBreakdownOverlay(true);
         });
       });
       card.querySelector('[data-undo-all]')?.addEventListener('click', async () => {
         if (isProcessing) return;
         isProcessing = true;
         renderModal();
-        const updated = await undoCompositionItemInstallment({
+        await undoCompositionItemInstallment({
           job,
           salaryMonth,
           entry: existingEntry,
         });
-        closeItemReceiveOverlay();
-        onUpdated(updated, `${itemName} voltou integralmente para o salário previsto.`);
+        closeBreakdownOverlay(true);
       });
       return;
     }
 
-    // Case B: Item has remaining amount to receive (either full item or remaining after partial)
     const accOptionsHtml =
       accounts.length > 0
         ? accounts
@@ -915,11 +938,6 @@ function openItemSeparateReceiveModal(params: {
             )
             .join('')
         : `<option value="">Conta padrão</option>`;
-
-    const totalBtnLabel =
-      alreadyPaidForItem > 0
-        ? `Receber restante total (${formatCurrency(remainingForItem, job.currency)})`
-        : `Receber valor total (${formatCurrency(remainingForItem, job.currency)})`;
 
     const partialInputBoxHtml =
       amountType === 'partial'
@@ -968,7 +986,6 @@ function openItemSeparateReceiveModal(params: {
       <div style="padding:15px 18px 20px;display:flex;flex-direction:column;gap:11px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;box-sizing:border-box;">
         ${installmentsHistoryHtml}
 
-        <!-- Step 1: Total vs Parcial of this benefit/item -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
           <button type="button" data-ir-amt-type="total" style="padding:11px 10px;border-radius:14px;border:2px solid ${
             amountType === 'total' ? '#059669' : '#e2e8f0'
@@ -1001,7 +1018,6 @@ function openItemSeparateReceiveModal(params: {
 
         ${partialInputBoxHtml}
 
-        <!-- Step 2: Immediate vs Scheduled Date -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
           <button type="button" data-ir-mode="now" style="padding:10px;border-radius:14px;border:2px solid ${
             whenMode === 'now' ? '#059669' : '#e2e8f0'
@@ -1044,7 +1060,6 @@ function openItemSeparateReceiveModal(params: {
           </select>
         </div>
 
-        <!-- Zero-duplication impact summary -->
         <div style="padding:11px 13px;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:4px;">
           <div style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">
             Ajuste automático sem duplicação
@@ -1086,8 +1101,8 @@ function openItemSeparateReceiveModal(params: {
               isProcessing
                 ? 'Salvando...'
                 : whenMode === 'now'
-                ? 'Confirmar e Creditar'
-                : 'Agendar Ingresso'
+                ? 'Salvar e Creditar'
+                : 'Salvar Agendamento'
             }
           </button>
         </div>
@@ -1103,14 +1118,13 @@ function openItemSeparateReceiveModal(params: {
         if (isProcessing || !existingEntry) return;
         isProcessing = true;
         renderModal();
-        const updated = await undoCompositionItemInstallment({
+        await undoCompositionItemInstallment({
           job,
           salaryMonth,
           entry: existingEntry,
           installmentId: btn.dataset.undoInst,
         });
-        closeItemReceiveOverlay();
-        onUpdated(updated, `Parcela de ${itemName} desfeita.`);
+        closeBreakdownOverlay(true);
       });
     });
 
@@ -1204,7 +1218,7 @@ function openItemSeparateReceiveModal(params: {
       isProcessing = true;
       renderModal();
       try {
-        const updated = await markCompositionItemReceivedSeparately({
+        await markCompositionItemReceivedSeparately({
           job,
           salaryMonth,
           itemId,
@@ -1215,16 +1229,9 @@ function openItemSeparateReceiveModal(params: {
           depositDate: whenMode === 'now' ? todayStr : depositDate,
           accountId: selectedAccountId,
         });
-        closeItemReceiveOverlay();
-        const isPartialMsg = amt < remainingForItem;
-        onUpdated(
-          updated,
-          whenMode === 'now'
-            ? `${itemName}${isPartialMsg ? ' (parcial)' : ''} creditado e abatido do salário!`
-            : `${itemName}${isPartialMsg ? ' (parcial)' : ''} agendado para ${formatShortDateBR(
-                depositDate
-              )} e abatido do salário!`
-        );
+        // Close BOTH the item modal AND the Composição Salarial overlay so the user
+        // immediately returns to the clean list of Receitas!
+        closeBreakdownOverlay(true);
       } catch (err) {
         console.warn('[SalaryBreakdown] separate item receipt failed:', err);
         isProcessing = false;
@@ -1802,7 +1809,8 @@ function buildItemStatusBadge(
 }
 
 function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string) {
-  closeBreakdownOverlay();
+  closeBreakdownOverlay(false);
+  armGhostClickShield(350);
 
   let activeJob: LaborJob = initialJob;
   let currentMonth = initialMonth;
@@ -2081,7 +2089,11 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
     `;
 
     card.querySelectorAll('[data-close-breakdown]').forEach((btn) => {
-      btn.addEventListener('click', closeBreakdownOverlay);
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeBreakdownOverlay(true);
+      });
     });
     card.querySelectorAll('[data-open-full-editor]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -2134,7 +2146,11 @@ function renderSalaryBreakdownOverlay(initialJob: LaborJob, initialMonth: string
   overlay.appendChild(card);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeBreakdownOverlay();
+    if (e.target === overlay) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeBreakdownOverlay(true);
+    }
   });
 
   document.body.appendChild(overlay);
@@ -2197,6 +2213,14 @@ function decorateSalaryIncomeRows() {
       chip.textContent = 'Ver composição salarial';
       chip.style.cssText =
         'display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:9999px;border:1px solid #a7f3d0;background:#ecfdf5;color:#047857;font-size:10px;font-weight:800;letter-spacing:0.02em;cursor:pointer;line-height:1.4;';
+      // Stop pointerdown/touchstart propagation so the parent card's onClick={() => handleEditIncome(inc)}
+      // never fires behind the Composição Salarial overlay!
+      chip.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+      });
+      chip.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+      }, { passive: true });
       el.insertAdjacentElement('afterend', chip);
     }
   });
@@ -2230,43 +2254,62 @@ export function initSalaryBreakdownViewer() {
         closeItemReceiveOverlay();
       } else if (document.getElementById(EDITOR_OVERLAY_ID)) {
         closeEditorOverlay();
-      } else {
-        closeBreakdownOverlay();
+      } else if (document.getElementById(OVERLAY_ID)) {
+        closeBreakdownOverlay(true);
       }
     }
   });
 
-  document.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement | null;
-    if (
-      !target ||
-      target.closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}`)
-    ) {
-      return;
-    }
+  // Capture-phase click listener prevents the underlying income card's React onClick
+  // from opening TransactionModal behind the Composição Salarial overlay, and absorbs ghost clicks on close.
+  document.addEventListener(
+    'click',
+    (event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
 
-    const chip = target.closest(`.${BADGE_CLASS}`) as HTMLElement | null;
-    if (chip) {
-      event.preventDefault();
-      event.stopPropagation();
-      const company = chip.dataset.sisfinzSalaryCompany || '';
-      const job = findJobByCompanyName(company);
-      if (job) {
-        renderSalaryBreakdownOverlay(job, detectActiveDashboardMonth());
-      }
-      return;
-    }
-
-    if (target.closest('button, a, input, select, textarea')) return;
-    const decorated = target.closest('[data-sisfinz-salary-decorated="1"]') as HTMLElement | null;
-    if (decorated) {
-      const company = decorated.dataset.sisfinzSalaryCompany || '';
-      const job = findJobByCompanyName(company);
-      if (job) {
+      if (
+        Date.now() < ghostClickBlockUntil &&
+        !target.closest(
+          `#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}, #sisfinz-partial-receipt-overlay`
+        )
+      ) {
         event.preventDefault();
         event.stopPropagation();
-        renderSalaryBreakdownOverlay(job, detectActiveDashboardMonth());
+        event.stopImmediatePropagation();
+        return;
       }
-    }
-  });
+
+      if (target.closest(`#${OVERLAY_ID}, #${EDITOR_OVERLAY_ID}, #${ITEM_RECEIVE_OVERLAY_ID}`)) {
+        return;
+      }
+
+      const chip = target.closest(`.${BADGE_CLASS}`) as HTMLElement | null;
+      if (chip) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const company = chip.dataset.sisfinzSalaryCompany || '';
+        const job = findJobByCompanyName(company);
+        if (job) {
+          renderSalaryBreakdownOverlay(job, detectActiveDashboardMonth());
+        }
+        return;
+      }
+
+      if (target.closest('button, a, input, select, textarea')) return;
+      const decorated = target.closest('[data-sisfinz-salary-decorated="1"]') as HTMLElement | null;
+      if (decorated) {
+        const company = decorated.dataset.sisfinzSalaryCompany || '';
+        const job = findJobByCompanyName(company);
+        if (job) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          renderSalaryBreakdownOverlay(job, detectActiveDashboardMonth());
+        }
+      }
+    },
+    true
+  );
 }
