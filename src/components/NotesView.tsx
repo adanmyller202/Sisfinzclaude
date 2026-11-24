@@ -63,6 +63,7 @@ import {
   NoteTemplateId,
   buildNoteFromTemplate,
 } from '../utils/noteTemplates';
+import { shareOrDownloadNotePdf } from '../utils/notePdfExport';
 import { NoteDrawingModal } from './NoteDrawingModal';
 import { NotePinModal } from './NotePinModal';
 import { SmartNoteEditor } from './SmartNoteEditor';
@@ -283,6 +284,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [moveNewFolderIcon, setMoveNewFolderIcon] = useState<NoteFolderIcon>('folder');
   const [moveNewFolderColor, setMoveNewFolderColor] = useState<NoteFolderColor>('emerald');
 
+  // In-app PDF Preview & Export modal (never uses window.open so iOS PWA never gets trapped)
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
   const [isEditorMenuOpen, setIsEditorMenuOpen] = useState(false);
   const [isTagsPopoverOpen, setIsTagsPopoverOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -381,6 +386,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       setIsTemplatePickerOpen(false);
       setContextMenuNoteId(null);
       setMoveModalNoteId(null);
+      setIsPdfPreviewOpen(false);
       setUnlockedIds({});
       return;
     }
@@ -662,6 +668,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setPreviewVersion(null);
     setIsEditorMenuOpen(false);
     setIsTagsPopoverOpen(false);
+    setIsPdfPreviewOpen(false);
     setActiveNoteId(null);
   };
 
@@ -898,69 +905,34 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setIsEditorMenuOpen(false);
   };
 
-  const handlePrintNotePdf = () => {
+  const handleOpenPdfPreview = () => {
     if (!activeNote) return;
     setIsEditorMenuOpen(false);
-    const win = window.open('', '_blank', 'width=820,height=920');
-    if (!win) return;
-    const blocksHtml = (activeNote.blocks || [])
-      .map((b) => {
-        const align = b.align ? ` style="text-align:${b.align}"` : '';
-        if (b.type === 'heading') return `<h1${align}>${b.html}</h1>`;
-        if (b.type === 'subheading') return `<h2${align}>${b.html}</h2>`;
-        if (b.type === 'heading3') return `<h3${align}>${b.html}</h3>`;
-        if (b.type === 'quote') return `<blockquote${align}>${b.html}</blockquote>`;
-        if (b.type === 'checklist') return `<p${align}>${b.checked ? '☑' : '☐'} ${b.html}</p>`;
-        if (b.type === 'bullet') return `<p${align}>• ${b.html}</p>`;
-        if (b.type === 'numbered') return `<p${align}>- ${b.html}</p>`;
-        return `<p${align}>${b.html}</p>`;
-      })
-      .join('');
-    const tablesHtml = (activeNote.tables || [])
-      .map(
-        (tbl) =>
-          `<table><thead><tr>${tbl.headers
-            .map((h) => `<th>${h}</th>`)
-            .join('')}</tr></thead><tbody>${tbl.rows
-            .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`)
-            .join('')}</tbody></table>`
-      )
-      .join('');
-    const imagesHtml =
-      (activeNote.images || []).length > 0
-        ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;">${activeNote.images
-            .map(
-              (img) =>
-                `<img src="${img.url}" style="max-width:260px;border-radius:10px;border:1px solid #e2e8f0;" />`
-            )
-            .join('')}</div>`
-        : '';
-    win.document.write(`
-      <html>
-        <head>
-          <title>${activeNote.title || 'Nota SisFinz'}</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 36px; color: #0f172a; line-height: 1.65; max-width: 740px; margin: 0 auto; }
-            h1.doc-title { color: #064e3b; margin-bottom: 4px; font-size: 26px; }
-            .meta { color: #64748b; font-size: 12px; margin-bottom: 24px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
-            blockquote { border-left: 3px solid #10b981; padding-left: 12px; color: #475569; font-style: italic; margin: 12px 0; }
-            table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-            th { background: #ecfdf5; color: #064e3b; }
-          </style>
-        </head>
-        <body>
-          <h1 class="doc-title">${activeNote.title || 'Nota sem título'}</h1>
-          <div class="meta">SisFinz Notas • ${formatNoteDate(activeNote.updatedAt, isEs)}</div>
-          <div>${blocksHtml}</div>
-          ${tablesHtml}
-          ${imagesHtml}
-        </body>
-      </html>
-    `);
-    win.document.close();
-    win.focus();
-    window.setTimeout(() => win.print(), 250);
+    setIsPdfPreviewOpen(true);
+  };
+
+  const handleExportPdfFile = async () => {
+    if (!activeNote || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const outcome = await shareOrDownloadNotePdf(
+        activeNote,
+        formatNoteDate(activeNote.updatedAt, isEs)
+      );
+      if (outcome === 'downloaded') {
+        showToast(isEs ? 'PDF descargado' : 'PDF baixado');
+      }
+    } catch {
+      showToast(isEs ? 'No se pudo generar el PDF' : 'Erro ao gerar PDF');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleNativePrintFromPreview = () => {
+    if (typeof window !== 'undefined' && typeof window.print === 'function') {
+      window.print();
+    }
   };
 
   const handleCreateFolderSubmit = async (e: React.FormEvent) => {
@@ -1777,7 +1749,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, y: 14 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                className="flex h-full w-full max-w-full flex-col bg-[#EFF6F3] overflow-hidden"
+                className="flex h-full w-full max-w-full flex-col bg-[#EFF6F3] overflow-hidden print:hidden"
               >
                 {activeAccentStyle && (
                   <div className={`h-[3.5px] w-full shrink-0 ${activeAccentStyle.accentBar}`} />
@@ -2041,7 +2013,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={handlePrintNotePdf}
+                            onClick={handleOpenPdfPreview}
                             className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
                           >
                             <Printer className="h-3.5 w-3.5 text-emerald-600" />
@@ -2398,6 +2370,219 @@ export const NotesView: React.FC<NotesViewProps> = ({
             )}
           </AnimatePresence>
 
+          {/* IN-APP PDF PREVIEW & EXPORT MODAL (Works reliably on iPhone PWA — never traps user) */}
+          <AnimatePresence>
+            {isPdfPreviewOpen && activeNote && (
+              <motion.div
+                key="notes-pdf-preview-modal"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 18 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-[94] flex flex-col bg-[#EFF6F3] text-slate-900 overflow-hidden print:static print:h-auto print:bg-white print:overflow-visible"
+              >
+                {/* Sticky Top Bar (Hidden when actually printing) */}
+                <div
+                  className="flex items-center justify-between gap-2 border-b border-emerald-200/80 bg-white px-3.5 py-3 shrink-0 shadow-xs print:hidden"
+                  style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsPdfPreviewOpen(false)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>{isEs ? 'Volver' : 'Voltar'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleNativePrintFromPreview}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100 cursor-pointer touch-manipulation"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      <span>{isEs ? 'Imprimir' : 'Imprimir'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isExportingPdf}
+                      onClick={() => void handleExportPdfFile()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-3.5 py-2 text-xs font-black text-white shadow-sm hover:opacity-95 disabled:opacity-50 cursor-pointer touch-manipulation"
+                    >
+                      {isExportingPdf ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isEs ? 'Guardar PDF' : 'Salvar PDF'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Printable A4 Sheet Preview */}
+                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-5 print:p-0 print:overflow-visible">
+                  <div className="mx-auto w-full max-w-2xl rounded-2xl border border-emerald-100 bg-white p-6 sm:p-10 shadow-md space-y-4 print:shadow-none print:border-none print:rounded-none print:p-4">
+                    <div className="h-1 w-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-500" />
+                    <div className="space-y-1 border-b border-slate-100 pb-3">
+                      <h1 className="text-2xl font-black text-emerald-900 tracking-tight break-words">
+                        {activeNote.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
+                      </h1>
+                      <p className="text-xs font-semibold text-slate-400">
+                        SisFinz Notas • {formatNoteDate(activeNote.updatedAt, isEs)}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 text-[14.5px] leading-relaxed text-slate-800">
+                      {(() => {
+                        let num = 0;
+                        return (activeNote.blocks || []).map((b) => {
+                          if (b.type === 'numbered') {
+                            num += 1;
+                          } else {
+                            num = 0;
+                          }
+                          const currentNum = num;
+                          const alignStyle = b.align ? { textAlign: b.align } : undefined;
+
+                          if (b.type === 'heading') {
+                            return (
+                              <h2
+                                key={b.id}
+                                style={alignStyle}
+                                className="text-xl font-black text-slate-900 pt-2"
+                                dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                              />
+                            );
+                          }
+                          if (b.type === 'subheading') {
+                            return (
+                              <h3
+                                key={b.id}
+                                style={alignStyle}
+                                className="text-base font-extrabold text-emerald-900 pt-1.5"
+                                dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                              />
+                            );
+                          }
+                          if (b.type === 'heading3') {
+                            return (
+                              <h4
+                                key={b.id}
+                                style={alignStyle}
+                                className="text-sm font-extrabold text-slate-800 pt-1"
+                                dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                              />
+                            );
+                          }
+                          if (b.type === 'quote') {
+                            return (
+                              <blockquote
+                                key={b.id}
+                                style={alignStyle}
+                                className="border-l-[3px] border-emerald-500 pl-3 italic text-slate-600 py-1"
+                                dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                              />
+                            );
+                          }
+                          if (b.type === 'checklist') {
+                            return (
+                              <div key={b.id} className="flex items-start gap-2">
+                                <span className="font-mono text-emerald-700 font-bold select-none">
+                                  {b.checked ? '☑' : '☐'}
+                                </span>
+                                <span
+                                  className={b.checked ? 'line-through text-slate-400' : ''}
+                                  dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                                />
+                              </div>
+                            );
+                          }
+                          if (b.type === 'bullet') {
+                            return (
+                              <div key={b.id} className="flex items-start gap-2">
+                                <span className="text-emerald-600 font-black">•</span>
+                                <span dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }} />
+                              </div>
+                            );
+                          }
+                          if (b.type === 'numbered') {
+                            return (
+                              <div key={b.id} className="flex items-start gap-2">
+                                <span className="font-mono text-xs font-black text-emerald-700 pt-0.5 min-w-[20px]">
+                                  {currentNum}.
+                                </span>
+                                <span dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }} />
+                              </div>
+                            );
+                          }
+                          return (
+                            <p
+                              key={b.id}
+                              style={alignStyle}
+                              dangerouslySetInnerHTML={{ __html: b.html || '&nbsp;' }}
+                            />
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {(activeNote.tables || []).length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        {activeNote.tables.map((tbl) => (
+                          <div key={tbl.id} className="overflow-x-auto">
+                            <table className="w-full border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-emerald-50">
+                                  {tbl.headers.map((h, i) => (
+                                    <th
+                                      key={i}
+                                      className="border border-slate-200 p-2 text-left font-black text-emerald-950"
+                                    >
+                                      {h}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tbl.rows.map((r, ri) => (
+                                  <tr key={ri}>
+                                    {r.map((c, ci) => (
+                                      <td
+                                        key={ci}
+                                        className="border border-slate-200 p-2 text-slate-700"
+                                      >
+                                        {c || '—'}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {(activeNote.images || []).length > 0 && (
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        {activeNote.images.map((img) => (
+                          <img
+                            key={img.id}
+                            src={img.url}
+                            alt={img.name}
+                            className="w-full rounded-xl border border-slate-200 object-cover"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Subtle Feedback Toast */}
           <AnimatePresence>
             {toastMessage && (
@@ -2405,17 +2590,17 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[98] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg whitespace-nowrap"
+                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[98] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg whitespace-nowrap print:hidden"
               >
                 {toastMessage}
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* MOVE NOTE TO FOLDER MODAL (Select existing folder or create new folder inline + "Mover aqui") */}
+          {/* MOVE NOTE TO FOLDER MODAL */}
           <AnimatePresence>
             {moveModalNoteId && noteBeingMoved && (
-              <div className="fixed inset-0 z-[88] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="fixed inset-0 z-[88] flex items-end sm:items-center justify-center p-0 sm:p-4 print:hidden">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -2430,7 +2615,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
                   className="relative z-10 w-full max-w-md max-h-[85dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white shadow-2xl"
                 >
-                  {/* Modal Header */}
                   <div className="flex items-center justify-between border-b border-emerald-100 px-5 py-4 shrink-0 bg-gradient-to-r from-emerald-50/80 to-white">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
@@ -2454,9 +2638,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Folder List + Inline New Folder Creator */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                    {/* Option: No Folder */}
                     <button
                       type="button"
                       onClick={() => {
@@ -2489,7 +2671,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       )}
                     </button>
 
-                    {/* Existing Folders */}
                     {folders.map((fld) => {
                       const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
                       const count = activeNotes.filter((n) => n.folderId === fld.id).length;
@@ -2532,7 +2713,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       );
                     })}
 
-                    {/* Create New Folder Inline Section */}
                     <div className="pt-1">
                       {!isCreatingInMoveModal ? (
                         <button
@@ -2614,7 +2794,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Sticky Bottom Confirm Action: "Mover aqui" */}
                   <div
                     className="border-t border-slate-100 bg-white p-4 shrink-0"
                     style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
@@ -2645,7 +2824,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           {/* Quick Templates Picker Modal */}
           <AnimatePresence>
             {isTemplatePickerOpen && (
-              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4 print:hidden">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -2703,7 +2882,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           {/* Version History Sheet */}
           <AnimatePresence>
             {isHistoryOpen && activeNote && (
-              <div className="fixed inset-0 z-[86] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="fixed inset-0 z-[86] flex items-end sm:items-center justify-center p-0 sm:p-4 print:hidden">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -2831,7 +3010,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           {/* Create Folder Modal */}
           <AnimatePresence>
             {isFolderModalOpen && (
-              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4 print:hidden">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -2952,7 +3131,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setPreviewImageUrl(null)}
-                className="fixed inset-0 z-[95] flex items-center justify-center bg-white/94 backdrop-blur-md p-4"
+                className="fixed inset-0 z-[95] flex items-center justify-center bg-white/94 backdrop-blur-md p-4 print:hidden"
               >
                 <img
                   src={previewImageUrl}
