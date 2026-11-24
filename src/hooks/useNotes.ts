@@ -15,6 +15,7 @@ export type NoteFolderIcon =
 
 export type NoteFolderColor = 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
 export type NoteAccentColor = 'none' | 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
+export type NotePaperStyle = 'plain' | 'dots' | 'lined';
 
 export interface NoteFolder {
   id: string;
@@ -87,6 +88,7 @@ export interface NoteItem {
   locked: boolean;
   tags: string[];
   accentColor: NoteAccentColor;
+  paperStyle: NotePaperStyle;
   groupCompletedChecklist: boolean;
   checklist: NoteChecklistItem[];
   images: NoteImageAttachment[];
@@ -279,6 +281,9 @@ function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
     data.plainText || blocksToPlainText(rawBlocks) || htmlToPlainText(data.bodyHtml || '');
   const bodyHtml = data.bodyHtml || blocksToHtml(rawBlocks);
 
+  const paperStyle: NotePaperStyle =
+    data.paperStyle === 'dots' || data.paperStyle === 'lined' ? data.paperStyle : 'plain';
+
   return {
     id,
     title: data.title || '',
@@ -291,6 +296,7 @@ function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
     locked: Boolean(data.locked),
     tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],
     accentColor: (data.accentColor as NoteAccentColor) || 'none',
+    paperStyle,
     groupCompletedChecklist: Boolean(data.groupCompletedChecklist),
     checklist: legacyChecklist,
     images: Array.isArray(data.images) ? data.images : [],
@@ -393,7 +399,6 @@ export function useNotes() {
     [foldersStorageKey]
   );
 
-  // Realtime Firestore sync for notes & folders
   useEffect(() => {
     if (!uid) return;
 
@@ -512,6 +517,7 @@ export function useNotes() {
         tables?: NoteTable[];
         tags?: string[];
         accentColor?: NoteAccentColor;
+        paperStyle?: NotePaperStyle;
       }
     ): Promise<NoteItem> => {
       const nowIso = new Date().toISOString();
@@ -541,6 +547,7 @@ export function useNotes() {
         locked: false,
         tags: initial?.tags || [],
         accentColor: initial?.accentColor || 'none',
+        paperStyle: initial?.paperStyle || 'plain',
         groupCompletedChecklist: false,
         checklist: checklistSummary,
         images: [],

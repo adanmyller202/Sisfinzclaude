@@ -34,6 +34,7 @@ import {
   Plus,
   ChevronDown,
   ArrowDownWideNarrow,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
@@ -50,13 +51,10 @@ interface SmartNoteEditorProps {
   blocks: NoteBlock[];
   readOnly?: boolean;
   isReadingMode?: boolean;
-  isKeyboardOpen?: boolean;
   searchQuery?: string;
   language?: LanguageCode;
   isUploadingImage?: boolean;
   isDictating?: boolean;
-  headerContent?: React.ReactNode;
-  footerContent?: React.ReactNode;
   onChangeBlocks: (nextBlocks: NoteBlock[], immediate?: boolean) => void;
   onTriggerImageUpload: () => void;
   onTriggerScanUpload: () => void;
@@ -222,17 +220,17 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
       ? 'text-right'
       : 'text-left';
 
-  // >= 16px on mobile prevents iOS Safari automatic zoom on focus
+  // Minimum 16px font-size on mobile prevents iOS Safari automatic zoom on focus
   const textStyleClass =
     block.type === 'heading'
       ? 'text-[22px] sm:text-[24px] font-black tracking-tight text-slate-900 leading-[1.3] mt-3 mb-1'
       : block.type === 'subheading'
       ? 'text-[18.5px] sm:text-[19px] font-extrabold tracking-tight text-emerald-950 leading-[1.35] mt-2.5 mb-0.5'
       : block.type === 'heading3'
-      ? 'text-[16.5px] sm:text-[17px] font-bold text-slate-800 leading-[1.4] mt-2'
+      ? 'text-[16.5px] sm:text-[17px] font-extrabold text-slate-800 leading-[1.4] mt-2'
       : block.type === 'quote'
       ? 'text-[16px] italic font-medium text-emerald-950/80 leading-[1.65]'
-      : 'text-[16px] font-normal text-slate-800 leading-[1.7]';
+      : 'text-[16px] font-normal text-slate-800 leading-[1.68]';
 
   const placeholderText = effectiveReadOnly
     ? ''
@@ -262,8 +260,8 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
       : 'Citação ou destaque...'
     : index === 0
     ? isEs
-      ? 'Empieza a escribir tus ideas aquí...'
-      : 'Comece a escrever suas ideias aqui...'
+      ? 'Empieza a escribir aquí...'
+      : 'Comece a escrever suas ideias...'
     : '';
 
   return (
@@ -273,13 +271,13 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
       animate={{ opacity: 1, y: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
       transition={{ duration: 0.15 }}
-      className={`group relative flex items-start gap-2.5 w-full min-w-0 max-w-full rounded-xl px-1.5 py-[3px] transition-colors ${
+      className={`group relative flex items-start gap-2.5 w-full min-w-0 max-w-full rounded-xl px-1.5 py-0.5 transition-colors ${
         block.type === 'quote'
-          ? 'border-l-[3px] border-emerald-500 bg-gradient-to-r from-emerald-50/75 to-transparent pl-3.5 pr-2 py-2.5 my-1.5 rounded-l-none rounded-r-2xl'
+          ? 'border-l-[3.5px] border-emerald-500 bg-gradient-to-r from-emerald-50/75 to-transparent pl-3.5 pr-2 py-2.5 my-1.5 rounded-l-none rounded-r-2xl'
+          : isFocused && !effectiveReadOnly && block.type === 'checklist'
+          ? 'bg-emerald-50/40'
           : ''
-      } ${isFocused && !effectiveReadOnly && block.type === 'checklist' ? 'bg-emerald-50/45' : ''} ${
-        isMatchedBySearch ? 'bg-amber-100/80 ring-1 ring-amber-300/80' : ''
-      }`}
+      } ${isMatchedBySearch ? 'bg-amber-100/80 ring-1 ring-amber-300/80' : ''}`}
     >
       {/* Interactive Checklist Checkbox */}
       {block.type === 'checklist' && (
@@ -293,13 +291,13 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
             reduceMotion
               ? undefined
               : isChecked
-              ? { scale: [1, 1.18, 1] }
-              : { scale: 1 }
+              ? { scale: [1, 1.2, 1], rotate: [0, -6, 0] }
+              : { scale: 1, rotate: 0 }
           }
           transition={{ type: 'spring', stiffness: 500, damping: 24 }}
           aria-label={isChecked ? 'Desmarcar item' : 'Marcar item como concluído'}
           aria-pressed={isChecked}
-          className={`mt-[4px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border-2 transition-all cursor-pointer select-none touch-manipulation ${
+          className={`mt-[4px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[8px] border-2 transition-all cursor-pointer select-none touch-manipulation ${
             isChecked
               ? 'border-emerald-600 bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/25'
               : 'border-emerald-400/90 bg-white text-transparent hover:border-emerald-600'
@@ -311,7 +309,7 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
               scale: isChecked ? 1 : 0.3,
               opacity: isChecked ? 1 : 0,
             }}
-            transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+            transition={{ type: 'spring', stiffness: 540, damping: 26 }}
           >
             <Check className="h-3.5 w-3.5 stroke-[3.2]" />
           </motion.span>
@@ -323,7 +321,7 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
       )}
 
       {block.type === 'numbered' && (
-        <span className="mt-[2px] min-w-[22px] shrink-0 font-mono text-[14px] font-bold text-emerald-700 text-right select-none leading-[1.7]">
+        <span className="mt-[2px] min-w-[22px] shrink-0 font-mono text-[14px] font-black text-emerald-700 text-right select-none leading-[1.68]">
           {numberIndex}.
         </span>
       )}
@@ -357,12 +355,12 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
             }}
             transition={{ duration: reduceMotion ? 0.01 : 0.24, ease: [0.22, 1, 0.36, 1] }}
             style={{ transformOrigin: 'left center' }}
-            className="pointer-events-none absolute left-0 right-1 top-[14px] h-[1.6px] rounded-full bg-emerald-600/75"
+            className="pointer-events-none absolute left-0 right-1 top-[14px] h-[1.8px] rounded-full bg-emerald-600/75"
           />
         )}
       </div>
 
-      {/* Subtle Reorder & Remove Controls */}
+      {/* Subtle Reorder & Remove Controls (hidden in Reading Mode) */}
       {!effectiveReadOnly &&
         (block.type === 'checklist' || block.type === 'bullet' || block.type === 'numbered') &&
         isFocused && (
@@ -372,7 +370,7 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onMoveBlock(index, -1)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-emerald-100 hover:text-emerald-700 cursor-pointer touch-manipulation"
+                className="rounded-lg p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer touch-manipulation"
                 title={isEs ? 'Subir' : 'Mover para cima'}
               >
                 <ArrowUp className="h-3.5 w-3.5" />
@@ -383,7 +381,7 @@ const EditableBlockRow: React.FC<EditableBlockRowProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onMoveBlock(index, 1)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-emerald-100 hover:text-emerald-700 cursor-pointer touch-manipulation"
+                className="rounded-lg p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer touch-manipulation"
                 title={isEs ? 'Bajar' : 'Mover para baixo'}
               >
                 <ArrowDown className="h-3.5 w-3.5" />
@@ -409,13 +407,10 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
   blocks,
   readOnly = false,
   isReadingMode = false,
-  isKeyboardOpen = false,
   searchQuery = '',
   language = 'pt',
   isUploadingImage = false,
   isDictating = false,
-  headerContent,
-  footerContent,
   onChangeBlocks,
   onTriggerImageUpload,
   onTriggerScanUpload,
@@ -450,7 +445,6 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
     showColors: boolean;
   }>({ visible: false, top: 0, left: 0, showColors: false });
 
-  // Undo / Redo stacks per noteId
   const pastRef = useRef<NoteBlock[][]>([]);
   const futureRef = useRef<NoteBlock[][]>([]);
   const lastHistoryPushAtRef = useRef<number>(0);
@@ -471,6 +465,14 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
 
   const focusedBlock =
     safeBlocks.find((b) => b.id === focusedBlockId) || safeBlocks[safeBlocks.length - 1];
+
+  const checklistStats = useMemo(() => {
+    const items = safeBlocks.filter((b) => b.type === 'checklist');
+    const done = items.filter((b) => b.checked).length;
+    const total = items.length;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, pct };
+  }, [safeBlocks]);
 
   useEffect(() => {
     const pending = pendingFocusRef.current;
@@ -630,13 +632,6 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
     );
     commitBlocks(next, true, true);
   };
-
-  // Checklist summary & sorting
-  const checklistStats = useMemo(() => {
-    const items = safeBlocks.filter((b) => b.type === 'checklist');
-    const done = items.filter((b) => b.checked).length;
-    return { total: items.length, done };
-  }, [safeBlocks]);
 
   const hasUnsortedCompletedChecklist = useMemo(() => {
     for (let i = 0; i < safeBlocks.length - 1; i++) {
@@ -868,89 +863,485 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
   let runningNumber = 0;
 
   return (
-    <div ref={editorRootRef} className="flex flex-1 min-h-0 flex-col w-full max-w-full overflow-hidden">
-      {/* Scrollable Document Paper */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#FAFDFB] sm:bg-[#F3F8F5]">
-        <div className="mx-auto w-full max-w-2xl min-h-full bg-white sm:my-4 sm:rounded-[2rem] sm:border sm:border-emerald-100/90 sm:shadow-[0_12px_36px_rgba(6,78,59,0.06)] px-5 sm:px-8 pt-5 pb-12 space-y-4">
-          {headerContent}
+    <div ref={editorRootRef} className="flex flex-col w-full min-w-0 max-w-full">
+      {/* Studio Tactile Formatting Toolbar (Hidden in Reading Mode) */}
+      {!effectiveReadOnly && (
+        <div className="mb-4 rounded-2xl border border-emerald-200/75 bg-white/95 shadow-[0_6px_20px_rgba(6,78,59,0.06)] overflow-hidden">
+          {/* Primary Compact Row */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar px-2 py-1.5">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleUndo}
+              disabled={historyCounts.past === 0}
+              className="rounded-xl p-2 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 cursor-pointer shrink-0 touch-manipulation"
+              title={isEs ? 'Deshacer' : 'Desfazer'}
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleRedo}
+              disabled={historyCounts.future === 0}
+              className="rounded-xl p-2 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 cursor-pointer shrink-0 touch-manipulation"
+              title={isEs ? 'Rehacer' : 'Refazer'}
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
 
-          {/* Live Checklist Progress Pill (interactive & motivating!) */}
-          {checklistStats.total > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-emerald-50/65 border border-emerald-100 px-3.5 py-2">
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <span className="text-[11px] font-black text-emerald-800 whitespace-nowrap">
-                  {checklistStats.done}/{checklistStats.total}{' '}
-                  {isEs ? 'completados' : 'concluídos'}
-                </span>
-                <div className="h-1.5 flex-1 max-w-[140px] overflow-hidden rounded-full bg-emerald-200/70">
-                  <motion.div
-                    initial={false}
-                    animate={{
-                      width: `${Math.round((checklistStats.done / checklistStats.total) * 100)}%`,
-                    }}
-                    transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
-                  />
+            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSetBlockType('checklist')}
+              className={`rounded-xl p-2 transition-all cursor-pointer shrink-0 touch-manipulation ${
+                focusedBlock?.type === 'checklist'
+                  ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+              title="Checklist"
+            >
+              <CheckSquare className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSetBlockType('bullet')}
+              className={`rounded-xl p-2 transition-all cursor-pointer shrink-0 touch-manipulation ${
+                focusedBlock?.type === 'bullet'
+                  ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+              title={isEs ? 'Viñetas' : 'Marcadores'}
+            >
+              <List className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSetBlockType('numbered')}
+              className={`rounded-xl p-2 transition-all cursor-pointer shrink-0 touch-manipulation ${
+                focusedBlock?.type === 'numbered'
+                  ? 'bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+              title={isEs ? 'Lista numerada' : 'Lista numerada'}
+            >
+              <ListOrdered className="h-4 w-4" />
+            </button>
+
+            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleInlineFormat('bold')}
+              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                activeFormats.bold
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'text-slate-700 hover:bg-emerald-50'
+              }`}
+              title={isEs ? 'Negrita' : 'Negrito'}
+            >
+              <Bold className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleInlineFormat('italic')}
+              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                activeFormats.italic
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'text-slate-700 hover:bg-emerald-50'
+              }`}
+              title={isEs ? 'Cursiva' : 'Itálico'}
+            >
+              <Italic className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleInlineFormat('underline')}
+              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                activeFormats.underline
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'text-slate-700 hover:bg-emerald-50'
+              }`}
+              title={isEs ? 'Subrayado' : 'Sublinhado'}
+            >
+              <Underline className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleInlineFormat('strikeThrough')}
+              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                activeFormats.strikeThrough
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'text-slate-700 hover:bg-emerald-50'
+              }`}
+              title="Tachado"
+            >
+              <Strikethrough className="h-4 w-4" />
+            </button>
+
+            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setOpenPanel((p) => (p === 'structure' ? 'none' : 'structure'))}
+              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                openPanel === 'structure'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-100/90 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
+              }`}
+            >
+              <Type className="h-3.5 w-3.5" />
+              <span>Aa</span>
+              <ChevronDown className="h-3 w-3 opacity-75" />
+            </button>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setOpenPanel((p) => (p === 'color' ? 'none' : 'color'))}
+              className={`inline-flex items-center gap-1 rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                openPanel === 'color'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-100/90 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
+              }`}
+              title={isEs ? 'Color y resaltado' : 'Cor e destaque'}
+            >
+              <Palette className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setOpenPanel((p) => (p === 'insert' ? 'none' : 'insert'))}
+              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                openPanel === 'insert'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              <Plus className="h-3.5 w-3.5 stroke-[2.6]" />
+              <span>{isEs ? 'Insertar' : 'Inserir'}</span>
+            </button>
+          </div>
+
+          {/* Expandable Sub-Bars */}
+          <AnimatePresence initial={false}>
+            {openPanel === 'structure' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden border-t border-emerald-100/80 bg-[#F8FBF9]"
+              >
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar px-2.5 py-2">
+                  {(
+                    [
+                      { id: 'heading', icon: Heading1, label: 'H1' },
+                      { id: 'subheading', icon: Heading2, label: 'H2' },
+                      { id: 'heading3', icon: Heading3, label: 'H3' },
+                      { id: 'paragraph', icon: Type, label: 'Texto' },
+                      { id: 'quote', icon: Quote, label: isEs ? 'Cita' : 'Citação' },
+                    ] as const
+                  ).map((item) => {
+                    const Icon = item.icon;
+                    const active = focusedBlock?.type === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSetBlockType(item.id)}
+                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                          active
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+
+                  <div className="mx-1 h-4 w-px bg-slate-200 shrink-0" />
+
+                  {(
+                    [
+                      { id: 'left', icon: AlignLeft },
+                      { id: 'center', icon: AlignCenter },
+                      { id: 'right', icon: AlignRight },
+                    ] as const
+                  ).map((al) => {
+                    const Icon = al.icon;
+                    const active = (focusedBlock?.align || 'left') === al.id;
+                    return (
+                      <button
+                        key={al.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSetAlign(al.id)}
+                        className={`rounded-xl border p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
+                          active
+                            ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
+              </motion.div>
+            )}
 
+            {openPanel === 'color' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden border-t border-emerald-100/80 bg-[#F8FBF9]"
+              >
+                <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black uppercase text-slate-400">Texto</span>
+                    {TEXT_COLORS.map((c) => (
+                      <button
+                        key={c.value}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleInlineFormat('foreColor', c.value)}
+                        style={{ backgroundColor: c.value }}
+                        title={c.label}
+                        className="h-6 w-6 rounded-full border-2 border-white shadow-xs hover:scale-110 transition-transform cursor-pointer touch-manipulation"
+                      />
+                    ))}
+                  </div>
+
+                  <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+                  <div className="flex items-center gap-1.5">
+                    <Highlighter className="h-3.5 w-3.5 text-emerald-600" />
+                    {HIGHLIGHT_COLORS.map((h) => (
+                      <button
+                        key={h.value}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleInlineFormat('hiliteColor', h.value)}
+                        style={{
+                          backgroundColor: h.value === 'transparent' ? '#ffffff' : h.value,
+                        }}
+                        title={h.label}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 shadow-2xs hover:scale-110 transition-transform cursor-pointer touch-manipulation"
+                      >
+                        {h.value === 'transparent' && <X className="h-3 w-3 text-slate-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {openPanel === 'insert' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden border-t border-emerald-100/80 bg-[#F8FBF9]"
+              >
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2.5 py-2">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setIsLinkDialogOpen((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <Link2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Link</span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setOpenPanel('none');
+                      onTriggerImageUpload();
+                    }}
+                    disabled={isUploadingImage}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    {isUploadingImage ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                    ) : (
+                      <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                    )}
+                    <span>{isEs ? 'Imagen' : 'Imagem'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setOpenPanel('none');
+                      onAddTable();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <TableIcon className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{isEs ? 'Tabla' : 'Tabela'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setOpenPanel('none');
+                      onOpenDrawing();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <PenTool className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{isEs ? 'Dibujo' : 'Desenho'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setOpenPanel('none');
+                      onTriggerScanUpload();
+                    }}
+                    disabled={isUploadingImage}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <ScanLine className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Escanear</span>
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onToggleDictation}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-black transition-all cursor-pointer shrink-0 touch-manipulation ${
+                      isDictating
+                        ? 'border-rose-400 bg-rose-500 text-white animate-pulse'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700'
+                    }`}
+                  >
+                    {isDictating ? (
+                      <MicOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5 text-emerald-600" />
+                    )}
+                    <span>{isDictating ? (isEs ? 'Escuchando...' : 'Ouvindo...') : isEs ? 'Dictar' : 'Ditar'}</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Inline Insert Link Dialog */}
+          <AnimatePresence>
+            {isLinkDialogOpen && (
+              <motion.form
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                onSubmit={handleInsertInlineLink}
+                className="overflow-hidden border-t border-emerald-100 bg-emerald-50/50 px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={linkUrlInput}
+                    onChange={(e) => setLinkUrlInput(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 min-w-[150px] rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[16px] sm:text-xs font-semibold text-slate-900 outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    value={linkTextInput}
+                    onChange={(e) => setLinkTextInput(e.target.value)}
+                    placeholder="Texto (opcional)"
+                    className="flex-1 min-w-[130px] rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[16px] sm:text-xs font-medium text-slate-800 outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-black text-white hover:bg-emerald-700 cursor-pointer touch-manipulation"
+                  >
+                    {isEs ? 'Insertar' : 'Inserir'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLinkDialogOpen(false)}
+                    className="rounded-xl p-1.5 text-slate-400 hover:bg-white cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Interactive Checklist Progress Strip (appears cleanly whenever note has checklist items) */}
+      {checklistStats.total > 0 && (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 px-3.5 py-2.5 space-y-1.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-black text-emerald-900">
+              {checklistStats.pct === 100 ? (
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              ) : (
+                <CheckSquare className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+              <span>
+                {checklistStats.pct === 100
+                  ? isEs
+                    ? '¡Todo listo!'
+                    : 'Tudo concluído!'
+                  : `${checklistStats.done}/${checklistStats.total} ${
+                      isEs ? 'completados' : 'concluídos'
+                    }`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               {!effectiveReadOnly && hasUnsortedCompletedChecklist && (
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleGroupCompletedAtBottom}
-                  className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-200 px-2.5 py-1 text-[10px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer touch-manipulation shrink-0"
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[10px] font-black text-emerald-700 hover:bg-emerald-100/60 transition-colors cursor-pointer touch-manipulation"
                 >
                   <ArrowDownWideNarrow className="h-3 w-3" />
-                  <span>{isEs ? 'Al final' : 'Agrupar no fim'}</span>
+                  <span>{isEs ? 'Ordenar' : 'Agrupar feitos'}</span>
                 </button>
               )}
+              <span className="font-mono text-[11px] font-black text-emerald-700">
+                {checklistStats.pct}%
+              </span>
             </div>
-          )}
-
-          {/* Fluid Natural Document Blocks */}
-          <div className="space-y-1 w-full min-w-0 max-w-full">
-            <AnimatePresence initial={false}>
-              {safeBlocks.map((block, index) => {
-                if (block.type === 'numbered') {
-                  runningNumber += 1;
-                } else {
-                  runningNumber = 0;
-                }
-                const currentNumber = runningNumber;
-                const isMatched =
-                  Boolean(normalizedQuery) &&
-                  htmlToPlainText(block.html).toLowerCase().includes(normalizedQuery);
-
-                return (
-                  <EditableBlockRow
-                    key={block.id}
-                    block={block}
-                    index={index}
-                    totalBlocks={safeBlocks.length}
-                    numberIndex={currentNumber}
-                    isFocused={focusedBlock?.id === block.id}
-                    isMatchedBySearch={isMatched}
-                    readOnly={readOnly}
-                    isReadingMode={isReadingMode}
-                    isEs={isEs}
-                    reduceMotion={reduceMotion}
-                    registerEl={registerEl}
-                    onFocusBlock={setFocusedBlockId}
-                    onHtmlChange={handleHtmlChange}
-                    onKeyDown={handleBlockKeyDown}
-                    onToggleCheck={handleToggleCheck}
-                    onMoveBlock={handleMoveBlock}
-                    onRemoveBlock={handleRemoveBlock}
-                  />
-                );
-              })}
-            </AnimatePresence>
           </div>
 
-          {footerContent}
-        </div>
-      </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-200/60">
+            <motion.div
+              initial={false}
+              animate={{ width: `${checklistStats.pct}%` }}
+              transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
+            />
+          </div>
+        </motion.div>
+      )}
 
       {/* Floating Contextual Selection Toolbar */}
       <AnimatePresence>
@@ -1053,435 +1444,45 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Docked Bottom Interactive Formatting Bar (Always pinned cleanly above the keyboard!) */}
-      {!effectiveReadOnly && (
-        <div
-          className="shrink-0 border-t border-emerald-100 bg-white/98 backdrop-blur-md shadow-[0_-6px_24px_rgba(6,78,59,0.06)] z-30"
-          style={{
-            paddingBottom: isKeyboardOpen
-              ? '0.35rem'
-              : 'max(0.55rem, env(safe-area-inset-bottom, 0px))',
-          }}
-        >
-          {/* Expandable Sub-Bars (open upward cleanly) */}
-          <AnimatePresence initial={false}>
-            {isLinkDialogOpen && (
-              <motion.form
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                onSubmit={handleInsertInlineLink}
-                className="overflow-hidden border-b border-emerald-100 bg-emerald-50/55 px-3 py-2.5"
-              >
-                <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={linkUrlInput}
-                    onChange={(e) => setLinkUrlInput(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 min-w-[140px] rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[16px] sm:text-xs font-semibold text-slate-900 outline-none focus:border-emerald-500"
-                  />
-                  <input
-                    type="text"
-                    value={linkTextInput}
-                    onChange={(e) => setLinkTextInput(e.target.value)}
-                    placeholder={isEs ? 'Texto (opcional)' : 'Texto (opcional)'}
-                    className="flex-1 min-w-[120px] rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[16px] sm:text-xs font-medium text-slate-800 outline-none focus:border-emerald-500"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-black text-white hover:bg-emerald-700 cursor-pointer touch-manipulation"
-                  >
-                    {isEs ? 'Insertar' : 'Inserir'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsLinkDialogOpen(false)}
-                    className="rounded-xl p-1.5 text-slate-400 hover:bg-white cursor-pointer"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </motion.form>
-            )}
+      {/* Fluid Document Canvas */}
+      <div className="space-y-1 w-full min-w-0 max-w-full">
+        <AnimatePresence initial={false}>
+          {safeBlocks.map((block, index) => {
+            if (block.type === 'numbered') {
+              runningNumber += 1;
+            } else {
+              runningNumber = 0;
+            }
+            const currentNumber = runningNumber;
+            const isMatched =
+              Boolean(normalizedQuery) &&
+              htmlToPlainText(block.html).toLowerCase().includes(normalizedQuery);
 
-            {openPanel === 'structure' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden border-b border-emerald-100/80 bg-[#F5FAF7]"
-              >
-                <div className="mx-auto flex max-w-2xl items-center gap-1 overflow-x-auto no-scrollbar px-3 py-2">
-                  {(
-                    [
-                      { id: 'heading', icon: Heading1, label: 'H1' },
-                      { id: 'subheading', icon: Heading2, label: 'H2' },
-                      { id: 'heading3', icon: Heading3, label: 'H3' },
-                      { id: 'paragraph', icon: Type, label: 'Texto' },
-                      { id: 'quote', icon: Quote, label: isEs ? 'Cita' : 'Citação' },
-                    ] as const
-                  ).map((item) => {
-                    const Icon = item.icon;
-                    const active = focusedBlock?.type === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSetBlockType(item.id)}
-                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                          active
-                            ? 'border-emerald-600 bg-emerald-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400'
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-
-                  <div className="mx-1 h-4 w-px bg-slate-200 shrink-0" />
-
-                  {(
-                    [
-                      { id: 'left', icon: AlignLeft },
-                      { id: 'center', icon: AlignCenter },
-                      { id: 'right', icon: AlignRight },
-                    ] as const
-                  ).map((al) => {
-                    const Icon = al.icon;
-                    const active = (focusedBlock?.align || 'left') === al.id;
-                    return (
-                      <button
-                        key={al.id}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSetAlign(al.id)}
-                        className={`rounded-xl border p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                          active
-                            ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-
-            {openPanel === 'color' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden border-b border-emerald-100/80 bg-[#F5FAF7]"
-              >
-                <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-3 px-3.5 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase text-slate-400">Texto</span>
-                    {TEXT_COLORS.map((c) => (
-                      <button
-                        key={c.value}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleInlineFormat('foreColor', c.value)}
-                        style={{ backgroundColor: c.value }}
-                        title={c.label}
-                        className="h-6 w-6 rounded-full border-2 border-white shadow-xs hover:scale-110 transition-transform cursor-pointer touch-manipulation"
-                      />
-                    ))}
-                  </div>
-
-                  <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-
-                  <div className="flex items-center gap-1.5">
-                    <Highlighter className="h-3.5 w-3.5 text-emerald-600" />
-                    {HIGHLIGHT_COLORS.map((h) => (
-                      <button
-                        key={h.value}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleInlineFormat('hiliteColor', h.value)}
-                        style={{
-                          backgroundColor: h.value === 'transparent' ? '#ffffff' : h.value,
-                        }}
-                        title={h.label}
-                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 shadow-2xs hover:scale-110 transition-transform cursor-pointer touch-manipulation"
-                      >
-                        {h.value === 'transparent' && <X className="h-3 w-3 text-slate-400" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {openPanel === 'insert' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden border-b border-emerald-100/80 bg-[#F5FAF7]"
-              >
-                <div className="mx-auto flex max-w-2xl items-center gap-1.5 overflow-x-auto no-scrollbar px-3 py-2">
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setIsLinkDialogOpen((v) => !v)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
-                  >
-                    <Link2 className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Link</span>
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setOpenPanel('none');
-                      onTriggerImageUpload();
-                    }}
-                    disabled={isUploadingImage}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
-                  >
-                    {isUploadingImage ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                    ) : (
-                      <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                    )}
-                    <span>{isEs ? 'Imagen' : 'Imagem'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setOpenPanel('none');
-                      onAddTable();
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
-                  >
-                    <TableIcon className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>{isEs ? 'Tabla' : 'Tabela'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setOpenPanel('none');
-                      onOpenDrawing();
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
-                  >
-                    <PenTool className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>{isEs ? 'Dibujo' : 'Desenho'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setOpenPanel('none');
-                      onTriggerScanUpload();
-                    }}
-                    disabled={isUploadingImage}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0 touch-manipulation"
-                  >
-                    <ScanLine className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Escanear</span>
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={onToggleDictation}
-                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-black transition-all cursor-pointer shrink-0 touch-manipulation ${
-                      isDictating
-                        ? 'border-rose-400 bg-rose-500 text-white animate-pulse'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700'
-                    }`}
-                  >
-                    {isDictating ? (
-                      <MicOff className="h-3.5 w-3.5" />
-                    ) : (
-                      <Mic className="h-3.5 w-3.5 text-emerald-600" />
-                    )}
-                    <span>{isDictating ? (isEs ? 'Escuchando...' : 'Ouvindo...') : isEs ? 'Dictar' : 'Ditar'}</span>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Main Compact Dock Row */}
-          <div className="mx-auto flex max-w-2xl items-center gap-1 overflow-x-auto no-scrollbar px-3 pt-1.5">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={handleUndo}
-              disabled={historyCounts.past === 0}
-              className="rounded-xl p-2 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 cursor-pointer shrink-0 touch-manipulation"
-              title={isEs ? 'Deshacer' : 'Desfazer'}
-            >
-              <Undo2 className="h-4 w-4" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={handleRedo}
-              disabled={historyCounts.future === 0}
-              className="rounded-xl p-2 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-30 cursor-pointer shrink-0 touch-manipulation"
-              title={isEs ? 'Rehacer' : 'Refazer'}
-            >
-              <Redo2 className="h-4 w-4" />
-            </motion.button>
-
-            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
-
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSetBlockType('checklist')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                focusedBlock?.type === 'checklist'
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-              }`}
-              title="Checklist"
-            >
-              <CheckSquare className="h-4 w-4" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSetBlockType('bullet')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                focusedBlock?.type === 'bullet'
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-              }`}
-              title={isEs ? 'Viñetas' : 'Marcadores'}
-            >
-              <List className="h-4 w-4" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSetBlockType('numbered')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                focusedBlock?.type === 'numbered'
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-              }`}
-              title="Lista numerada"
-            >
-              <ListOrdered className="h-4 w-4" />
-            </motion.button>
-
-            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
-
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleInlineFormat('bold')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                activeFormats.bold
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'text-slate-700 hover:bg-emerald-50'
-              }`}
-              title={isEs ? 'Negrita' : 'Negrito'}
-            >
-              <Bold className="h-4 w-4" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleInlineFormat('italic')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                activeFormats.italic
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'text-slate-700 hover:bg-emerald-50'
-              }`}
-              title={isEs ? 'Cursiva' : 'Itálico'}
-            >
-              <Italic className="h-4 w-4" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleInlineFormat('underline')}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                activeFormats.underline
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'text-slate-700 hover:bg-emerald-50'
-              }`}
-              title={isEs ? 'Subrayado' : 'Sublinhado'}
-            >
-              <Underline className="h-4 w-4" />
-            </motion.button>
-
-            <div className="mx-0.5 h-4 w-px bg-slate-200 shrink-0" />
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setOpenPanel((p) => (p === 'structure' ? 'none' : 'structure'))}
-              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                openPanel === 'structure'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
-              }`}
-            >
-              <span>Aa</span>
-              <ChevronDown
-                className={`h-3 w-3 transition-transform ${
-                  openPanel === 'structure' ? 'rotate-180' : ''
-                }`}
+            return (
+              <EditableBlockRow
+                key={block.id}
+                block={block}
+                index={index}
+                totalBlocks={safeBlocks.length}
+                numberIndex={currentNumber}
+                isFocused={focusedBlock?.id === block.id}
+                isMatchedBySearch={isMatched}
+                readOnly={readOnly}
+                isReadingMode={isReadingMode}
+                isEs={isEs}
+                reduceMotion={reduceMotion}
+                registerEl={registerEl}
+                onFocusBlock={setFocusedBlockId}
+                onHtmlChange={handleHtmlChange}
+                onKeyDown={handleBlockKeyDown}
+                onToggleCheck={handleToggleCheck}
+                onMoveBlock={handleMoveBlock}
+                onRemoveBlock={handleRemoveBlock}
               />
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setOpenPanel((p) => (p === 'color' ? 'none' : 'color'))}
-              className={`rounded-xl p-2 transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                openPanel === 'color'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
-              }`}
-              title={isEs ? 'Color y resaltado' : 'Cor e destaque'}
-            >
-              <Palette className="h-3.5 w-3.5" />
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setOpenPanel((p) => (p === 'insert' ? 'none' : 'insert'))}
-              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors cursor-pointer shrink-0 touch-manipulation ${
-                openPanel === 'insert'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-              }`}
-            >
-              <Plus className="h-3.5 w-3.5 stroke-[2.6]" />
-              <span>{isEs ? 'Insertar' : 'Inserir'}</span>
-            </motion.button>
-          </div>
-        </div>
-      )}
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };

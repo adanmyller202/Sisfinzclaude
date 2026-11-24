@@ -38,6 +38,9 @@ import {
   Files,
   Tag,
   Sparkles,
+  LayoutGrid,
+  List as ListIcon,
+  Grid2x2,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
@@ -47,6 +50,7 @@ import {
   NoteFolderColor,
   NoteFolderIcon,
   NoteItem,
+  NotePaperStyle,
   NoteVersionSnapshot,
   countCharacters,
   countWords,
@@ -86,55 +90,62 @@ const FOLDER_ICONS: Array<{ id: NoteFolderIcon; icon: React.ComponentType<{ clas
 
 const FOLDER_COLORS: Record<
   NoteFolderColor,
-  { bg: string; text: string; border: string; dot: string; accentBar: string; softTint: string }
+  {
+    bg: string;
+    cardTint: string;
+    text: string;
+    border: string;
+    dot: string;
+    accentBar: string;
+  }
 > = {
   emerald: {
     bg: 'bg-emerald-50',
+    cardTint: 'from-emerald-50/75 via-white to-white border-emerald-200/80',
     text: 'text-emerald-700',
     border: 'border-emerald-200',
     dot: 'bg-emerald-500',
-    accentBar: 'from-emerald-500 to-teal-500',
-    softTint: 'from-emerald-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-emerald-500 to-teal-500',
   },
   teal: {
     bg: 'bg-teal-50',
+    cardTint: 'from-teal-50/75 via-white to-white border-teal-200/80',
     text: 'text-teal-700',
     border: 'border-teal-200',
     dot: 'bg-teal-500',
-    accentBar: 'from-teal-500 to-emerald-500',
-    softTint: 'from-teal-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-teal-500 to-cyan-500',
   },
   sky: {
     bg: 'bg-sky-50',
+    cardTint: 'from-sky-50/75 via-white to-white border-sky-200/80',
     text: 'text-sky-700',
     border: 'border-sky-200',
     dot: 'bg-sky-500',
-    accentBar: 'from-sky-500 to-cyan-500',
-    softTint: 'from-sky-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-sky-500 to-blue-500',
   },
   amber: {
     bg: 'bg-amber-50',
+    cardTint: 'from-amber-50/75 via-white to-white border-amber-200/80',
     text: 'text-amber-700',
     border: 'border-amber-200',
     dot: 'bg-amber-500',
-    accentBar: 'from-amber-400 to-orange-500',
-    softTint: 'from-amber-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-amber-400 to-orange-500',
   },
   violet: {
     bg: 'bg-violet-50',
+    cardTint: 'from-violet-50/75 via-white to-white border-violet-200/80',
     text: 'text-violet-700',
     border: 'border-violet-200',
     dot: 'bg-violet-500',
-    accentBar: 'from-violet-500 to-purple-500',
-    softTint: 'from-violet-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-violet-500 to-purple-500',
   },
   rose: {
     bg: 'bg-rose-50',
+    cardTint: 'from-rose-50/75 via-white to-white border-rose-200/80',
     text: 'text-rose-700',
     border: 'border-rose-200',
     dot: 'bg-rose-500',
-    accentBar: 'from-rose-500 to-pink-500',
-    softTint: 'from-rose-50/70 via-white to-white',
+    accentBar: 'bg-gradient-to-r from-rose-400 to-pink-500',
   },
 };
 
@@ -156,6 +167,23 @@ function formatNoteDate(iso: string, isEs: boolean): string {
   } catch {
     return '';
   }
+}
+
+function getPaperBackgroundStyle(style: NotePaperStyle): React.CSSProperties {
+  if (style === 'dots') {
+    return {
+      backgroundImage: 'radial-gradient(rgba(16, 185, 129, 0.22) 1.15px, transparent 1.15px)',
+      backgroundSize: '20px 20px',
+    };
+  }
+  if (style === 'lined') {
+    return {
+      backgroundImage:
+        'linear-gradient(to bottom, transparent 31px, rgba(16, 185, 129, 0.12) 32px)',
+      backgroundSize: '100% 32px',
+    };
+  }
+  return {};
 }
 
 function buildMarkdownFromNote(note: NoteItem): string {
@@ -233,13 +261,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [activeTab, setActiveTab] = useState<NotesHomeTab>('all_notes');
   const [quickFilter, setQuickFilter] = useState<NotesQuickFilter>('all');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [notesLayout, setNotesLayout] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [isReadingMode, setIsReadingMode] = useState(false);
 
   const [isInNoteSearchOpen, setIsInNoteSearchOpen] = useState(false);
   const [inNoteSearchQuery, setInNoteSearchQuery] = useState('');
-
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
 
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -267,10 +295,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDictating, setIsDictating] = useState(false);
 
-  // Accurate iOS visualViewport tracking (height + offsetTop) so the home screen NEVER leaks through
-  const [vvBox, setVvBox] = useState<{ top: number; height: number; keyboardOpen: boolean } | null>(
-    null
-  );
+  // Track virtual keyboard inset ONLY as extra bottom scroll padding inside the canvas,
+  // while keeping the outer full-screen backdrop 100% opaque (inset-0) so the underlying
+  // home screen can NEVER bleed through on iOS Safari!
+  const [keyboardInset, setKeyboardInset] = useState<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -300,32 +328,34 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setIsDictating(false);
   };
 
-  // Definitive iOS Safari keyboard & viewport lock: tracks BOTH offsetTop and height
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') return;
     const vv = window.visualViewport;
     if (!vv) return;
 
-    const syncViewport = () => {
-      const h = Math.round(vv.height);
-      const top = Math.max(0, Math.round(vv.offsetTop));
-      const keyboardOpen = window.innerHeight - h > 110;
-      setVvBox({ top, height: h, keyboardOpen });
+    const updateKeyboardInset = () => {
+      const diff = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setKeyboardInset(diff > 80 ? diff : 0);
     };
-
-    syncViewport();
-    vv.addEventListener('resize', syncViewport);
-    vv.addEventListener('scroll', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
+    updateKeyboardInset();
+    vv.addEventListener('resize', updateKeyboardInset);
+    vv.addEventListener('scroll', updateKeyboardInset);
     return () => {
-      vv.removeEventListener('resize', syncViewport);
-      vv.removeEventListener('scroll', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-      setVvBox(null);
+      vv.removeEventListener('resize', updateKeyboardInset);
+      vv.removeEventListener('scroll', updateKeyboardInset);
+      setKeyboardInset(0);
     };
   }, [isOpen]);
 
-  // Strict iOS body scroll lock while NotesView is open (prevents underlying dashboard bleed/scroll)
+  useEffect(() => {
+    if (!activeNoteId || isReadingMode) return;
+    const timer = window.setInterval(() => {
+      saveVersionSnapshot(activeNoteId, 90_000);
+    }, 90_000);
+    return () => window.clearInterval(timer);
+  }, [activeNoteId, isReadingMode, saveVersionSnapshot]);
+
+  // Lock background page completely when Notes is open so iOS Safari never scrolls or shows the dashboard behind
   useEffect(() => {
     if (!isOpen) {
       stopDictation();
@@ -356,7 +386,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
       bodyWidth: body.style.width,
       bodyOverflow: body.style.overflow,
       htmlOverflow: html.style.overflow,
-      htmlOverscroll: html.style.overscrollBehavior,
     };
 
     body.style.position = 'fixed';
@@ -366,7 +395,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
     body.style.width = '100%';
     body.style.overflow = 'hidden';
     html.style.overflow = 'hidden';
-    html.style.overscrollBehavior = 'none';
 
     return () => {
       body.style.position = prev.bodyPosition;
@@ -376,19 +404,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
       body.style.width = prev.bodyWidth;
       body.style.overflow = prev.bodyOverflow;
       html.style.overflow = prev.htmlOverflow;
-      html.style.overscrollBehavior = prev.htmlOverscroll;
       window.scrollTo(0, scrollY);
     };
   }, [isOpen, flushPendingSaves]);
-
-  // Periodic smart version snapshot while editing
-  useEffect(() => {
-    if (!activeNoteId || isReadingMode) return;
-    const timer = window.setInterval(() => {
-      saveVersionSnapshot(activeNoteId, 90_000);
-    }, 90_000);
-    return () => window.clearInterval(timer);
-  }, [activeNoteId, isReadingMode, saveVersionSnapshot]);
 
   const activeNotes = useMemo(() => notes.filter((n) => !n.deletedAt), [notes]);
   const trashedNotes = useMemo(() => notes.filter((n) => Boolean(n.deletedAt)), [notes]);
@@ -398,6 +416,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
     () => activeNotes.filter((n) => (n.images || []).length > 0).length,
     [activeNotes]
   );
+
+  const totalChecklistDone = useMemo(() => {
+    let done = 0;
+    for (const n of activeNotes) {
+      for (const b of n.blocks || []) {
+        if (b.type === 'checklist' && b.checked) done += 1;
+      }
+    }
+    return done;
+  }, [activeNotes]);
 
   const folderNameMap = useMemo(() => {
     const map: Record<string, NoteFolder> = {};
@@ -531,9 +559,31 @@ export const NotesView: React.FC<NotesViewProps> = ({
       tables: tpl.tables,
       tags: tpl.tags,
       accentColor: tpl.accentColor,
+      paperStyle: templateId === 'study' ? 'dots' : 'plain',
     });
     setIsReadingMode(false);
     setActiveNoteId(created.id);
+  };
+
+  const handleCyclePaperStyle = () => {
+    if (!activeNote) return;
+    const order: NotePaperStyle[] = ['plain', 'dots', 'lined'];
+    const idx = order.indexOf(activeNote.paperStyle || 'plain');
+    const next = order[(idx + 1) % order.length];
+    updateNote(activeNote.id, { paperStyle: next }, true);
+    const label =
+      next === 'dots'
+        ? isEs
+          ? 'Papel punteado'
+          : 'Papel pontilhado'
+        : next === 'lined'
+        ? isEs
+          ? 'Papel rayado'
+          : 'Papel pautado'
+        : isEs
+        ? 'Papel liso'
+        : 'Papel liso';
+    showToast(label);
   };
 
   const handleDuplicate = async (noteId: string) => {
@@ -886,1769 +936,1766 @@ export const NotesView: React.FC<NotesViewProps> = ({
       ? FOLDER_COLORS[activeNote.accentColor]
       : null;
 
-  const containerStyle: React.CSSProperties =
-    vvBox && vvBox.keyboardOpen
-      ? { top: `${vvBox.top}px`, height: `${vvBox.height}px`, bottom: 'auto' }
-      : { top: 0, bottom: 0, height: '100dvh' };
-
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <>
-          {/* Permanent Solid Opaque Shield — guarantees the home screen NEVER peeks through on iOS keyboard transitions */}
-          <div
-            key="sisfinz-notes-opaque-shield"
-            className="fixed inset-0 z-[57] bg-[#F4F9F6]"
-            aria-hidden="true"
-          />
-
-          <motion.div
-            key="sisfinz-notes-root"
-            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduceMotion ? undefined : { opacity: 0, y: 12 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            style={containerStyle}
-            className="fixed inset-x-0 z-[58] flex flex-col w-full max-w-full bg-[#F4F9F6] text-slate-900 overflow-hidden"
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {!activeNote ? (
-                /* REDESIGNED MODERN NOTES 2.0 HOME */
-                <motion.div
-                  key="notes-home"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  className="flex h-full w-full max-w-full flex-col overflow-hidden"
+        /* SOLID FULL-VIEWPORT OPAQUE SHELL: Guarantees underlying Home Dashboard NEVER shows through */
+        <motion.div
+          key="sisfinz-notes-root"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-[72] flex flex-col w-full h-[100dvh] max-w-full bg-[#EFF6F3] text-slate-900 overflow-hidden isolate"
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {!activeNote ? (
+              /* CREATIVE EDITORIAL STUDIO LIBRARY */
+              <motion.div
+                key="notes-home"
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.985 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={reduceMotion ? undefined : { opacity: 0, scale: 0.985 }}
+                transition={{ duration: 0.2 }}
+                className="flex h-full w-full max-w-full flex-col overflow-hidden"
+              >
+                {/* Emerald Editorial Hero Header */}
+                <div
+                  className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 pb-4 pt-3 shrink-0 shadow-[0_10px_30px_rgba(6,78,59,0.16)]"
+                  style={{ paddingTop: 'max(0.85rem, env(safe-area-inset-top, 0px))' }}
                 >
-                  {/* Editorial Ambient Emerald-White Header */}
-                  <div
-                    className="relative overflow-hidden border-b border-emerald-100/90 bg-gradient-to-b from-white via-white to-[#F7FBF9] px-4 pb-3.5 shrink-0 space-y-3.5"
-                    style={{ paddingTop: 'max(0.85rem, env(safe-area-inset-top, 0px))' }}
-                  >
-                    {/* Subtle Decorative Ambient Glow */}
-                    <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-200/35 blur-3xl" />
+                  {/* Decorative organic soft light blobs */}
+                  <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/12 blur-2xl" />
+                  <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-teal-300/15 blur-2xl" />
 
-                    <div className="relative z-10 mx-auto flex max-w-2xl items-center justify-between gap-2">
+                  <div className="relative z-10 mx-auto max-w-2xl space-y-3.5">
+                    <div className="flex items-center justify-between gap-2">
                       <motion.button
-                        whileTap={{ scale: 0.94 }}
                         type="button"
+                        whileTap={{ scale: 0.94 }}
                         onClick={onClose}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-2xs hover:border-emerald-300 hover:text-emerald-800 transition-all cursor-pointer shrink-0 touch-manipulation"
+                        className="inline-flex items-center gap-1.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 px-3 py-2 text-xs font-black text-white backdrop-blur-sm transition-colors cursor-pointer shrink-0 touch-manipulation"
                       >
                         <ArrowLeft className="h-4 w-4" />
                         <span>{isEs ? 'Volver' : 'Voltar'}</span>
                       </motion.button>
 
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25">
-                          <StickyNote className="h-4.5 w-4.5" />
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/20 border border-white/25 shadow-inner backdrop-blur-sm">
+                          <StickyNote className="h-4.5 w-4.5 text-white" />
                         </div>
                         <div className="min-w-0">
-                          <h1 className="truncate text-[15px] font-black tracking-tight text-slate-900">
-                            Notas SisFinz
+                          <h1 className="truncate text-[15px] font-black tracking-tight text-white leading-tight">
+                            Notas Studio
                           </h1>
-                          <p className="truncate text-[10px] font-bold text-emerald-700">
-                            {activeTab === 'saved_links'
-                              ? isEs
-                                ? 'Colección visual de enlaces'
-                                : 'Coleção visual de links'
-                              : activeTab === 'folders'
-                              ? `${folders.length} ${folders.length === 1 ? 'pasta' : 'pastas'}`
-                              : `${activeNotes.length} ${activeNotes.length === 1 ? 'nota' : 'notas'}${
-                                  favoritesCount > 0 ? ` • ${favoritesCount} ★` : ''
-                                }`}
+                          <p className="truncate text-[10px] font-bold text-emerald-100/90">
+                            {activeNotes.length} {activeNotes.length === 1 ? 'nota' : 'notas'} •{' '}
+                            {totalChecklistDone} {isEs ? 'hechas' : 'feitas'}
                           </p>
                         </div>
                       </div>
 
                       {activeTab === 'folders' ? (
                         <motion.button
-                          whileTap={{ scale: 0.94 }}
                           type="button"
+                          whileTap={{ scale: 0.94 }}
                           onClick={() => setIsFolderModalOpen(true)}
-                          className="inline-flex items-center gap-1 rounded-2xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 cursor-pointer shrink-0 touch-manipulation"
+                          className="inline-flex items-center gap-1 rounded-2xl bg-white text-emerald-800 px-3 py-2 text-[11px] font-black shadow-sm hover:bg-emerald-50 cursor-pointer shrink-0 touch-manipulation"
                         >
                           <FolderPlus className="h-3.5 w-3.5" />
                           <span>{isEs ? 'Nueva' : 'Nova'}</span>
                         </motion.button>
                       ) : activeTab === 'all_notes' ? (
-                        <motion.button
-                          whileTap={{ scale: 0.94 }}
-                          type="button"
-                          onClick={() => setIsTemplatePickerOpen(true)}
-                          className="inline-flex items-center gap-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 px-3 py-2 text-[11px] font-black text-white shadow-sm shadow-emerald-600/25 hover:opacity-95 cursor-pointer shrink-0 touch-manipulation"
-                        >
-                          <Plus className="h-3.5 w-3.5 stroke-[2.8]" />
-                          <span>{isEs ? 'Nueva' : 'Nova'}</span>
-                        </motion.button>
+                        <div className="flex items-center rounded-2xl bg-white/15 border border-white/20 p-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setNotesLayout('grid')}
+                            className={`rounded-xl p-1.5 transition-colors cursor-pointer touch-manipulation ${
+                              notesLayout === 'grid'
+                                ? 'bg-white text-emerald-700 shadow-2xs'
+                                : 'text-emerald-100 hover:text-white'
+                            }`}
+                            aria-label="Grade"
+                          >
+                            <LayoutGrid className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNotesLayout('list')}
+                            className={`rounded-xl p-1.5 transition-colors cursor-pointer touch-manipulation ${
+                              notesLayout === 'list'
+                                ? 'bg-white text-emerald-700 shadow-2xs'
+                                : 'text-emerald-100 hover:text-white'
+                            }`}
+                            aria-label="Lista"
+                          >
+                            <ListIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ) : (
-                        <div className="w-16 shrink-0" />
+                        <div className="w-14 shrink-0" />
                       )}
                     </div>
 
-                    {/* Sleek 3-Area Animated Segmented Control */}
-                    <div className="relative z-10 mx-auto max-w-2xl">
-                      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-emerald-100/90 bg-[#EDF5F1] p-1">
-                        {(
-                          [
-                            {
-                              id: 'all_notes',
-                              label: isEs ? 'Todas' : 'Notas',
-                              icon: FileText,
-                            },
-                            {
-                              id: 'folders',
-                              label: isEs ? 'Carpetas' : 'Pastas',
-                              icon: Folder,
-                            },
-                            {
-                              id: 'saved_links',
-                              label: isEs ? 'Links salvos' : 'Links salvos',
-                              icon: Link2,
-                            },
-                          ] as const
-                        ).map((tab) => {
-                          const Icon = tab.icon;
-                          const isActive = activeTab === tab.id;
-                          return (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => {
-                                setActiveTab(tab.id);
-                                if (tab.id === 'all_notes') setSelectedFolderId(null);
-                              }}
-                              className={`relative isolate flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-xs font-black transition-colors cursor-pointer touch-manipulation ${
-                                isActive
-                                  ? 'text-emerald-950'
-                                  : 'text-slate-500 hover:text-emerald-800'
-                              }`}
-                            >
-                              {isActive && (
-                                <motion.span
-                                  layoutId="notes-home-tab-pill"
-                                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                                  className="absolute inset-0 -z-10 rounded-xl bg-white border border-emerald-200/70 shadow-sm"
-                                />
-                              )}
-                              <Icon
-                                className={`h-3.5 w-3.5 shrink-0 ${
-                                  isActive ? 'text-emerald-600' : 'text-slate-400'
-                                }`}
+                    {/* 3-Area Floating Capsule Navigation */}
+                    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-emerald-950/20 border border-white/15 p-1 backdrop-blur-sm">
+                      {(
+                        [
+                          {
+                            id: 'all_notes',
+                            label: isEs ? 'Notas' : 'Notas',
+                            icon: FileText,
+                          },
+                          {
+                            id: 'folders',
+                            label: isEs ? 'Carpetas' : 'Pastas',
+                            icon: Folder,
+                          },
+                          {
+                            id: 'saved_links',
+                            label: isEs ? 'Links salvos' : 'Links salvos',
+                            icon: Link2,
+                          },
+                        ] as const
+                      ).map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = activeTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(tab.id);
+                              if (tab.id === 'all_notes') setSelectedFolderId(null);
+                            }}
+                            className={`relative isolate flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-[11.5px] font-black transition-colors cursor-pointer touch-manipulation ${
+                              isActive ? 'text-emerald-950' : 'text-emerald-50/90 hover:text-white'
+                            }`}
+                          >
+                            {isActive && (
+                              <motion.span
+                                layoutId="notes-studio-tab-pill"
+                                transition={{ type: 'spring', stiffness: 440, damping: 28 }}
+                                className="absolute inset-0 -z-10 rounded-xl bg-white shadow-md"
                               />
-                              <span className="truncate">{tab.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                            )}
+                            <Icon
+                              className={`h-3.5 w-3.5 shrink-0 ${
+                                isActive ? 'text-emerald-600' : 'text-emerald-100'
+                              }`}
+                            />
+                            <span className="truncate">{tab.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
+                </div>
 
-                  {/* Scrollable Body */}
-                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4">
-                    <div className="mx-auto max-w-2xl w-full min-w-0">
-                      <AnimatePresence mode="wait" initial={false}>
-                        {activeTab === 'saved_links' ? (
-                          <motion.div
-                            key="area-saved-links"
-                            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-                            transition={{ duration: 0.18 }}
-                          >
-                            <SavedLinksLibrary language={language} />
-                          </motion.div>
-                        ) : activeTab === 'folders' ? (
-                          <motion.div
-                            key="area-folders"
-                            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-                            transition={{ duration: 0.18 }}
-                            className="space-y-5 pb-24"
-                          >
-                            {/* Bento Smart Folders */}
-                            <div className="space-y-2.5">
-                              <span className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                {isEs ? 'Colecciones inteligentes' : 'Coleções inteligentes'}
-                              </span>
-                              <div className="grid grid-cols-2 gap-3">
-                                {(
-                                  [
-                                    {
-                                      id: 'all',
-                                      label: isEs ? 'Todas las notas' : 'Todas as notas',
-                                      count: activeNotes.length,
-                                      icon: FileText,
-                                      cardBg: 'from-emerald-50/80 via-white to-white',
-                                      iconBg: 'bg-emerald-600 text-white shadow-emerald-600/25',
-                                    },
-                                    {
-                                      id: 'favorites',
-                                      label: isEs ? 'Favoritas' : 'Favoritas',
-                                      count: favoritesCount,
-                                      icon: Heart,
-                                      cardBg: 'from-rose-50/80 via-white to-white',
-                                      iconBg: 'bg-rose-500 text-white shadow-rose-500/25',
-                                    },
-                                    {
-                                      id: 'pinned',
-                                      label: isEs ? 'Fijadas' : 'Fixadas',
-                                      count: pinnedCount,
-                                      icon: Pin,
-                                      cardBg: 'from-amber-50/80 via-white to-white',
-                                      iconBg: 'bg-amber-500 text-white shadow-amber-500/25',
-                                    },
-                                    {
-                                      id: 'trash',
-                                      label: isEs ? 'Papelera' : 'Lixeira',
-                                      count: trashedNotes.length,
-                                      icon: Trash2,
-                                      cardBg: 'from-slate-100/80 via-white to-white',
-                                      iconBg: 'bg-slate-600 text-white shadow-slate-600/20',
-                                    },
-                                  ] as const
-                                ).map((sys) => {
-                                  const Icon = sys.icon;
-                                  return (
-                                    <motion.button
-                                      key={sys.id}
-                                      type="button"
-                                      whileHover={{ y: -2 }}
-                                      whileTap={{ scale: 0.97 }}
-                                      onClick={() => {
-                                        setSelectedFolderId(null);
-                                        setQuickFilter(sys.id);
-                                        setActiveTab('all_notes');
-                                      }}
-                                      className={`flex flex-col justify-between gap-4 rounded-[1.5rem] border border-emerald-100/90 bg-gradient-to-br ${sys.cardBg} p-4 text-left shadow-[0_6px_20px_rgba(15,23,42,0.04)] hover:border-emerald-300 transition-all cursor-pointer touch-manipulation`}
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <span
-                                          className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-md ${sys.iconBg}`}
-                                        >
-                                          <Icon className="h-4.5 w-4.5" />
-                                        </span>
-                                        <span className="font-mono text-xl font-black text-slate-900">
-                                          {sys.count}
-                                        </span>
-                                      </div>
-                                      <span className="text-xs font-black text-slate-800">
-                                        {sys.label}
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 py-4">
+                  <div className="mx-auto max-w-2xl w-full min-w-0">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {activeTab === 'saved_links' ? (
+                        <motion.div
+                          key="area-saved-links"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <SavedLinksLibrary language={language} />
+                        </motion.div>
+                      ) : activeTab === 'folders' ? (
+                        <motion.div
+                          key="area-folders"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="space-y-5 pb-24"
+                        >
+                          {/* Smart Collections */}
+                          <div className="space-y-2.5">
+                            <span className="px-1 text-[10px] font-black uppercase tracking-widest text-emerald-900/60">
+                              {isEs ? 'Colecciones inteligentes' : 'Coleções inteligentes'}
+                            </span>
+                            <div className="grid grid-cols-2 gap-2.5">
+                              {(
+                                [
+                                  {
+                                    id: 'all',
+                                    label: isEs ? 'Todas las notas' : 'Todas as notas',
+                                    count: activeNotes.length,
+                                    icon: FileText,
+                                    grad: 'from-emerald-50 to-white border-emerald-200/80',
+                                    iconBox: 'bg-emerald-600 text-white',
+                                  },
+                                  {
+                                    id: 'favorites',
+                                    label: isEs ? 'Favoritas' : 'Favoritas',
+                                    count: favoritesCount,
+                                    icon: Heart,
+                                    grad: 'from-rose-50 to-white border-rose-200/80',
+                                    iconBox: 'bg-rose-500 text-white',
+                                  },
+                                  {
+                                    id: 'pinned',
+                                    label: isEs ? 'Fijadas' : 'Fixadas',
+                                    count: pinnedCount,
+                                    icon: Pin,
+                                    grad: 'from-amber-50 to-white border-amber-200/80',
+                                    iconBox: 'bg-amber-500 text-white',
+                                  },
+                                  {
+                                    id: 'trash',
+                                    label: isEs ? 'Papelera' : 'Lixeira',
+                                    count: trashedNotes.length,
+                                    icon: Trash2,
+                                    grad: 'from-slate-100 to-white border-slate-200',
+                                    iconBox: 'bg-slate-600 text-white',
+                                  },
+                                ] as const
+                              ).map((sys) => {
+                                const Icon = sys.icon;
+                                return (
+                                  <motion.button
+                                    key={sys.id}
+                                    type="button"
+                                    whileHover={{ y: -2 }}
+                                    whileTap={{ scale: 0.96 }}
+                                    onClick={() => {
+                                      setSelectedFolderId(null);
+                                      setQuickFilter(sys.id);
+                                      setActiveTab('all_notes');
+                                    }}
+                                    className={`flex flex-col justify-between gap-3 rounded-[1.5rem] border bg-gradient-to-br ${sys.grad} p-4 text-left shadow-xs hover:shadow-md transition-all cursor-pointer touch-manipulation`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span
+                                        className={`flex h-9 w-9 items-center justify-center rounded-2xl shadow-xs ${sys.iconBox}`}
+                                      >
+                                        <Icon className="h-4 w-4" />
                                       </span>
-                                    </motion.button>
-                                  );
-                                })}
-                              </div>
+                                      <span className="font-mono text-lg font-black text-slate-900">
+                                        {sys.count}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-black text-slate-800">
+                                      {sys.label}
+                                    </span>
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Custom Folders */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-900/60">
+                                {isEs ? 'Mis cuadernos y carpetas' : 'Meus cadernos e pastas'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsFolderModalOpen(true)}
+                                className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 hover:underline cursor-pointer touch-manipulation"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                {isEs ? 'Nueva carpeta' : 'Nova pasta'}
+                              </button>
                             </div>
 
-                            {/* Custom Folders */}
-                            <div className="space-y-2.5">
-                              <div className="flex items-center justify-between px-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                  {isEs ? 'Mis carpetas' : 'Minhas pastas'}
-                                </span>
+                            {folders.length === 0 ? (
+                              <div className="rounded-[1.75rem] border border-dashed border-emerald-300/80 bg-white/90 p-8 text-center space-y-2.5">
+                                <Folder className="mx-auto h-8 w-8 text-emerald-500" />
+                                <p className="text-xs font-bold text-slate-600">
+                                  {isEs
+                                    ? 'Crea cuadernos para Estudios, Trabajo, Recetas o Proyectos.'
+                                    : 'Crie cadernos para Estudos, Trabalho, Receitas ou Projetos.'}
+                                </p>
                                 <button
                                   type="button"
                                   onClick={() => setIsFolderModalOpen(true)}
-                                  className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 hover:underline cursor-pointer touch-manipulation"
+                                  className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer touch-manipulation"
                                 >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  {isEs ? 'Crear carpeta' : 'Criar pasta'}
+                                  <FolderPlus className="h-3.5 w-3.5" />
+                                  {isEs ? 'Crear primera carpeta' : 'Criar primeira pasta'}
                                 </button>
                               </div>
-
-                              {folders.length === 0 ? (
-                                <div className="rounded-[1.75rem] border border-dashed border-emerald-200 bg-white p-8 text-center space-y-2.5">
-                                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                                    <FolderPlus className="h-6 w-6" />
-                                  </div>
-                                  <p className="text-xs font-bold text-slate-600">
-                                    {isEs
-                                      ? 'Organiza tus notas en carpetas como Estudios, Trabajo o Proyectos.'
-                                      : 'Organize suas notas em pastas como Estudos, Trabalho, Receitas ou Projetos.'}
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsFolderModalOpen(true)}
-                                    className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer touch-manipulation"
-                                  >
-                                    <FolderPlus className="h-3.5 w-3.5" />
-                                    {isEs ? 'Nueva carpeta' : 'Nova pasta'}
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                  {folders.map((fld) => {
-                                    const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
-                                    const count = activeNotes.filter(
-                                      (n) => n.folderId === fld.id
-                                    ).length;
-                                    return (
-                                      <motion.div
-                                        key={fld.id}
-                                        whileHover={{ y: -1 }}
-                                        className={`flex items-center justify-between gap-2 rounded-2xl border border-emerald-100/90 bg-gradient-to-r ${palette.softTint} p-3.5 shadow-2xs hover:border-emerald-300 transition-all`}
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {folders.map((fld) => {
+                                  const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
+                                  const count = activeNotes.filter(
+                                    (n) => n.folderId === fld.id
+                                  ).length;
+                                  return (
+                                    <motion.div
+                                      key={fld.id}
+                                      whileHover={{ y: -2 }}
+                                      className={`flex items-center justify-between gap-2 rounded-[1.5rem] border bg-gradient-to-br ${palette.cardTint} p-3.5 shadow-xs transition-all`}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedFolderId(fld.id);
+                                          setQuickFilter('all');
+                                          setActiveTab('all_notes');
+                                        }}
+                                        className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer touch-manipulation"
                                       >
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setSelectedFolderId(fld.id);
-                                            setQuickFilter('all');
-                                            setActiveTab('all_notes');
-                                          }}
-                                          className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer touch-manipulation"
+                                        <span
+                                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-2xs ${palette.bg} ${palette.text} ${palette.border}`}
                                         >
-                                          <span
-                                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${palette.bg} ${palette.text} ${palette.border}`}
-                                          >
-                                            {renderFolderIcon(fld.icon, 'h-4 w-4')}
-                                          </span>
-                                          <div className="min-w-0">
-                                            <div className="truncate text-sm font-black text-slate-900">
-                                              {fld.name}
-                                            </div>
-                                            <div className="text-[10.5px] font-bold text-slate-400">
-                                              {count} {count === 1 ? 'nota' : 'notas'}
-                                            </div>
+                                          {renderFolderIcon(fld.icon, 'h-5 w-5')}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <div className="truncate text-sm font-black text-slate-900">
+                                            {fld.name}
                                           </div>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => void deleteFolder(fld.id)}
-                                          className="rounded-xl p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-500 cursor-pointer touch-manipulation"
-                                          aria-label="Excluir pasta"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </button>
-                                      </motion.div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        ) : (
-                          /* AREA 1: MODERN VISUAL NOTES LIBRARY */
-                          <motion.div
-                            key="area-all-notes"
-                            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
-                            transition={{ duration: 0.18 }}
-                            className="space-y-4 pb-24"
-                          >
-                            {/* Search Bar */}
-                            <div className="relative">
-                              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/70" />
-                              <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder={
-                                  isEs
-                                    ? 'Buscar por título, texto, etiqueta o carpeta...'
-                                    : 'Buscar por título, texto, etiqueta ou pasta...'
-                                }
-                                className="w-full rounded-2xl border border-emerald-100 bg-white py-3 pl-10 pr-9 text-[16px] sm:text-xs font-semibold text-slate-900 placeholder:text-slate-400 shadow-[0_4px_16px_rgba(6,78,59,0.04)] outline-none focus:border-emerald-500"
-                              />
-                              {searchQuery && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSearchQuery('')}
-                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
+                                          <div className="text-[10.5px] font-bold text-slate-400">
+                                            {count} {count === 1 ? 'nota' : 'notas'}
+                                          </div>
+                                        </div>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void deleteFolder(fld.id)}
+                                        className="rounded-xl p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-500 cursor-pointer touch-manipulation"
+                                        aria-label="Excluir pasta"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </motion.div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        /* AREA 1: CREATIVE NOTES STUDIO */
+                        <motion.div
+                          key="area-all-notes"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="space-y-4 pb-28"
+                        >
+                          {/* Search Bar (16px font on mobile) */}
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/70" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder={
+                                isEs
+                                  ? 'Buscar notas, etiquetas o carpetas...'
+                                  : 'Buscar notas, etiquetas ou pastas...'
+                              }
+                              className="w-full rounded-2xl border border-emerald-200/70 bg-white py-3 pl-11 pr-9 text-[16px] sm:text-xs font-semibold text-slate-900 placeholder:text-slate-400 shadow-[0_4px_16px_rgba(6,78,59,0.05)] outline-none focus:border-emerald-500"
+                            />
+                            {searchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
 
-                            {/* Quick Creative Start Strip (1-tap templates!) */}
-                            {!searchQuery && quickFilter === 'all' && !selectedFolderId && (
+                          {/* Quick Start Templates Carousel (1-Tap Note Creation) */}
+                          {quickFilter !== 'trash' && !searchQuery.trim() && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between px-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-900/60">
+                                  <Sparkles className="h-3 w-3 text-emerald-600" />
+                                  {isEs ? 'Crear rápido' : 'Criar rápido'}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
                                 {NOTE_TEMPLATES.map((tpl) => (
                                   <motion.button
                                     key={tpl.id}
-                                    whileTap={{ scale: 0.95 }}
                                     type="button"
+                                    whileTap={{ scale: 0.94 }}
                                     onClick={() => void handleCreateFromTemplate(tpl.id)}
-                                    className="inline-flex items-center gap-1.5 rounded-2xl border border-emerald-100/90 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 shadow-2xs hover:border-emerald-300 hover:bg-emerald-50/50 transition-all cursor-pointer shrink-0 touch-manipulation"
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200/70 bg-white px-3.5 py-2 text-left shadow-2xs hover:border-emerald-400 hover:bg-emerald-50/40 transition-all cursor-pointer shrink-0 touch-manipulation"
                                   >
-                                    <span className="text-sm leading-none">{tpl.emoji}</span>
-                                    <span className="whitespace-nowrap">
+                                    <span className="text-base leading-none">{tpl.emoji}</span>
+                                    <span className="text-[11.5px] font-black text-slate-800 whitespace-nowrap">
                                       {isEs ? tpl.labelEs : tpl.labelPt}
                                     </span>
                                   </motion.button>
                                 ))}
                               </div>
-                            )}
-
-                            {/* Active Folder Banner or Quick Filter Pills */}
-                            {selectedFolderId ? (
-                              <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2.5">
-                                <div className="flex items-center gap-2 text-xs font-black text-emerald-900">
-                                  {renderFolderIcon(
-                                    folderNameMap[selectedFolderId]?.icon || 'folder',
-                                    'h-4 w-4 text-emerald-600'
-                                  )}
-                                  <span>{folderNameMap[selectedFolderId]?.name || 'Pasta'}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedFolderId(null)}
-                                  className="inline-flex items-center gap-1 rounded-xl bg-white px-2.5 py-1 text-[10.5px] font-black text-emerald-800 shadow-2xs cursor-pointer touch-manipulation"
-                                >
-                                  <X className="h-3 w-3" />
-                                  {isEs ? 'Ver todas' : 'Ver todas'}
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                                {(
-                                  [
-                                    { id: 'all', label: isEs ? 'Todas' : 'Todas', count: activeNotes.length },
-                                    { id: 'favorites', label: isEs ? 'Favoritas' : 'Favoritas', count: favoritesCount },
-                                    { id: 'pinned', label: isEs ? 'Fijadas' : 'Fixadas', count: pinnedCount },
-                                    { id: 'with_images', label: isEs ? 'Con imágenes' : 'Com imagens', count: withImagesCount },
-                                    { id: 'trash', label: isEs ? 'Papelera' : 'Lixeira', count: trashedNotes.length },
-                                  ] as const
-                                ).map((f) => {
-                                  const active = quickFilter === f.id;
-                                  return (
-                                    <button
-                                      key={f.id}
-                                      type="button"
-                                      onClick={() => setQuickFilter(f.id)}
-                                      className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-black whitespace-nowrap transition-all cursor-pointer shrink-0 touch-manipulation ${
-                                        active
-                                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
-                                          : 'border-emerald-100/90 bg-white text-slate-600 hover:border-emerald-300'
-                                      }`}
-                                    >
-                                      <span>{f.label}</span>
-                                      <span
-                                        className={`font-mono text-[10px] ${
-                                          active ? 'text-emerald-100' : 'text-slate-400'
-                                        }`}
-                                      >
-                                        {f.count}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Trash Header */}
-                            {quickFilter === 'trash' && !selectedFolderId && trashedNotes.length > 0 && (
-                              <div className="flex items-center justify-between px-1">
-                                <span className="text-[10.5px] font-bold text-slate-500">
-                                  {isEs ? 'Notas en la papelera' : 'Notas na lixeira'}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => void emptyTrash()}
-                                  className="text-[11px] font-black text-rose-600 hover:underline cursor-pointer touch-manipulation"
-                                >
-                                  {isEs ? 'Vaciar papelera' : 'Esvaziar lixeira'}
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Elevated Modern Note Cards */}
-                            {filteredNotes.length === 0 ? (
-                              <div className="rounded-[2rem] border border-dashed border-emerald-200 bg-white p-9 text-center space-y-3 shadow-2xs">
-                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-600">
-                                  <Sparkles className="h-7 w-7" />
-                                </div>
-                                <div className="space-y-1">
-                                  <div className="text-sm font-black text-slate-900">
-                                    {quickFilter === 'trash'
-                                      ? isEs
-                                        ? 'La papelera está vacía'
-                                        : 'A lixeira está vazia'
-                                      : isEs
-                                      ? 'Tu espacio creativo de notas'
-                                      : 'Seu espaço criativo de notas'}
-                                  </div>
-                                  <p className="mx-auto max-w-xs text-xs font-medium text-slate-500">
-                                    {quickFilter === 'trash'
-                                      ? isEs
-                                        ? 'Las notas eliminadas aparecerán aquí.'
-                                        : 'Notas apagadas aparecem aqui para restauração.'
-                                      : isEs
-                                      ? 'Crea notas rápidas, recetas, listas de compras o apuntes de estudio.'
-                                      : 'Crie anotações, receitas, checklists interativos ou estudos organizados.'}
-                                  </p>
-                                </div>
-                                {quickFilter !== 'trash' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsTemplatePickerOpen(true)}
-                                    className="inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 px-5 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-600/20 hover:opacity-95 cursor-pointer touch-manipulation"
-                                  >
-                                    <Plus className="h-4 w-4 stroke-[2.6]" />
-                                    {isEs ? 'Crear primera nota' : 'Criar primeira nota'}
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <AnimatePresence initial={false} mode="popLayout">
-                                  {filteredNotes.map((note) => {
-                                    const folder = note.folderId ? folderNameMap[note.folderId] : null;
-                                    const checkBlocks = (note.blocks || []).filter(
-                                      (b) => b.type === 'checklist'
-                                    );
-                                    const checkTotal = checkBlocks.length;
-                                    const checkDone = checkBlocks.filter((c) => c.checked).length;
-                                    const firstImage = (note.images || [])[0]?.url || null;
-                                    const isTrashed = Boolean(note.deletedAt);
-                                    const isLockedPreview = note.locked && !unlockedIds[note.id];
-                                    const accent =
-                                      note.accentColor && note.accentColor !== 'none'
-                                        ? FOLDER_COLORS[note.accentColor]
-                                        : null;
-                                    const menuOpen = contextMenuNoteId === note.id;
-
-                                    return (
-                                      <motion.div
-                                        key={note.id}
-                                        layout={!reduceMotion}
-                                        initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.98 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={reduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
-                                        whileHover={reduceMotion ? undefined : { y: -2 }}
-                                        transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                                        onClick={() => handleOpenNoteCard(note)}
-                                        className={`group relative flex flex-col justify-between rounded-[1.5rem] border p-4 transition-all cursor-pointer overflow-visible ${
-                                          note.pinned
-                                            ? 'border-emerald-300/90 bg-gradient-to-br from-emerald-50/55 via-white to-white shadow-[0_8px_24px_rgba(5,150,105,0.08)]'
-                                            : 'border-emerald-100/90 bg-white hover:border-emerald-300 shadow-[0_4px_18px_rgba(15,23,42,0.04)]'
-                                        }`}
-                                      >
-                                        {/* Top Color Accent Strip */}
-                                        {accent && (
-                                          <div
-                                            className={`absolute inset-x-5 top-0 h-[3px] rounded-b-full bg-gradient-to-r ${accent.accentBar}`}
-                                          />
-                                        )}
-
-                                        <div className="space-y-2.5">
-                                          {/* Card Top Row */}
-                                          <div className="flex items-start justify-between gap-2">
-                                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                              {note.pinned && (
-                                                <Pin className="h-3.5 w-3.5 shrink-0 fill-emerald-600 text-emerald-600" />
-                                              )}
-                                              {note.locked && (
-                                                <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                              )}
-                                              <h3 className="truncate text-[14.5px] font-black tracking-tight text-slate-900">
-                                                {note.title ||
-                                                  (isEs ? 'Nota sin título' : 'Nota sem título')}
-                                              </h3>
-                                            </div>
-
-                                            <div
-                                              className="relative flex items-center gap-0.5 shrink-0"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              {!isTrashed ? (
-                                                <>
-                                                  <motion.button
-                                                    whileTap={{ scale: 0.8 }}
-                                                    type="button"
-                                                    onClick={() => toggleFavoriteNote(note.id)}
-                                                    className={`rounded-xl p-1.5 transition-colors cursor-pointer touch-manipulation ${
-                                                      note.favorite
-                                                        ? 'text-rose-500'
-                                                        : 'text-slate-300 hover:text-rose-400'
-                                                    }`}
-                                                    aria-label="Favoritar"
-                                                  >
-                                                    <Heart
-                                                      className={`h-3.5 w-3.5 ${
-                                                        note.favorite ? 'fill-rose-500' : ''
-                                                      }`}
-                                                    />
-                                                  </motion.button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                      setContextMenuNoteId(menuOpen ? null : note.id)
-                                                    }
-                                                    className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer touch-manipulation"
-                                                    aria-label="Opções da nota"
-                                                  >
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                  </button>
-
-                                                  <AnimatePresence>
-                                                    {menuOpen && (
-                                                      <motion.div
-                                                        initial={{ opacity: 0, scale: 0.94, y: 4 }}
-                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                        exit={{ opacity: 0, scale: 0.94, y: 4 }}
-                                                        className="absolute right-0 top-full mt-1 w-44 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-xl z-40"
-                                                      >
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            togglePinNote(note.id);
-                                                            setContextMenuNoteId(null);
-                                                          }}
-                                                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                                                        >
-                                                          <Pin className="h-3.5 w-3.5 text-emerald-600" />
-                                                          {note.pinned
-                                                            ? isEs
-                                                              ? 'Desfijar'
-                                                              : 'Desafixar'
-                                                            : isEs
-                                                            ? 'Fijar arriba'
-                                                            : 'Fixar no topo'}
-                                                        </button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => void handleDuplicate(note.id)}
-                                                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                                                        >
-                                                          <Files className="h-3.5 w-3.5 text-emerald-600" />
-                                                          {isEs ? 'Duplicar' : 'Duplicar'}
-                                                        </button>
-                                                        <div className="my-1 h-px bg-slate-100" />
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            softDeleteNote(note.id);
-                                                            setContextMenuNoteId(null);
-                                                          }}
-                                                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
-                                                        >
-                                                          <Trash2 className="h-3.5 w-3.5" />
-                                                          {isEs ? 'Eliminar' : 'Excluir'}
-                                                        </button>
-                                                      </motion.div>
-                                                    )}
-                                                  </AnimatePresence>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => restoreNote(note.id)}
-                                                    className="rounded-xl bg-emerald-50 p-1.5 text-emerald-700 hover:bg-emerald-100 cursor-pointer touch-manipulation"
-                                                    title={isEs ? 'Restaurar' : 'Restaurar'}
-                                                  >
-                                                    <RotateCcw className="h-3.5 w-3.5" />
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => void permanentlyDeleteNote(note.id)}
-                                                    className="rounded-xl bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 cursor-pointer touch-manipulation"
-                                                    title={
-                                                      isEs
-                                                        ? 'Eliminar definitivamente'
-                                                        : 'Excluir definitivamente'
-                                                    }
-                                                  >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                  </button>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {/* Thumbnail Preview if note has an image */}
-                                          {!isLockedPreview && firstImage && (
-                                            <div className="h-24 w-full overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
-                                              <img
-                                                src={firstImage}
-                                                alt=""
-                                                loading="lazy"
-                                                className="h-full w-full object-cover"
-                                              />
-                                            </div>
-                                          )}
-
-                                          {/* Body Preview */}
-                                          <p className="line-clamp-3 text-xs font-medium text-slate-500 leading-relaxed break-words">
-                                            {isLockedPreview
-                                              ? isEs
-                                                ? 'Nota protegida con PIN • Toca para desbloquear'
-                                                : 'Nota protegida com PIN • Toque para desbloquear'
-                                              : note.plainText ||
-                                                (isEs
-                                                  ? 'Toca para empezar a escribir...'
-                                                  : 'Toque para começar a escrever...')}
-                                          </p>
-
-                                          {/* Mini Animated Checklist Progress Bar on Card */}
-                                          {!isLockedPreview && checkTotal > 0 && (
-                                            <div className="flex items-center gap-2 pt-0.5">
-                                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
-                                                <div
-                                                  style={{
-                                                    width: `${Math.round((checkDone / checkTotal) * 100)}%`,
-                                                  }}
-                                                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
-                                                />
-                                              </div>
-                                              <span className="inline-flex items-center gap-1 font-mono text-[10px] font-black text-emerald-700 shrink-0">
-                                                <CheckSquare className="h-3 w-3" />
-                                                {checkDone}/{checkTotal}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* Footer Metadata */}
-                                        <div className="mt-3 flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-100/90 pt-2.5">
-                                          <span className="text-[10px] font-bold text-slate-400">
-                                            {formatNoteDate(note.updatedAt, isEs)}
-                                          </span>
-
-                                          <div className="flex flex-wrap items-center gap-1">
-                                            {folder && (
-                                              <span
-                                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-black ${
-                                                  FOLDER_COLORS[folder.color]?.bg || 'bg-emerald-50'
-                                                } ${
-                                                  FOLDER_COLORS[folder.color]?.text ||
-                                                  'text-emerald-700'
-                                                } ${
-                                                  FOLDER_COLORS[folder.color]?.border ||
-                                                  'border-emerald-200'
-                                                }`}
-                                              >
-                                                {renderFolderIcon(folder.icon, 'h-2.5 w-2.5')}
-                                                {folder.name}
-                                              </span>
-                                            )}
-
-                                            {(note.tags || []).slice(0, 2).map((tg) => (
-                                              <span
-                                                key={tg}
-                                                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600"
-                                              >
-                                                #{tg}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </motion.div>
-                                    );
-                                  })}
-                                </AnimatePresence>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                /* REDESIGNED FULL-SCREEN PROFESSIONAL EDITOR (NO HOME BLEED, BOTTOM DOCK ABOVE KEYBOARD) */
-                <motion.div
-                  key={`note-editor-${activeNote.id}`}
-                  initial={reduceMotion ? false : { opacity: 0, x: 18 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={reduceMotion ? undefined : { opacity: 0, x: 14 }}
-                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex h-full w-full max-w-full flex-col bg-white overflow-hidden"
-                >
-                  {/* Discreet Top Accent Line */}
-                  {activeAccentStyle && (
-                    <div
-                      className={`h-[3px] w-full shrink-0 bg-gradient-to-r ${activeAccentStyle.accentBar}`}
-                    />
-                  )}
-
-                  {/* Pinned Compact Editor Top Bar */}
-                  <div
-                    className="flex items-center justify-between gap-1.5 border-b border-emerald-100/90 bg-white px-3.5 py-2.5 shrink-0 z-30"
-                    style={{
-                      paddingTop:
-                        vvBox && vvBox.keyboardOpen
-                          ? '0.55rem'
-                          : 'max(0.65rem, env(safe-area-inset-top, 0px))',
-                    }}
-                  >
-                    <motion.button
-                      whileTap={{ scale: 0.94 }}
-                      type="button"
-                      onClick={handleCloseEditor}
-                      className="inline-flex items-center gap-1 rounded-xl bg-slate-100/90 px-3 py-2 text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer shrink-0 touch-manipulation"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Notas</span>
-                    </motion.button>
-
-                    {/* Animated Autosave Pill */}
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-bold text-emerald-700 shrink-0">
-                      {saveState === 'saving' ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          <span>{isEs ? 'Guardando...' : 'Salvando...'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          <Cloud className="h-3 w-3" />
-                          <span>{isEs ? 'Guardado' : 'Salvo'}</span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Right Action Controls */}
-                    <div className="flex items-center gap-1 shrink-0 relative">
-                      {!activeNote.deletedAt ? (
-                        <>
-                          <motion.button
-                            whileTap={{ scale: 0.94 }}
-                            type="button"
-                            onClick={() => setIsReadingMode((v) => !v)}
-                            className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-2 text-[11px] font-black transition-colors cursor-pointer touch-manipulation ${
-                              isReadingMode
-                                ? 'bg-emerald-600 text-white shadow-sm'
-                                : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'
-                            }`}
-                            title={
-                              isReadingMode
-                                ? isEs
-                                  ? 'Volver a edición'
-                                  : 'Voltar para edição'
-                                : isEs
-                                ? 'Modo lectura'
-                                : 'Modo leitura'
-                            }
-                          >
-                            {isReadingMode ? (
-                              <>
-                                <Pencil className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">Editar</span>
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">{isEs ? 'Leer' : 'Ler'}</span>
-                              </>
-                            )}
-                          </motion.button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsInNoteSearchOpen((v) => !v);
-                              if (isInNoteSearchOpen) setInNoteSearchQuery('');
-                            }}
-                            className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
-                              isInNoteSearchOpen
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100/90 text-slate-600 hover:text-emerald-700'
-                            }`}
-                            title={isEs ? 'Buscar en la nota' : 'Buscar na nota'}
-                          >
-                            <Search className="h-4 w-4" />
-                          </button>
-
-                          <motion.button
-                            whileTap={{ scale: 0.85 }}
-                            type="button"
-                            onClick={() => toggleFavoriteNote(activeNote.id)}
-                            className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
-                              activeNote.favorite
-                                ? 'bg-rose-50 text-rose-500'
-                                : 'bg-slate-100/90 text-slate-500 hover:text-rose-500'
-                            }`}
-                            title="Favoritar"
-                          >
-                            <Heart
-                              className={`h-4 w-4 ${activeNote.favorite ? 'fill-rose-500' : ''}`}
-                            />
-                          </motion.button>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsEditorMenuOpen((v) => !v)}
-                            className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
-                              isEditorMenuOpen
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50'
-                            }`}
-                            title={isEs ? 'Más opciones' : 'Mais opções'}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => restoreNote(activeNote.id)}
-                          className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white cursor-pointer touch-manipulation"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          Restaurar
-                        </button>
-                      )}
-
-                      {/* Editor Options Popover */}
-                      <AnimatePresence>
-                        {isEditorMenuOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                            className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-50"
-                          >
-                            <div className="px-2.5 py-1.5">
-                              <label className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                                {isEs ? 'Carpeta' : 'Pasta'}
-                              </label>
-                              <select
-                                value={activeNote.folderId || ''}
-                                onChange={(e) =>
-                                  updateNote(activeNote.id, { folderId: e.target.value || null }, true)
-                                }
-                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none"
-                              >
-                                <option value="">{isEs ? 'Sin carpeta' : 'Sem pasta'}</option>
-                                {folders.map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    {f.name}
-                                  </option>
-                                ))}
-                              </select>
                             </div>
-
-                            <div className="px-2.5 py-1.5">
-                              <span className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                                {isEs ? 'Color discreto' : 'Cor discreta'}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateNote(activeNote.id, { accentColor: 'none' }, true)
-                                  }
-                                  className={`flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white cursor-pointer ${
-                                    activeNote.accentColor === 'none'
-                                      ? 'ring-2 ring-emerald-600 ring-offset-1'
-                                      : ''
-                                  }`}
-                                  title="Padrão"
-                                >
-                                  <X className="h-3 w-3 text-slate-400" />
-                                </button>
-                                {(Object.keys(FOLDER_COLORS) as NoteFolderColor[]).map((col) => (
-                                  <button
-                                    key={col}
-                                    type="button"
-                                    onClick={() =>
-                                      updateNote(
-                                        activeNote.id,
-                                        { accentColor: col as NoteAccentColor },
-                                        true
-                                      )
-                                    }
-                                    className={`h-6 w-6 rounded-full ${FOLDER_COLORS[col].dot} cursor-pointer ${
-                                      activeNote.accentColor === col
-                                        ? 'ring-2 ring-slate-800 ring-offset-1 scale-110'
-                                        : ''
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="my-1 h-px bg-slate-100" />
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsEditorMenuOpen(false);
-                                setIsTagsPopoverOpen((v) => !v);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Tag className="h-3.5 w-3.5 text-emerald-600" />
-                              Etiquetas
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                togglePinNote(activeNote.id);
-                                setIsEditorMenuOpen(false);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Pin className="h-3.5 w-3.5 text-emerald-600" />
-                              {activeNote.pinned
-                                ? isEs
-                                  ? 'Desfijar nota'
-                                  : 'Desafixar nota'
-                                : isEs
-                                ? 'Fijar arriba'
-                                : 'Fixar no topo'}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => void handleDuplicate(activeNote.id)}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Files className="h-3.5 w-3.5 text-emerald-600" />
-                              Duplicar nota
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsEditorMenuOpen(false);
-                                saveVersionSnapshot(activeNote.id, 0);
-                                setPreviewVersion(null);
-                                setIsHistoryOpen(true);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <History className="h-3.5 w-3.5 text-emerald-600" />
-                              {isEs ? 'Historial de versiones' : 'Histórico de edições'}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={handleRequestToggleLock}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              {activeNote.locked ? (
-                                <Unlock className="h-3.5 w-3.5 text-amber-600" />
-                              ) : (
-                                <Lock className="h-3.5 w-3.5 text-amber-600" />
-                              )}
-                              {activeNote.locked
-                                ? isEs
-                                  ? 'Quitar PIN'
-                                  : 'Remover PIN'
-                                : isEs
-                                ? 'Bloquear con PIN'
-                                : 'Bloquear com PIN'}
-                            </button>
-
-                            <div className="my-1 h-px bg-slate-100" />
-
-                            <button
-                              type="button"
-                              onClick={() => void handleShareNote()}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Share2 className="h-3.5 w-3.5 text-emerald-600" />
-                              {isEs ? 'Compartir' : 'Compartilhar'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleCopyNoteText()}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Copy className="h-3.5 w-3.5 text-emerald-600" />
-                              Copiar texto
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handlePrintNotePdf}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Printer className="h-3.5 w-3.5 text-emerald-600" />
-                              Exportar PDF
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadNote('md')}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
-                            >
-                              <Download className="h-3.5 w-3.5 text-emerald-600" />
-                              Markdown (.md)
-                            </button>
-
-                            <div className="my-1 h-px bg-slate-100" />
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsEditorMenuOpen(false);
-                                softDeleteNote(activeNote.id);
-                                setActiveNoteId(null);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              {isEs ? 'Mover a papelera' : 'Mover para lixeira'}
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  {/* In-Note Search Bar */}
-                  <AnimatePresence>
-                    {isInNoteSearchOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden border-b border-emerald-100 bg-[#F6FBF8] px-3.5 py-2 shrink-0"
-                      >
-                        <div className="mx-auto flex max-w-2xl items-center gap-2">
-                          <Search className="h-4 w-4 text-emerald-600 shrink-0" />
-                          <input
-                            type="text"
-                            autoFocus
-                            value={inNoteSearchQuery}
-                            onChange={(e) => setInNoteSearchQuery(e.target.value)}
-                            placeholder={
-                              isEs
-                                ? 'Buscar palabras en esta nota...'
-                                : 'Buscar palavras nesta nota...'
-                            }
-                            className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-xs font-semibold text-slate-900 placeholder:text-slate-400 outline-none"
-                          />
-                          {inNoteSearchQuery.trim() && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-800 shrink-0">
-                              {inNoteMatchCount}
-                            </span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsInNoteSearchOpen(false);
-                              setInNoteSearchQuery('');
-                            }}
-                            className="rounded-lg p-1 text-slate-400 hover:bg-white cursor-pointer"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
 
-                  {/* Hidden File Inputs */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => void handleImageFileSelect(e, 'photo')}
-                    className="hidden"
-                  />
-                  <input
-                    ref={scanInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => void handleImageFileSelect(e, 'scan')}
-                    className="hidden"
-                  />
-
-                  {/* SmartNoteEditor manages the scrollable document paper + pinned bottom formatting dock */}
-                  <SmartNoteEditor
-                    noteId={activeNote.id}
-                    blocks={activeNote.blocks}
-                    readOnly={Boolean(activeNote.deletedAt)}
-                    isReadingMode={isReadingMode}
-                    isKeyboardOpen={Boolean(vvBox?.keyboardOpen)}
-                    searchQuery={inNoteSearchQuery}
-                    language={language}
-                    isUploadingImage={isUploadingImage}
-                    isDictating={isDictating}
-                    onChangeBlocks={(nextBlocks, immediate) =>
-                      updateNote(activeNote.id, { blocks: nextBlocks }, Boolean(immediate))
-                    }
-                    onTriggerImageUpload={() => fileInputRef.current?.click()}
-                    onTriggerScanUpload={() => scanInputRef.current?.click()}
-                    onOpenDrawing={() => setIsDrawingOpen(true)}
-                    onAddTable={handleAddTable}
-                    onToggleDictation={handleToggleDictation}
-                    headerContent={
-                      <div className="space-y-3">
-                        {/* Subtle Metadata Row */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-slate-400">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span>{formatNoteDate(activeNote.updatedAt, isEs)}</span>
-                            {activeNote.folderId && folderNameMap[activeNote.folderId] && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-700">
-                                {folderNameMap[activeNote.folderId].name}
-                              </span>
-                            )}
-                          </div>
-                          <span className="font-mono text-[10.5px]">
-                            {activeWordCount} pal. • {activeCharCount} car.
-                          </span>
-                        </div>
-
-                        {/* Discreet Tags Bar */}
-                        {((activeNote.tags || []).length > 0 || isTagsPopoverOpen) && (
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {(activeNote.tags || []).map((tg) => (
-                              <span
-                                key={tg}
-                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-800"
-                              >
-                                #{tg}
-                                {!isReadingMode && !activeNote.deletedAt && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveTag(tg)}
-                                    className="text-emerald-600/70 hover:text-rose-500 cursor-pointer"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
+                          {/* Active Folder Banner or Filter Pills */}
+                          {selectedFolderId ? (
+                            <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5">
+                              <div className="flex items-center gap-2 text-xs font-black text-emerald-900">
+                                {renderFolderIcon(
+                                  folderNameMap[selectedFolderId]?.icon || 'folder',
+                                  'h-4 w-4 text-emerald-600'
                                 )}
-                              </span>
-                            ))}
-
-                            {isTagsPopoverOpen && !isReadingMode && !activeNote.deletedAt && (
-                              <form onSubmit={handleAddTag} className="inline-flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={tagInput}
-                                  onChange={(e) => setTagInput(e.target.value)}
-                                  placeholder={isEs ? 'Nueva etiqueta...' : 'Nova etiqueta...'}
-                                  className="w-36 rounded-full border border-emerald-200 bg-slate-50 px-3 py-1 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white"
-                                />
-                                <button
-                                  type="submit"
-                                  className="rounded-full bg-emerald-600 p-1.5 text-white cursor-pointer"
-                                >
-                                  <Check className="h-3 w-3" />
-                                </button>
-                              </form>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Editorial Document Title */}
-                        {isReadingMode ? (
-                          <h1 className="text-[26px] font-black tracking-tight text-slate-900 leading-tight break-words">
-                            {activeNote.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
-                          </h1>
-                        ) : (
-                          <input
-                            type="text"
-                            value={activeNote.title}
-                            readOnly={Boolean(activeNote.deletedAt)}
-                            onChange={(e) => updateNote(activeNote.id, { title: e.target.value })}
-                            placeholder={isEs ? 'Título de la nota...' : 'Título da nota...'}
-                            className="w-full min-w-0 bg-transparent text-[26px] font-black tracking-tight text-slate-900 placeholder:text-slate-300 leading-tight outline-none"
-                          />
-                        )}
-
-                        <div className="h-px w-full bg-gradient-to-r from-emerald-100 via-slate-100 to-transparent" />
-                      </div>
-                    }
-                    footerContent={
-                      <>
-                        {/* Responsive Tables with Internal Horizontal Scroll */}
-                        {(activeNote.tables || []).length > 0 && (
-                          <div className="space-y-3 pt-4 w-full max-w-full min-w-0">
-                            {(activeNote.tables || []).map((tbl) => (
-                              <div
-                                key={tbl.id}
-                                className="w-full max-w-full overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xs"
-                              >
-                                {!isReadingMode && !activeNote.deletedAt && (
-                                  <div className="flex items-center justify-between border-b border-emerald-100/70 bg-emerald-50/40 px-3 py-1.5">
-                                    <span className="text-[10px] font-black uppercase text-emerald-800">
-                                      {isEs ? 'Tabla' : 'Tabela'}
-                                    </span>
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddTableRow(tbl.id)}
-                                        className="rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 cursor-pointer touch-manipulation"
-                                      >
-                                        + {isEs ? 'Fila' : 'Linha'}
-                                      </button>
-                                      {tbl.headers.length < 5 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleAddTableCol(tbl.id)}
-                                          className="rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 cursor-pointer touch-manipulation"
-                                        >
-                                          + Col
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteTable(tbl.id)}
-                                        className="rounded-lg p-1 text-slate-400 hover:text-rose-500 cursor-pointer touch-manipulation"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="w-full overflow-x-auto">
-                                  <table className="w-full min-w-[320px] border-collapse">
-                                    <thead>
-                                      <tr className="bg-emerald-50/50">
-                                        {tbl.headers.map((h, ci) => (
-                                          <th
-                                            key={ci}
-                                            className="border-b border-r last:border-r-0 border-slate-200 p-2 text-left"
-                                          >
-                                            {isReadingMode ? (
-                                              <span className="text-xs font-black text-emerald-950">
-                                                {h}
-                                              </span>
-                                            ) : (
-                                              <input
-                                                type="text"
-                                                value={h}
-                                                readOnly={Boolean(activeNote.deletedAt)}
-                                                onChange={(e) =>
-                                                  handleUpdateTableHeader(tbl.id, ci, e.target.value)
-                                                }
-                                                className="w-full min-w-[80px] bg-transparent text-[16px] sm:text-xs font-black text-emerald-950 outline-none"
-                                              />
-                                            )}
-                                          </th>
-                                        ))}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {tbl.rows.map((row, ri) => (
-                                        <tr key={ri} className="border-b last:border-b-0 border-slate-100">
-                                          {row.map((cell, ci) => (
-                                            <td
-                                              key={ci}
-                                              className="border-r last:border-r-0 border-slate-100 p-2"
-                                            >
-                                              {isReadingMode ? (
-                                                <span className="text-xs font-medium text-slate-700">
-                                                  {cell || '—'}
-                                                </span>
-                                              ) : (
-                                                <input
-                                                  type="text"
-                                                  value={cell}
-                                                  readOnly={Boolean(activeNote.deletedAt)}
-                                                  onChange={(e) =>
-                                                    handleUpdateTableCell(tbl.id, ri, ci, e.target.value)
-                                                  }
-                                                  placeholder="—"
-                                                  className="w-full min-w-[80px] bg-transparent text-[16px] sm:text-xs font-medium text-slate-700 outline-none"
-                                                />
-                                              )}
-                                            </td>
-                                          ))}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Attached Images, Drawings & Scans */}
-                        {(activeNote.images || []).length > 0 && (
-                          <div className="space-y-2 pt-4">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                              {isEs
-                                ? 'Imágenes, dibujos y escaneos'
-                                : 'Imagens, desenhos e documentos'}
-                            </span>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                              {(activeNote.images || []).map((img) => (
-                                <div
-                                  key={img.id}
-                                  className="group relative aspect-video overflow-hidden rounded-2xl border border-emerald-100 bg-slate-50 shadow-2xs"
-                                >
-                                  <img
-                                    src={img.url}
-                                    alt={img.name}
-                                    loading="lazy"
-                                    onClick={() => setPreviewImageUrl(img.url)}
-                                    className="h-full w-full object-cover cursor-pointer"
-                                  />
-                                  {img.kind && img.kind !== 'photo' && (
-                                    <span className="absolute left-1.5 bottom-1.5 rounded-lg bg-white/95 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-900 shadow-xs">
-                                      {img.kind === 'drawing'
-                                        ? isEs
-                                          ? 'Dibujo'
-                                          : 'Desenho'
-                                        : isEs
-                                        ? 'Escaneo'
-                                        : 'Scanner'}
-                                    </span>
-                                  )}
-                                  {!isReadingMode && !activeNote.deletedAt && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveImage(img.id)}
-                                      className="absolute right-1.5 top-1.5 rounded-lg bg-white/95 p-1 text-slate-700 hover:bg-rose-500 hover:text-white shadow-xs cursor-pointer touch-manipulation"
-                                      aria-label="Remover anexo"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    }
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Subtle Feedback Toast */}
-            <AnimatePresence>
-              {toastMessage && (
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[96] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg"
-                >
-                  {toastMessage}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Quick Templates Picker Modal */}
-            <AnimatePresence>
-              {isTemplatePickerOpen && (
-                <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setIsTemplatePickerOpen(false)}
-                    className="fixed inset-0 bg-emerald-950/15 backdrop-blur-[2px]"
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: 30, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 24, scale: 0.98 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-                    className="relative z-10 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-2xl space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-emerald-600" />
-                        <h3 className="text-sm font-black text-slate-900">
-                          {isEs ? 'Crear nueva nota' : 'Criar nova nota'}
-                        </h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsTemplatePickerOpen(false)}
-                        className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {NOTE_TEMPLATES.map((tpl) => (
-                        <motion.button
-                          key={tpl.id}
-                          type="button"
-                          whileHover={{ y: -1 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => void handleCreateFromTemplate(tpl.id)}
-                          className="flex flex-col items-start gap-1.5 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/35 via-white to-white p-3.5 text-left hover:border-emerald-400 transition-all cursor-pointer touch-manipulation"
-                        >
-                          <span className="text-2xl leading-none">{tpl.emoji}</span>
-                          <div className="text-xs font-black text-slate-900">
-                            {isEs ? tpl.labelEs : tpl.labelPt}
-                          </div>
-                          <div className="text-[10.5px] font-medium text-slate-500 leading-snug">
-                            {isEs ? tpl.descEs : tpl.descPt}
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
-
-            {/* Enhanced Version History Sheet */}
-            <AnimatePresence>
-              {isHistoryOpen && activeNote && (
-                <div className="fixed inset-0 z-[82] flex items-end sm:items-center justify-center p-0 sm:p-4">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => {
-                      setPreviewVersion(null);
-                      setIsHistoryOpen(false);
-                    }}
-                    className="fixed inset-0 bg-emerald-950/15 backdrop-blur-[2px]"
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: 32 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 32 }}
-                    className="relative z-10 w-full max-w-md max-h-[80dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white shadow-2xl"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 shrink-0">
-                      <div className="flex items-center gap-2">
-                        {previewVersion ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewVersion(null)}
-                            className="rounded-lg bg-slate-100 p-1 text-slate-600 hover:bg-emerald-50 cursor-pointer"
-                          >
-                            <ArrowLeft className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <History className="h-4 w-4 text-emerald-600" />
-                        )}
-                        <h3 className="text-sm font-black text-slate-900">
-                          {previewVersion
-                            ? formatNoteDate(previewVersion.savedAt, isEs)
-                            : isEs
-                            ? 'Historial de versiones'
-                            : 'Histórico de edições'}
-                        </h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreviewVersion(null);
-                          setIsHistoryOpen(false);
-                        }}
-                        className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {previewVersion ? (
-                      <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                        <div className="rounded-2xl border border-emerald-100 bg-[#F8FBF9] p-4 space-y-2">
-                          <div className="text-base font-black text-slate-900">
-                            {previewVersion.title || (isEs ? 'Sin título' : 'Sem título')}
-                          </div>
-                          <div className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                            {previewVersion.plainText || '—'}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewVersion(null)}
-                            className="flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
-                          >
-                            {isEs ? 'Cancelar' : 'Voltar'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              restoreVersionSnapshot(activeNote.id, previewVersion);
-                              setPreviewVersion(null);
-                              setIsHistoryOpen(false);
-                              showToast(isEs ? 'Versión restaurada' : 'Versão restaurada');
-                            }}
-                            className="flex-1 rounded-2xl bg-emerald-600 py-3 text-xs font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer"
-                          >
-                            {isEs ? 'Confirmar restauración' : 'Confirmar restauração'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                        {(activeNote.versions || []).length === 0 ? (
-                          <div className="py-8 text-center text-xs font-semibold text-slate-400">
-                            {isEs
-                              ? 'Aún no hay versiones guardadas para esta nota.'
-                              : 'Nenhuma versão anterior salva ainda.'}
-                          </div>
-                        ) : (
-                          (activeNote.versions || []).map((ver) => (
-                            <div
-                              key={ver.id}
-                              className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 p-3 bg-slate-50/70"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[10.5px] font-black text-emerald-700">
-                                  {formatNoteDate(ver.savedAt, isEs)}
-                                </div>
-                                <div className="truncate text-xs font-black text-slate-900 mt-0.5">
-                                  {ver.title || (isEs ? 'Sin título' : 'Sem título')}
-                                </div>
-                                <div className="line-clamp-2 text-[11px] font-medium text-slate-500 mt-0.5">
-                                  {ver.plainText || '—'}
-                                </div>
+                                <span>{folderNameMap[selectedFolderId]?.name || 'Pasta'}</span>
                               </div>
                               <button
                                 type="button"
-                                onClick={() => setPreviewVersion(ver)}
-                                className="rounded-xl border border-emerald-200 bg-white px-2.5 py-1.5 text-[10.5px] font-black text-emerald-700 hover:bg-emerald-50 cursor-pointer shrink-0 touch-manipulation"
+                                onClick={() => setSelectedFolderId(null)}
+                                className="inline-flex items-center gap-1 rounded-xl bg-white px-2.5 py-1 text-[10.5px] font-black text-emerald-800 shadow-2xs cursor-pointer touch-manipulation"
                               >
-                                {isEs ? 'Ver' : 'Visualizar'}
+                                <X className="h-3 w-3" />
+                                {isEs ? 'Ver todas' : 'Ver todas'}
                               </button>
                             </div>
-                          ))
+                          ) : (
+                            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                              {(
+                                [
+                                  { id: 'all', label: 'Todas', count: activeNotes.length },
+                                  { id: 'favorites', label: 'Favoritas', count: favoritesCount },
+                                  { id: 'pinned', label: isEs ? 'Fijadas' : 'Fixadas', count: pinnedCount },
+                                  { id: 'with_images', label: isEs ? 'Imágenes' : 'Imagens', count: withImagesCount },
+                                  { id: 'trash', label: isEs ? 'Papelera' : 'Lixeira', count: trashedNotes.length },
+                                ] as const
+                              ).map((f) => {
+                                const active = quickFilter === f.id;
+                                return (
+                                  <button
+                                    key={f.id}
+                                    type="button"
+                                    onClick={() => setQuickFilter(f.id)}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-black whitespace-nowrap transition-all cursor-pointer shrink-0 touch-manipulation ${
+                                      active
+                                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                                        : 'border-emerald-100 bg-white text-slate-600 hover:border-emerald-300'
+                                    }`}
+                                  >
+                                    <span>{f.label}</span>
+                                    <span
+                                      className={`font-mono text-[10px] ${
+                                        active ? 'text-emerald-100' : 'text-slate-400'
+                                      }`}
+                                    >
+                                      {f.count}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {quickFilter === 'trash' && !selectedFolderId && trashedNotes.length > 0 && (
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[10.5px] font-bold text-slate-500">
+                                {isEs ? 'Notas en la papelera' : 'Notas na lixeira'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void emptyTrash()}
+                                className="text-[11px] font-black text-rose-600 hover:underline cursor-pointer touch-manipulation"
+                              >
+                                {isEs ? 'Vaciar papelera' : 'Esvaziar lixeira'}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Creative Notebook Cards Grid / List */}
+                          {filteredNotes.length === 0 ? (
+                            <motion.div
+                              initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="rounded-[2rem] border border-dashed border-emerald-300/80 bg-white/90 p-9 text-center space-y-3 shadow-2xs"
+                            >
+                              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-600">
+                                <StickyNote className="h-7 w-7" />
+                              </div>
+                              <div className="space-y-1">
+                                <div className="text-sm font-black text-slate-900">
+                                  {quickFilter === 'trash'
+                                    ? isEs
+                                      ? 'La papelera está vacía'
+                                      : 'A lixeira está vazia'
+                                    : isEs
+                                    ? 'Tu cuaderno está listo'
+                                    : 'Seu caderno criativo está pronto'}
+                                </div>
+                                <p className="mx-auto max-w-xs text-xs font-medium text-slate-500">
+                                  {quickFilter === 'trash'
+                                    ? isEs
+                                      ? 'Las notas eliminadas aparecerán aquí.'
+                                      : 'As notas apagadas aparecerão aqui.'
+                                    : isEs
+                                    ? 'Elige un modelo arriba o crea una nota libre con checklists, tablas y dibujos.'
+                                    : 'Escolha um modelo acima ou crie uma nota livre com checklists, tabelas e desenhos.'}
+                                </p>
+                              </div>
+                              {quickFilter !== 'trash' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setIsTemplatePickerOpen(true)}
+                                  className="inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 px-5 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-600/25 hover:opacity-95 cursor-pointer touch-manipulation"
+                                >
+                                  <Plus className="h-4 w-4 stroke-[2.6]" />
+                                  {isEs ? 'Nueva nota' : 'Nova nota'}
+                                </button>
+                              )}
+                            </motion.div>
+                          ) : (
+                            <div
+                              className={
+                                notesLayout === 'grid'
+                                  ? 'grid grid-cols-2 gap-2.5 sm:gap-3'
+                                  : 'flex flex-col gap-2.5'
+                              }
+                            >
+                              <AnimatePresence initial={false} mode="popLayout">
+                                {filteredNotes.map((note, idx) => {
+                                  const folder = note.folderId ? folderNameMap[note.folderId] : null;
+                                  const checkBlocks = (note.blocks || []).filter(
+                                    (b) => b.type === 'checklist'
+                                  );
+                                  const checkTotal = checkBlocks.length;
+                                  const checkDone = checkBlocks.filter((c) => c.checked).length;
+                                  const checkPct =
+                                    checkTotal > 0 ? Math.round((checkDone / checkTotal) * 100) : 0;
+                                  const firstImg = (note.images || [])[0];
+                                  const imgCount = (note.images || []).length;
+                                  const isTrashed = Boolean(note.deletedAt);
+                                  const isLockedPreview = note.locked && !unlockedIds[note.id];
+                                  const accent =
+                                    note.accentColor && note.accentColor !== 'none'
+                                      ? FOLDER_COLORS[note.accentColor]
+                                      : null;
+                                  const menuOpen = contextMenuNoteId === note.id;
+
+                                  return (
+                                    <motion.div
+                                      key={note.id}
+                                      layout={!reduceMotion}
+                                      initial={reduceMotion ? false : { opacity: 0, y: 12, scale: 0.96 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      exit={reduceMotion ? undefined : { opacity: 0, scale: 0.94 }}
+                                      transition={{
+                                        delay: Math.min(idx * 0.03, 0.18),
+                                        type: 'spring',
+                                        stiffness: 400,
+                                        damping: 28,
+                                      }}
+                                      whileTap={reduceMotion ? undefined : { scale: 0.975 }}
+                                      onClick={() => handleOpenNoteCard(note)}
+                                      className={`group relative rounded-[1.5rem] border bg-gradient-to-br p-3.5 transition-all cursor-pointer overflow-visible flex flex-col justify-between gap-2.5 shadow-[0_6px_22px_rgba(6,78,59,0.05)] hover:shadow-[0_10px_28px_rgba(6,78,59,0.10)] ${
+                                        accent
+                                          ? accent.cardTint
+                                          : note.pinned
+                                          ? 'from-emerald-50/70 via-white to-white border-emerald-300/90'
+                                          : 'from-white via-white to-[#F9FCFA] border-slate-200/80 hover:border-emerald-300'
+                                      }`}
+                                    >
+                                      {/* Top Accent Ribbon */}
+                                      {accent && (
+                                        <span
+                                          className={`absolute left-4 right-4 top-0 h-[3px] rounded-b-full ${accent.accentBar}`}
+                                        />
+                                      )}
+
+                                      <div className="space-y-2 min-w-0">
+                                        {/* Thumbnail Preview if note has image/drawing */}
+                                        {!isLockedPreview && firstImg && notesLayout === 'grid' && (
+                                          <div className="relative h-20 w-full overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                                            <img
+                                              src={firstImg.url}
+                                              alt=""
+                                              loading="lazy"
+                                              className="h-full w-full object-cover"
+                                            />
+                                            {imgCount > 1 && (
+                                              <span className="absolute right-1.5 bottom-1.5 rounded-lg bg-white/90 px-1.5 py-0.5 font-mono text-[9px] font-black text-slate-800 shadow-2xs">
+                                                +{imgCount - 1}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Header & Context Menu */}
+                                        <div className="flex items-start justify-between gap-1.5">
+                                          <div className="flex items-center gap-1 min-w-0 flex-1">
+                                            {note.pinned && (
+                                              <Pin className="h-3 w-3 shrink-0 fill-emerald-600 text-emerald-600" />
+                                            )}
+                                            {note.favorite && (
+                                              <Heart className="h-3 w-3 shrink-0 fill-rose-500 text-rose-500" />
+                                            )}
+                                            {note.locked && (
+                                              <Lock className="h-3 w-3 shrink-0 text-amber-600" />
+                                            )}
+                                            <h3 className="truncate text-[13.5px] font-black text-slate-900 leading-snug">
+                                              {note.title ||
+                                                (isEs ? 'Sin título' : 'Sem título')}
+                                            </h3>
+                                          </div>
+
+                                          <div
+                                            className="relative shrink-0"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            {!isTrashed ? (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setContextMenuNoteId(menuOpen ? null : note.id)
+                                                  }
+                                                  className="rounded-lg p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer touch-manipulation"
+                                                  aria-label="Opções da nota"
+                                                >
+                                                  <MoreHorizontal className="h-3.5 w-3.5" />
+                                                </button>
+
+                                                <AnimatePresence>
+                                                  {menuOpen && (
+                                                    <motion.div
+                                                      initial={{ opacity: 0, scale: 0.94, y: 4 }}
+                                                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                      exit={{ opacity: 0, scale: 0.94, y: 4 }}
+                                                      className="absolute right-0 top-full mt-1 w-40 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-40"
+                                                    >
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          toggleFavoriteNote(note.id);
+                                                          setContextMenuNoteId(null);
+                                                        }}
+                                                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                                      >
+                                                        <Heart
+                                                          className={`h-3.5 w-3.5 ${
+                                                            note.favorite
+                                                              ? 'fill-rose-500 text-rose-500'
+                                                              : 'text-slate-400'
+                                                          }`}
+                                                        />
+                                                        {note.favorite ? 'Desfavoritar' : 'Favoritar'}
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          togglePinNote(note.id);
+                                                          setContextMenuNoteId(null);
+                                                        }}
+                                                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                                      >
+                                                        <Pin className="h-3.5 w-3.5 text-emerald-600" />
+                                                        {note.pinned ? 'Desafixar' : 'Fixar'}
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => void handleDuplicate(note.id)}
+                                                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                                      >
+                                                        <Files className="h-3.5 w-3.5 text-emerald-600" />
+                                                        Duplicar
+                                                      </button>
+                                                      <div className="my-1 h-px bg-slate-100" />
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          softDeleteNote(note.id);
+                                                          setContextMenuNoteId(null);
+                                                        }}
+                                                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                                      >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        {isEs ? 'Eliminar' : 'Excluir'}
+                                                      </button>
+                                                    </motion.div>
+                                                  )}
+                                                </AnimatePresence>
+                                              </>
+                                            ) : (
+                                              <div className="flex items-center gap-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => restoreNote(note.id)}
+                                                  className="rounded-lg bg-emerald-50 p-1 text-emerald-700 cursor-pointer"
+                                                >
+                                                  <RotateCcw className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => void permanentlyDeleteNote(note.id)}
+                                                  className="rounded-lg bg-rose-50 p-1 text-rose-600 cursor-pointer"
+                                                >
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Snippet */}
+                                        <p className="line-clamp-3 text-[11.5px] font-medium text-slate-500 leading-relaxed break-words">
+                                          {isLockedPreview
+                                            ? isEs
+                                              ? 'Nota protegida con PIN'
+                                              : 'Nota protegida com PIN'
+                                            : note.plainText ||
+                                              (isEs ? 'Toca para escribir...' : 'Toque para escrever...')}
+                                        </p>
+
+                                        {/* Mini Animated Checklist Progress Bar inside Card */}
+                                        {!isLockedPreview && checkTotal > 0 && (
+                                          <div className="space-y-1 pt-0.5">
+                                            <div className="flex items-center justify-between text-[9.5px] font-black text-emerald-700">
+                                              <span className="inline-flex items-center gap-1">
+                                                <CheckSquare className="h-2.5 w-2.5" />
+                                                {checkDone}/{checkTotal}
+                                              </span>
+                                              <span className="font-mono">{checkPct}%</span>
+                                            </div>
+                                            <div className="h-1 w-full overflow-hidden rounded-full bg-emerald-100">
+                                              <div
+                                                style={{ width: `${checkPct}%` }}
+                                                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+                                              />
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Footer Metadata */}
+                                      <div className="flex flex-wrap items-center justify-between gap-1 pt-1.5 border-t border-slate-100/90">
+                                        <span className="text-[9.5px] font-bold text-slate-400">
+                                          {formatNoteDate(note.updatedAt, isEs)}
+                                        </span>
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          {folder && (
+                                            <span
+                                              className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-black ${
+                                                FOLDER_COLORS[folder.color]?.bg || 'bg-emerald-50'
+                                              } ${
+                                                FOLDER_COLORS[folder.color]?.text || 'text-emerald-700'
+                                              } ${
+                                                FOLDER_COLORS[folder.color]?.border || 'border-emerald-200'
+                                              }`}
+                                            >
+                                              {folder.name}
+                                            </span>
+                                          )}
+                                          {(note.tags || []).slice(0, 1).map((tg) => (
+                                            <span
+                                              key={tg}
+                                              className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                            >
+                                              #{tg}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  );
+                                })}
+                              </AnimatePresence>
+                            </div>
+                          )}
+
+                          {/* Floating Studio + New Note Button */}
+                          {quickFilter !== 'trash' && (
+                            <motion.button
+                              type="button"
+                              whileHover={{ scale: 1.07 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => setIsTemplatePickerOpen(true)}
+                              style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+                              className="fixed right-5 z-[76] flex h-13 w-13 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white shadow-[0_10px_28px_rgba(5,150,105,0.4)] border-2 border-white/70 cursor-pointer touch-manipulation"
+                              aria-label={isEs ? 'Nueva nota' : 'Nova nota'}
+                            >
+                              <Plus className="h-6 w-6 stroke-[2.8]" />
+                            </motion.button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              /* CREATIVE STUDIO FULL-SCREEN NOTEBOOK EDITOR */
+              <motion.div
+                key={`note-editor-${activeNote.id}`}
+                initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: 14 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                className="flex h-full w-full max-w-full flex-col bg-[#EFF6F3] overflow-hidden"
+              >
+                {/* Top Accent Line */}
+                {activeAccentStyle && (
+                  <div className={`h-[3.5px] w-full shrink-0 ${activeAccentStyle.accentBar}`} />
+                )}
+
+                {/* Safe-Area Protected Compact Studio Header */}
+                <div
+                  className="flex items-center justify-between gap-1.5 border-b border-emerald-200/70 bg-white px-3 py-2.5 shrink-0 shadow-[0_2px_12px_rgba(6,78,59,0.04)] z-30"
+                  style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+                >
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.94 }}
+                    onClick={handleCloseEditor}
+                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200/80 px-2.5 py-2 text-xs font-black text-emerald-900 hover:bg-emerald-100 cursor-pointer shrink-0 touch-manipulation"
+                  >
+                    <ArrowLeft className="h-4 w-4 text-emerald-700" />
+                    <span>Notas</span>
+                  </motion.button>
+
+                  {/* Discreet Live Autosave Pill */}
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50/80 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shrink-0">
+                    {saveState === 'saving' ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>{isEs ? 'Guardando...' : 'Salvando...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        <Cloud className="h-3 w-3" />
+                        <span>{isEs ? 'Guardado' : 'Salvo'}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right Actions: Paper Texture, Reading Mode, Search, Favorite, More */}
+                  <div className="flex items-center gap-1 shrink-0 relative">
+                    {!activeNote.deletedAt ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleCyclePaperStyle}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
+                            activeNote.paperStyle !== 'plain'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                          }`}
+                          title={isEs ? 'Estilo de papel (liso/punteado/rayado)' : 'Estilo de papel (liso/pontilhado/pautado)'}
+                        >
+                          <Grid2x2 className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsReadingMode((v) => !v)}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
+                            isReadingMode
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                          }`}
+                          title={isReadingMode ? 'Editar' : isEs ? 'Modo lectura' : 'Modo leitura'}
+                        >
+                          {isReadingMode ? (
+                            <Pencil className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsInNoteSearchOpen((v) => !v);
+                            if (isInNoteSearchOpen) setInNoteSearchQuery('');
+                          }}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
+                            isInNoteSearchOpen
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100/90 text-slate-600 hover:text-emerald-700'
+                          }`}
+                          title={isEs ? 'Buscar en la nota' : 'Buscar na nota'}
+                        >
+                          <Search className="h-4 w-4" />
+                        </button>
+
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.84 }}
+                          onClick={() => toggleFavoriteNote(activeNote.id)}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
+                            activeNote.favorite
+                              ? 'bg-rose-50 text-rose-500'
+                              : 'bg-slate-100/90 text-slate-500 hover:text-rose-500'
+                          }`}
+                          title={isEs ? 'Favorita' : 'Favoritar'}
+                        >
+                          <Heart
+                            className={`h-4 w-4 ${activeNote.favorite ? 'fill-rose-500' : ''}`}
+                          />
+                        </motion.button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsEditorMenuOpen((v) => !v)}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer touch-manipulation ${
+                            isEditorMenuOpen
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50'
+                          }`}
+                          title={isEs ? 'Más opciones' : 'Mais opções'}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => restoreNote(activeNote.id)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white cursor-pointer touch-manipulation"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restaurar
+                      </button>
+                    )}
+
+                    {/* Editor Options Dropdown */}
+                    <AnimatePresence>
+                      {isEditorMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                          className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-50"
+                        >
+                          <div className="px-2.5 py-1.5">
+                            <label className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                              {isEs ? 'Carpeta' : 'Pasta'}
+                            </label>
+                            <select
+                              value={activeNote.folderId || ''}
+                              onChange={(e) =>
+                                updateNote(activeNote.id, { folderId: e.target.value || null }, true)
+                              }
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none"
+                            >
+                              <option value="">{isEs ? 'Sin carpeta' : 'Sem pasta'}</option>
+                              {folders.map((f) => (
+                                <option key={f.id} value={f.id}>
+                                  {f.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="px-2.5 py-1.5">
+                            <span className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                              {isEs ? 'Color del cuaderno' : 'Cor do caderno'}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateNote(activeNote.id, { accentColor: 'none' }, true)
+                                }
+                                className={`flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white cursor-pointer ${
+                                  activeNote.accentColor === 'none'
+                                    ? 'ring-2 ring-emerald-600 ring-offset-1'
+                                    : ''
+                                }`}
+                              >
+                                <X className="h-3 w-3 text-slate-400" />
+                              </button>
+                              {(Object.keys(FOLDER_COLORS) as NoteFolderColor[]).map((col) => (
+                                <button
+                                  key={col}
+                                  type="button"
+                                  onClick={() =>
+                                    updateNote(
+                                      activeNote.id,
+                                      { accentColor: col as NoteAccentColor },
+                                      true
+                                    )
+                                  }
+                                  className={`h-6 w-6 rounded-full ${FOLDER_COLORS[col].dot} cursor-pointer ${
+                                    activeNote.accentColor === col
+                                      ? 'ring-2 ring-slate-800 ring-offset-1 scale-110'
+                                      : ''
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="my-1 h-px bg-slate-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditorMenuOpen(false);
+                              setIsTagsPopoverOpen((v) => !v);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Tag className="h-3.5 w-3.5 text-emerald-600" />
+                            Etiquetas
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              togglePinNote(activeNote.id);
+                              setIsEditorMenuOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Pin className="h-3.5 w-3.5 text-emerald-600" />
+                            {activeNote.pinned ? 'Desafixar nota' : 'Fixar no topo'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void handleDuplicate(activeNote.id)}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Files className="h-3.5 w-3.5 text-emerald-600" />
+                            Duplicar nota
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditorMenuOpen(false);
+                              saveVersionSnapshot(activeNote.id, 0);
+                              setPreviewVersion(null);
+                              setIsHistoryOpen(true);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <History className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Historial de versiones' : 'Histórico de edições'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRequestToggleLock}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            {activeNote.locked ? (
+                              <Unlock className="h-3.5 w-3.5 text-amber-600" />
+                            ) : (
+                              <Lock className="h-3.5 w-3.5 text-amber-600" />
+                            )}
+                            {activeNote.locked ? 'Remover PIN' : 'Bloquear com PIN'}
+                          </button>
+
+                          <div className="my-1 h-px bg-slate-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => void handleShareNote()}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Share2 className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Compartir' : 'Compartilhar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyNoteText()}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-emerald-600" />
+                            Copiar texto
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePrintNotePdf}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-emerald-600" />
+                            Exportar PDF
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadNote('md')}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 text-emerald-600" />
+                            Markdown (.md)
+                          </button>
+
+                          <div className="my-1 h-px bg-slate-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditorMenuOpen(false);
+                              softDeleteNote(activeNote.id);
+                              setActiveNoteId(null);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {isEs ? 'Mover a papelera' : 'Mover para lixeira'}
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* In-Note Search Bar */}
+                <AnimatePresence>
+                  {isInNoteSearchOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden border-b border-emerald-100 bg-white px-3.5 py-2 shrink-0"
+                    >
+                      <div className="mx-auto flex max-w-2xl items-center gap-2">
+                        <Search className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={inNoteSearchQuery}
+                          onChange={(e) => setInNoteSearchQuery(e.target.value)}
+                          placeholder={isEs ? 'Buscar palabras en esta nota...' : 'Buscar palavras nesta nota...'}
+                          className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-xs font-semibold text-slate-900 placeholder:text-slate-400 outline-none"
+                        />
+                        {inNoteSearchQuery.trim() && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-800 shrink-0">
+                            {inNoteMatchCount}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsInNoteSearchOpen(false);
+                            setInNoteSearchQuery('');
+                          }}
+                          className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => void handleImageFileSelect(e, 'photo')}
+                  className="hidden"
+                />
+                <input
+                  ref={scanInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => void handleImageFileSelect(e, 'scan')}
+                  className="hidden"
+                />
+
+                {/* Paper Desk Scrollable Surface (NEVER shrinks overlay; uses bottom padding for virtual keyboard) */}
+                <div
+                  className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2.5 sm:px-5 py-3 sm:py-5"
+                  style={{
+                    paddingBottom: `calc(${keyboardInset + 84}px + env(safe-area-inset-bottom, 0px))`,
+                  }}
+                >
+                  <div
+                    style={getPaperBackgroundStyle(activeNote.paperStyle || 'plain')}
+                    className="mx-auto w-full max-w-2xl min-h-[calc(100dvh-140px)] rounded-[1.75rem] border border-emerald-200/70 bg-white px-4 sm:px-7 py-5 sm:py-7 shadow-[0_12px_36px_rgba(6,78,59,0.06)] space-y-3.5 min-w-0"
+                  >
+                    {/* Metadata & Stats */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-400">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{formatNoteDate(activeNote.updatedAt, isEs)}</span>
+                        {activeNote.folderId && folderNameMap[activeNote.folderId] && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            {folderNameMap[activeNote.folderId].name}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[10.5px] text-slate-400">
+                        {activeWordCount} pal. • {activeCharCount} car.
+                      </span>
+                    </div>
+
+                    {/* Tags */}
+                    {((activeNote.tags || []).length > 0 || isTagsPopoverOpen) && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {(activeNote.tags || []).map((tg) => (
+                          <span
+                            key={tg}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-800"
+                          >
+                            #{tg}
+                            {!isReadingMode && !activeNote.deletedAt && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTag(tg)}
+                                className="text-emerald-600/70 hover:text-rose-500 cursor-pointer"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+
+                        {isTagsPopoverOpen && !isReadingMode && !activeNote.deletedAt && (
+                          <form onSubmit={handleAddTag} className="inline-flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={tagInput}
+                              onChange={(e) => setTagInput(e.target.value)}
+                              placeholder={isEs ? 'Nueva etiqueta...' : 'Nova etiqueta...'}
+                              className="w-32 rounded-full border border-emerald-200 bg-slate-50 px-2.5 py-0.5 text-[16px] sm:text-xs font-semibold text-slate-800 outline-none focus:border-emerald-500 focus:bg-white"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded-full bg-emerald-600 p-1 text-white cursor-pointer"
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                          </form>
                         )}
                       </div>
                     )}
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
 
-            {/* Create Folder Modal */}
-            <AnimatePresence>
-              {isFolderModalOpen && (
-                <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setIsFolderModalOpen(false)}
-                    className="fixed inset-0 bg-emerald-950/15 backdrop-blur-[2px]"
-                  />
-                  <motion.form
-                    initial={{ opacity: 0, y: 28 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 28 }}
-                    onSubmit={handleCreateFolderSubmit}
-                    className="relative z-10 w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-2xl space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-black text-slate-900">
-                        {isEs ? 'Nueva carpeta' : 'Nova pasta'}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => setIsFolderModalOpen(false)}
-                        className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
+                    {/* Title */}
+                    {isReadingMode ? (
+                      <h1 className="text-[26px] font-black tracking-tight text-slate-900 leading-tight break-words">
+                        {activeNote.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
+                      </h1>
+                    ) : (
+                      <input
+                        type="text"
+                        value={activeNote.title}
+                        readOnly={Boolean(activeNote.deletedAt)}
+                        onChange={(e) => updateNote(activeNote.id, { title: e.target.value })}
+                        placeholder={isEs ? 'Título de la nota...' : 'Título da nota...'}
+                        className="w-full min-w-0 bg-transparent text-[24px] sm:text-[26px] font-black tracking-tight text-slate-900 placeholder:text-slate-300 leading-tight outline-none"
+                      />
+                    )}
 
-                    <input
-                      type="text"
-                      required
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      placeholder={
-                        isEs
-                          ? 'Ej: Estudios, Trabajo, Ideas, Proyectos...'
-                          : 'Ex: Estudos, Trabalho, Ideias, Projetos...'
+                    {/* Smart Editor */}
+                    <SmartNoteEditor
+                      noteId={activeNote.id}
+                      blocks={activeNote.blocks}
+                      readOnly={Boolean(activeNote.deletedAt)}
+                      isReadingMode={isReadingMode}
+                      searchQuery={inNoteSearchQuery}
+                      language={language}
+                      isUploadingImage={isUploadingImage}
+                      isDictating={isDictating}
+                      onChangeBlocks={(nextBlocks, immediate) =>
+                        updateNote(activeNote.id, { blocks: nextBlocks }, Boolean(immediate))
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[16px] sm:text-xs font-bold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white"
+                      onTriggerImageUpload={() => fileInputRef.current?.click()}
+                      onTriggerScanUpload={() => scanInputRef.current?.click()}
+                      onOpenDrawing={() => setIsDrawingOpen(true)}
+                      onAddTable={handleAddTable}
+                      onToggleDictation={handleToggleDictation}
                     />
 
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase text-slate-400">
-                        {isEs ? 'Ícono' : 'Ícone'}
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {FOLDER_ICONS.map((ic) => {
-                          const Icon = ic.icon;
-                          const active = newFolderIcon === ic.id;
-                          return (
-                            <button
-                              key={ic.id}
-                              type="button"
-                              onClick={() => setNewFolderIcon(ic.id)}
-                              className={`flex h-9 w-9 items-center justify-center rounded-xl border cursor-pointer touch-manipulation ${
-                                active
-                                  ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                                  : 'border-slate-200 bg-white text-slate-500'
-                              }`}
-                            >
-                              <Icon className="h-4 w-4" />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase text-slate-400">
-                        {isEs ? 'Color' : 'Cor'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {(Object.keys(FOLDER_COLORS) as NoteFolderColor[]).map((col) => (
-                          <button
-                            key={col}
-                            type="button"
-                            onClick={() => setNewFolderColor(col)}
-                            className={`h-7 w-7 rounded-full ${FOLDER_COLORS[col].dot} cursor-pointer transition-transform touch-manipulation ${
-                              newFolderColor === col
-                                ? 'ring-2 ring-offset-2 ring-slate-800 scale-110'
-                                : ''
-                            }`}
-                          />
+                    {/* Tables */}
+                    {(activeNote.tables || []).length > 0 && (
+                      <div className="space-y-3 pt-3 w-full max-w-full min-w-0">
+                        {(activeNote.tables || []).map((tbl) => (
+                          <div
+                            key={tbl.id}
+                            className="w-full max-w-full overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xs"
+                          >
+                            {!isReadingMode && !activeNote.deletedAt && (
+                              <div className="flex items-center justify-between border-b border-emerald-100/70 bg-emerald-50/40 px-3 py-1.5">
+                                <span className="text-[10px] font-black uppercase text-emerald-800/70">
+                                  {isEs ? 'Tabla' : 'Tabela'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddTableRow(tbl.id)}
+                                    className="rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 cursor-pointer touch-manipulation"
+                                  >
+                                    + {isEs ? 'Fila' : 'Linha'}
+                                  </button>
+                                  {tbl.headers.length < 5 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddTableCol(tbl.id)}
+                                      className="rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 cursor-pointer touch-manipulation"
+                                    >
+                                      + Col
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTable(tbl.id)}
+                                    className="rounded-lg p-1 text-slate-400 hover:text-rose-500 cursor-pointer touch-manipulation"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            <div className="w-full overflow-x-auto">
+                              <table className="w-full min-w-[320px] border-collapse">
+                                <thead>
+                                  <tr className="bg-emerald-50/60">
+                                    {tbl.headers.map((h, ci) => (
+                                      <th
+                                        key={ci}
+                                        className="border-b border-r last:border-r-0 border-slate-200 p-2 text-left"
+                                      >
+                                        {isReadingMode ? (
+                                          <span className="text-xs font-black text-emerald-950">
+                                            {h}
+                                          </span>
+                                        ) : (
+                                          <input
+                                            type="text"
+                                            value={h}
+                                            readOnly={Boolean(activeNote.deletedAt)}
+                                            onChange={(e) =>
+                                              handleUpdateTableHeader(tbl.id, ci, e.target.value)
+                                            }
+                                            className="w-full min-w-[80px] bg-transparent text-[16px] sm:text-xs font-black text-emerald-950 outline-none"
+                                          />
+                                        )}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {tbl.rows.map((row, ri) => (
+                                    <tr key={ri} className="border-b last:border-b-0 border-slate-100">
+                                      {row.map((cell, ci) => (
+                                        <td
+                                          key={ci}
+                                          className="border-r last:border-r-0 border-slate-100 p-2"
+                                        >
+                                          {isReadingMode ? (
+                                            <span className="text-xs font-medium text-slate-700">
+                                              {cell || '—'}
+                                            </span>
+                                          ) : (
+                                            <input
+                                              type="text"
+                                              value={cell}
+                                              readOnly={Boolean(activeNote.deletedAt)}
+                                              onChange={(e) =>
+                                                handleUpdateTableCell(tbl.id, ri, ci, e.target.value)
+                                              }
+                                              placeholder="—"
+                                              className="w-full min-w-[80px] bg-transparent text-[16px] sm:text-xs font-medium text-slate-700 outline-none"
+                                            />
+                                          )}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    </div>
+                    )}
 
-                    <button
-                      type="submit"
-                      className="w-full rounded-2xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700 cursor-pointer touch-manipulation"
-                    >
-                      {isEs ? 'Crear carpeta' : 'Criar pasta'}
-                    </button>
-                  </motion.form>
+                    {/* Attached Images, Drawings & Scans */}
+                    {(activeNote.images || []).length > 0 && (
+                      <div className="space-y-2 pt-3">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          {isEs ? 'Imágenes, dibujos y escaneos' : 'Imagens, desenhos e documentos'}
+                        </span>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {(activeNote.images || []).map((img) => (
+                            <div
+                              key={img.id}
+                              className="group relative aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+                            >
+                              <img
+                                src={img.url}
+                                alt={img.name}
+                                loading="lazy"
+                                onClick={() => setPreviewImageUrl(img.url)}
+                                className="h-full w-full object-cover cursor-pointer"
+                              />
+                              {img.kind && img.kind !== 'photo' && (
+                                <span className="absolute left-1.5 bottom-1.5 rounded-lg bg-white/90 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-900 shadow-xs">
+                                  {img.kind === 'drawing'
+                                    ? isEs
+                                      ? 'Dibujo'
+                                      : 'Desenho'
+                                    : isEs
+                                    ? 'Escaneo'
+                                    : 'Scanner'}
+                                </span>
+                              )}
+                              {!isReadingMode && !activeNote.deletedAt && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveImage(img.id)}
+                                  className="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1 text-slate-700 hover:bg-rose-500 hover:text-white shadow-xs cursor-pointer touch-manipulation"
+                                  aria-label="Remover anexo"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-            {/* Freehand Drawing Modal */}
-            <NoteDrawingModal
-              isOpen={isDrawingOpen}
-              onClose={() => setIsDrawingOpen(false)}
-              onSaveDrawing={handleSaveDrawing}
-              language={language}
-            />
+          {/* Subtle Feedback Toast */}
+          <AnimatePresence>
+            {toastMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[98] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg"
+              >
+                {toastMessage}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-            {/* PIN Lock / Unlock Modal */}
-            <NotePinModal
-              isOpen={pinModalState.open}
-              mode={pinModalState.mode}
-              onClose={() => setPinModalState((s) => ({ ...s, open: false }))}
-              onSubmitPin={handlePinSubmit}
-              language={language}
-            />
-
-            {/* Light Image Lightbox */}
-            <AnimatePresence>
-              {previewImageUrl && (
+          {/* Quick Templates Picker Modal */}
+          <AnimatePresence>
+            {isTemplatePickerOpen && (
+              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  onClick={() => setPreviewImageUrl(null)}
-                  className="fixed inset-0 z-[92] flex items-center justify-center bg-white/92 backdrop-blur-md p-4"
+                  onClick={() => setIsTemplatePickerOpen(false)}
+                  className="fixed inset-0 bg-emerald-950/20 backdrop-blur-[2px]"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 30, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 24, scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                  className="relative z-10 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-2xl space-y-4"
                 >
-                  <img
-                    src={previewImageUrl}
-                    alt="Preview"
-                    className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl border border-emerald-100"
-                  />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-600" />
+                      <h3 className="text-sm font-black text-slate-900">
+                        {isEs ? 'Crear nueva nota' : 'Criar nova nota'}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTemplatePickerOpen(false)}
+                      className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {NOTE_TEMPLATES.map((tpl) => (
+                      <motion.button
+                        key={tpl.id}
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => void handleCreateFromTemplate(tpl.id)}
+                        className="flex flex-col items-start gap-1.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-left hover:border-emerald-400 hover:bg-emerald-50/40 transition-all cursor-pointer touch-manipulation"
+                      >
+                        <span className="text-xl leading-none">{tpl.emoji}</span>
+                        <div className="text-xs font-black text-slate-900">
+                          {isEs ? tpl.labelEs : tpl.labelPt}
+                        </div>
+                        <div className="text-[10.5px] font-medium text-slate-500 leading-snug">
+                          {isEs ? tpl.descEs : tpl.descPt}
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
                 </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        </>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Version History Sheet */}
+          <AnimatePresence>
+            {isHistoryOpen && activeNote && (
+              <div className="fixed inset-0 z-[86] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => {
+                    setPreviewVersion(null);
+                    setIsHistoryOpen(false);
+                  }}
+                  className="fixed inset-0 bg-emerald-950/20 backdrop-blur-[2px]"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 32 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 32 }}
+                  className="relative z-10 w-full max-w-md max-h-[80dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white shadow-2xl"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 shrink-0">
+                    <div className="flex items-center gap-2">
+                      {previewVersion ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewVersion(null)}
+                          className="rounded-lg bg-slate-100 p-1 text-slate-600 hover:bg-emerald-50 cursor-pointer"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <History className="h-4 w-4 text-emerald-600" />
+                      )}
+                      <h3 className="text-sm font-black text-slate-900">
+                        {previewVersion
+                          ? formatNoteDate(previewVersion.savedAt, isEs)
+                          : isEs
+                          ? 'Historial de versiones'
+                          : 'Histórico de edições'}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewVersion(null);
+                        setIsHistoryOpen(false);
+                      }}
+                      className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {previewVersion ? (
+                    <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                      <div className="rounded-2xl border border-emerald-100 bg-[#F8FBF9] p-4 space-y-2">
+                        <div className="text-base font-black text-slate-900">
+                          {previewVersion.title || (isEs ? 'Sin título' : 'Sem título')}
+                        </div>
+                        <div className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                          {previewVersion.plainText || '—'}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewVersion(null)}
+                          className="flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        >
+                          {isEs ? 'Cancelar' : 'Voltar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            restoreVersionSnapshot(activeNote.id, previewVersion);
+                            setPreviewVersion(null);
+                            setIsHistoryOpen(false);
+                            showToast(isEs ? 'Versión restaurada' : 'Versão restaurada');
+                          }}
+                          className="flex-1 rounded-2xl bg-emerald-600 py-3 text-xs font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer"
+                        >
+                          {isEs ? 'Confirmar restauración' : 'Confirmar restauração'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                      {(activeNote.versions || []).length === 0 ? (
+                        <div className="py-8 text-center text-xs font-semibold text-slate-400">
+                          {isEs
+                            ? 'Aún no hay versiones guardadas para esta nota.'
+                            : 'Nenhuma versão anterior salva ainda.'}
+                        </div>
+                      ) : (
+                        (activeNote.versions || []).map((ver) => (
+                          <div
+                            key={ver.id}
+                            className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 p-3 bg-slate-50/70"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10.5px] font-black text-emerald-700">
+                                {formatNoteDate(ver.savedAt, isEs)}
+                              </div>
+                              <div className="truncate text-xs font-black text-slate-900 mt-0.5">
+                                {ver.title || (isEs ? 'Sin título' : 'Sem título')}
+                              </div>
+                              <div className="line-clamp-2 text-[11px] font-medium text-slate-500 mt-0.5">
+                                {ver.plainText || '—'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewVersion(ver)}
+                              className="rounded-xl border border-emerald-200 bg-white px-2.5 py-1.5 text-[10.5px] font-black text-emerald-700 hover:bg-emerald-50 cursor-pointer shrink-0 touch-manipulation"
+                            >
+                              {isEs ? 'Ver' : 'Visualizar'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Create Folder Modal */}
+          <AnimatePresence>
+            {isFolderModalOpen && (
+              <div className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsFolderModalOpen(false)}
+                  className="fixed inset-0 bg-emerald-950/20 backdrop-blur-[2px]"
+                />
+                <motion.form
+                  initial={{ opacity: 0, y: 28 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 28 }}
+                  onSubmit={handleCreateFolderSubmit}
+                  className="relative z-10 w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-2xl space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-slate-900">
+                      {isEs ? 'Nueva carpeta' : 'Nova pasta'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setIsFolderModalOpen(false)}
+                      className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    required
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder={
+                      isEs
+                        ? 'Ej: Estudios, Trabajo, Ideas, Proyectos...'
+                        : 'Ex: Estudos, Trabalho, Ideias, Projetos...'
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[16px] sm:text-xs font-bold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase text-slate-400">
+                      {isEs ? 'Ícono' : 'Ícone'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FOLDER_ICONS.map((ic) => {
+                        const Icon = ic.icon;
+                        const active = newFolderIcon === ic.id;
+                        return (
+                          <button
+                            key={ic.id}
+                            type="button"
+                            onClick={() => setNewFolderIcon(ic.id)}
+                            className={`flex h-9 w-9 items-center justify-center rounded-xl border cursor-pointer touch-manipulation ${
+                              active
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-white text-slate-500'
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase text-slate-400">
+                      {isEs ? 'Color' : 'Cor'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {(Object.keys(FOLDER_COLORS) as NoteFolderColor[]).map((col) => (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => setNewFolderColor(col)}
+                          className={`h-7 w-7 rounded-full ${FOLDER_COLORS[col].dot} cursor-pointer transition-transform touch-manipulation ${
+                            newFolderColor === col ? 'ring-2 ring-offset-2 ring-slate-800 scale-110' : ''
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-2xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700 cursor-pointer touch-manipulation"
+                  >
+                    {isEs ? 'Crear carpeta' : 'Criar pasta'}
+                  </button>
+                </motion.form>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Freehand Drawing Modal */}
+          <NoteDrawingModal
+            isOpen={isDrawingOpen}
+            onClose={() => setIsDrawingOpen(false)}
+            onSaveDrawing={handleSaveDrawing}
+            language={language}
+          />
+
+          {/* PIN Lock / Unlock Modal */}
+          <NotePinModal
+            isOpen={pinModalState.open}
+            mode={pinModalState.mode}
+            onClose={() => setPinModalState((s) => ({ ...s, open: false }))}
+            onSubmitPin={handlePinSubmit}
+            language={language}
+          />
+
+          {/* Light Image Lightbox */}
+          <AnimatePresence>
+            {previewImageUrl && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setPreviewImageUrl(null)}
+                className="fixed inset-0 z-[95] flex items-center justify-center bg-white/94 backdrop-blur-md p-4"
+              >
+                <img
+                  src={previewImageUrl}
+                  alt="Preview"
+                  className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl border border-emerald-100"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       )}
     </AnimatePresence>,
     document.body
