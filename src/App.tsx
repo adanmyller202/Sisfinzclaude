@@ -816,7 +816,7 @@ export default function App() {
                         accountId,
                       });
                       if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
-                      await toggleIncomeReceived(createdIncome.id);
+                      await toggleIncomeReceived(createdIncome.id, today.slice(0, 7), true, today);
                       await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
                     }}
                     onAddExpense={addExpense}
@@ -907,7 +907,7 @@ export default function App() {
                         accountId,
                       });
                       if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
-                      await toggleIncomeReceived(createdIncome.id);
+                      await toggleIncomeReceived(createdIncome.id, today.slice(0, 7), true, today);
                       await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
                     }}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
