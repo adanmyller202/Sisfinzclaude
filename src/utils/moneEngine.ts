@@ -2373,7 +2373,7 @@ export async function askMone(question: string, context: MoneContext, audio?: { 
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { text: 'Qual é o e-mail da pessoa que você quer convidar?', isInternalCalculation: true };
       try {
         const result = await handlers.onSendSharedInvitation(email);
-        if (!result?.success) return { text: result?.message || 'Não consegui enviar o convite. Verifique o e-mail e tente novamente.', isInternalCalculation: true };
+        if (!result || !result.success) return { text: result && result.message ? result.message : 'Não consegui enviar o convite. Verifique o e-mail e tente novamente.', isInternalCalculation: true };
         return { text: `Convite enviado para ${email}. A pessoa precisa aceitar para aparecer nas suas contas compartilhadas.`, isInternalCalculation: true, actionExecuted: 'send_shared_invitation' };
       } catch (err: any) {
         return { text: `Não consegui enviar o convite: ${err?.message || 'falha ao enviar'}.`, isInternalCalculation: true };
