@@ -25,7 +25,6 @@ import {
 import { formatCurrency } from '../../utils/currency';
 import { getCurrentMonthStr } from '../../utils/finance';
 import { LaborJobDetail } from './LaborJobDetail';
-import { QuickActionFAB } from '../QuickActionFAB';
 
 interface LaborAgendaViewProps {
   isOpen: boolean;
@@ -44,13 +43,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   isOpen,
   onClose,
   language = 'pt',
-  onOpenCalculator,
-  onOpenExpense,
-  onOpenIncome,
-  onOpenBill,
-  onOpenTransfer,
-  onOpenSharedBill,
-  onOpenVoice,
 }) => {
   const {
     jobs,
@@ -114,14 +106,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   };
 
   if (typeof document === 'undefined') return null;
-
-  const triggerOrFallback = (fn?: () => void) => {
-    if (fn) {
-      fn();
-    } else {
-      onClose();
-    }
-  };
 
   return createPortal(
     <AnimatePresence>
@@ -311,21 +295,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
               </AnimatePresence>
             </div>
           </div>
-
-          {/* Full Glass QuickActionFAB inside Labor Agenda with all actions */}
-          {onOpenCalculator && (
-            <QuickActionFAB
-              language={language}
-              bottomOffsetClass="bottom-5 sm:bottom-6"
-              onOpenExpense={() => triggerOrFallback(onOpenExpense)}
-              onOpenIncome={() => triggerOrFallback(onOpenIncome)}
-              onOpenBill={() => triggerOrFallback(onOpenBill)}
-              onOpenTransfer={() => triggerOrFallback(onOpenTransfer)}
-              onOpenSharedBill={() => triggerOrFallback(onOpenSharedBill)}
-              onOpenVoice={() => triggerOrFallback(onOpenVoice)}
-              onOpenCalculator={onOpenCalculator}
-            />
-          )}
 
           {/* Create New Job Modal */}
           <AnimatePresence>
