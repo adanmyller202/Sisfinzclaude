@@ -3,7 +3,6 @@ import { collection, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firesto
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
-import { LanguageCode } from '../types';
 
 export type NoteFolderIcon =
   | 'folder'
@@ -15,7 +14,8 @@ export type NoteFolderIcon =
   | 'heart';
 
 export type NoteFolderColor = 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
-export type NoteAccentColor = 'none' | NoteFolderColor;
+
+export type NoteAccentColor = 'none' | 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
 
 export interface NoteFolder {
   id: string;
@@ -30,11 +30,11 @@ export type NoteBlockType =
   | 'paragraph'
   | 'heading'
   | 'subheading'
-  | 'heading3'
+  | 'h3'
+  | 'quote'
   | 'checklist'
   | 'bullet'
-  | 'numbered'
-  | 'quote';
+  | 'numbered';
 
 export type NoteTextAlign = 'left' | 'center' | 'right';
 
@@ -88,6 +88,7 @@ export interface NoteItem {
   locked: boolean;
   tags: string[];
   accentColor: NoteAccentColor;
+  groupCompletedChecklist: boolean;
   checklist: NoteChecklistItem[];
   images: NoteImageAttachment[];
   tables: NoteTable[];
@@ -97,20 +98,12 @@ export interface NoteItem {
   updatedAt: string;
 }
 
-export type NoteTemplateId =
-  | 'blank'
-  | 'study'
-  | 'recipe'
-  | 'shopping'
-  | 'weekly'
-  | 'report';
-
 const NOTES_STORAGE_PREFIX = 'sisfinz_notes_v1_';
 const FOLDERS_STORAGE_PREFIX = 'sisfinz_note_folders_v1_';
 const PIN_STORAGE_PREFIX = 'sisfinz_notes_pin_hash_v1_';
 
 export function createBlockId(): string {
-  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 export function htmlToPlainText(html: string): string {
@@ -136,7 +129,7 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
     .map((b) => {
       if (b.type === 'heading') return `<h1>${b.html}</h1>`;
       if (b.type === 'subheading') return `<h2>${b.html}</h2>`;
-      if (b.type === 'heading3') return `<h3>${b.html}</h3>`;
+      if (b.type === 'h3') return `<h3>${b.html}</h3>`;
       if (b.type === 'quote') return `<blockquote>${b.html}</blockquote>`;
       if (b.type === 'checklist') return `<p>${b.checked ? '[x]' : '[ ]'} ${b.html}</p>`;
       if (b.type === 'bullet') return `<p>• ${b.html}</p>`;
@@ -185,108 +178,6 @@ export function countWords(text: string): number {
 
 export function countCharacters(text: string): number {
   return text.replace(/\n/g, '').length;
-}
-
-export function buildTemplateContent(
-  templateId: NoteTemplateId,
-  language: LanguageCode = 'pt'
-): { title: string; blocks: NoteBlock[]; tags: string[]; accentColor: NoteAccentColor } {
-  const isEs = language === 'es';
-  const mk = (type: NoteBlockType, html: string, checked?: boolean): NoteBlock => ({
-    id: createBlockId(),
-    type,
-    html,
-    ...(type === 'checklist' ? { checked: Boolean(checked) } : {}),
-  });
-
-  switch (templateId) {
-    case 'study':
-      return {
-        title: isEs ? 'Apuntes de estudio' : 'Anotações de estudo',
-        tags: [isEs ? 'Estudios' : 'Estudos'],
-        accentColor: 'sky',
-        blocks: [
-          mk('subheading', isEs ? 'Tema principal' : 'Tema principal'),
-          mk('paragraph', ''),
-          mk('subheading', isEs ? 'Puntos clave' : 'Pontos-chave'),
-          mk('bullet', ''),
-          mk('subheading', isEs ? 'Resumen o cita importante' : 'Resumo ou citação importante'),
-          mk('quote', ''),
-          mk('subheading', isEs ? 'Próximos pasos de revisión' : 'Checklist de revisão'),
-          mk('checklist', isEs ? 'Revisar resumen' : 'Revisar resumo', false),
-          mk('checklist', isEs ? 'Hacer ejercicios prácticos' : 'Praticar exercícios', false),
-        ],
-      };
-    case 'recipe':
-      return {
-        title: isEs ? 'Nueva receta' : 'Nova receita',
-        tags: [isEs ? 'Receta' : 'Receita'],
-        accentColor: 'amber',
-        blocks: [
-          mk('subheading', isEs ? 'Ingredientes' : 'Ingredientes'),
-          mk('checklist', '', false),
-          mk('checklist', '', false),
-          mk('subheading', isEs ? 'Preparación' : 'Modo de preparo'),
-          mk('numbered', ''),
-          mk('numbered', ''),
-          mk('subheading', isEs ? 'Notas y consejos' : 'Dicas e observações'),
-          mk('quote', ''),
-        ],
-      };
-    case 'shopping':
-      return {
-        title: isEs ? 'Lista de compras' : 'Lista de compras',
-        tags: [isEs ? 'Compras' : 'Compras'],
-        accentColor: 'emerald',
-        blocks: [
-          mk('subheading', isEs ? 'Esenciales' : 'Essenciais'),
-          mk('checklist', '', false),
-          mk('checklist', '', false),
-          mk('subheading', isEs ? 'Extras' : 'Extras'),
-          mk('checklist', '', false),
-        ],
-      };
-    case 'weekly':
-      return {
-        title: isEs ? 'Planificación semanal' : 'Planejamento semanal',
-        tags: [isEs ? 'Semana' : 'Semana'],
-        accentColor: 'teal',
-        blocks: [
-          mk('subheading', isEs ? 'Prioridades de la semana' : 'Prioridades da semana'),
-          mk('checklist', '', false),
-          mk('checklist', '', false),
-          mk('subheading', isEs ? 'Lunes a Miércoles' : 'Segunda a Quarta'),
-          mk('bullet', ''),
-          mk('subheading', isEs ? 'Jueves a Domingo' : 'Quinta a Domingo'),
-          mk('bullet', ''),
-          mk('subheading', isEs ? 'Notas rápidas' : 'Observações'),
-          mk('paragraph', ''),
-        ],
-      };
-    case 'report':
-      return {
-        title: isEs ? 'Informe' : 'Relatório',
-        tags: [isEs ? 'Informe' : 'Relatório'],
-        accentColor: 'violet',
-        blocks: [
-          mk('subheading', isEs ? 'Objetivo' : 'Objetivo'),
-          mk('paragraph', ''),
-          mk('subheading', isEs ? 'Principales resultados' : 'Principais pontos'),
-          mk('bullet', ''),
-          mk('bullet', ''),
-          mk('subheading', isEs ? 'Conclusión y acciones' : 'Conclusão e próximos passos'),
-          mk('checklist', '', false),
-        ],
-      };
-    case 'blank':
-    default:
-      return {
-        title: '',
-        tags: [],
-        accentColor: 'none',
-        blocks: [mk('paragraph', '')],
-      };
-  }
 }
 
 async function hashPin(pin: string): Promise<string> {
@@ -379,7 +270,8 @@ function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
     favorite: Boolean(data.favorite),
     locked: Boolean(data.locked),
     tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],
-    accentColor: (data.accentColor as NoteAccentColor) || 'none',
+    accentColor: data.accentColor || 'none',
+    groupCompletedChecklist: Boolean(data.groupCompletedChecklist),
     checklist: legacyChecklist,
     images: Array.isArray(data.images) ? data.images : [],
     tables: Array.isArray(data.tables) ? data.tables : [],
@@ -594,14 +486,22 @@ export function useNotes() {
   const createNote = useCallback(
     async (
       folderId: string | null = null,
-      templateId: NoteTemplateId = 'blank',
-      language: LanguageCode = 'pt'
+      initial?: {
+        title?: string;
+        blocks?: NoteBlock[];
+        tables?: NoteTable[];
+        tags?: string[];
+        accentColor?: NoteAccentColor;
+      }
     ): Promise<NoteItem> => {
       const nowIso = new Date().toISOString();
-      const tpl = buildTemplateContent(templateId, language);
-      const bodyHtml = blocksToHtml(tpl.blocks);
-      const plainText = blocksToPlainText(tpl.blocks);
-      const checklistSummary: NoteChecklistItem[] = tpl.blocks
+      const blocks: NoteBlock[] =
+        initial?.blocks && initial.blocks.length > 0
+          ? initial.blocks
+          : [{ id: createBlockId(), type: 'paragraph', html: '' }];
+      const bodyHtml = blocksToHtml(blocks);
+      const plainText = blocksToPlainText(blocks);
+      const checklistSummary: NoteChecklistItem[] = blocks
         .filter((b) => b.type === 'checklist')
         .map((b) => ({
           id: b.id,
@@ -611,19 +511,20 @@ export function useNotes() {
 
       const item: NoteItem = {
         id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        title: tpl.title,
+        title: initial?.title || '',
         bodyHtml,
         plainText,
-        blocks: tpl.blocks,
+        blocks,
         folderId,
         pinned: false,
         favorite: false,
         locked: false,
-        tags: tpl.tags,
-        accentColor: tpl.accentColor,
+        tags: initial?.tags || [],
+        accentColor: initial?.accentColor || 'none',
+        groupCompletedChecklist: false,
         checklist: checklistSummary,
         images: [],
-        tables: [],
+        tables: initial?.tables || [],
         versions: [],
         deletedAt: null,
         createdAt: nowIso,
@@ -640,24 +541,30 @@ export function useNotes() {
   );
 
   const duplicateNote = useCallback(
-    async (noteId: string, language: LanguageCode = 'pt'): Promise<NoteItem | null> => {
+    async (noteId: string): Promise<NoteItem | null> => {
       const source = notesRef.current.find((n) => n.id === noteId);
       if (!source) return null;
       const nowIso = new Date().toISOString();
-      const copySuffix = language === 'es' ? ' (copia)' : ' (cópia)';
-      const clonedBlocks = (source.blocks || []).map((b) => ({
+      const clonedBlocks: NoteBlock[] = (source.blocks || []).map((b) => ({
         ...b,
         id: createBlockId(),
       }));
+      const clonedTables: NoteTable[] = (source.tables || []).map((t) => ({
+        ...t,
+        id: `ntbl_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        headers: [...t.headers],
+        rows: t.rows.map((r) => [...r]),
+      }));
+      const copyTitle = source.title ? `${source.title} (cópia)` : 'Cópia da nota';
       const item: NoteItem = {
         ...source,
         id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        title: source.title ? `${source.title}${copySuffix}` : '',
+        title: copyTitle,
         blocks: clonedBlocks,
+        tables: clonedTables,
         pinned: false,
-        locked: false,
-        deletedAt: null,
         versions: [],
+        deletedAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
       };
@@ -706,9 +613,7 @@ export function useNotes() {
         ...patch,
         blocks: nextBlocks,
         checklist:
-          patch.blocks !== undefined
-            ? checklistSummary
-            : patch.checklist ?? current.checklist,
+          patch.blocks !== undefined ? checklistSummary : patch.checklist ?? current.checklist,
         bodyHtml,
         plainText,
         updatedAt: nowIso,
@@ -750,26 +655,22 @@ export function useNotes() {
   );
 
   const saveVersionSnapshot = useCallback(
-    (noteId: string, force = false) => {
+    (noteId: string, minIntervalMs = 0) => {
       const current = notesRef.current.find((n) => n.id === noteId);
       if (!current) return;
       if (!current.title.trim() && !current.plainText.trim()) return;
 
       const existing = current.versions || [];
       const latest = existing[0];
-      if (
-        latest &&
-        latest.title === current.title &&
-        latest.bodyHtml === current.bodyHtml
-      ) {
-        return;
-      }
-
-      // Avoid creating redundant snapshots within 45s unless explicitly forced
-      if (!force && latest) {
-        const elapsedMs = Date.now() - new Date(latest.savedAt).getTime();
-        if (Number.isFinite(elapsedMs) && elapsedMs < 45_000) {
+      if (latest) {
+        if (latest.title === current.title && latest.bodyHtml === current.bodyHtml) {
           return;
+        }
+        if (minIntervalMs > 0) {
+          const elapsed = Date.now() - new Date(latest.savedAt).getTime();
+          if (Number.isFinite(elapsed) && elapsed < minIntervalMs) {
+            return;
+          }
         }
       }
 
@@ -791,10 +692,10 @@ export function useNotes() {
     (noteId: string, version: NoteVersionSnapshot) => {
       const current = notesRef.current.find((n) => n.id === noteId);
       if (!current) return;
-      saveVersionSnapshot(noteId, true);
+      saveVersionSnapshot(noteId, 0);
       const restoredBlocks =
         Array.isArray(version.blocks) && version.blocks.length > 0
-          ? version.blocks.map((b) => ({ ...b }))
+          ? version.blocks
           : deriveBlocksFromLegacyNote(version.bodyHtml || '', []);
       updateNote(
         noteId,
