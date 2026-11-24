@@ -9,12 +9,14 @@ import {
   ArrowRightLeft,
   Users,
   Calculator,
+  Camera,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 
 interface QuickActionFABProps {
   language?: LanguageCode;
   onOpenExpense: () => void;
+  onOpenReceiptScan?: () => void;
   onOpenIncome: () => void;
   onOpenBill: () => void;
   onOpenTransfer: () => void;
@@ -30,6 +32,7 @@ const EDGE_STORAGE_KEY = 'sisfinz_quick_fab_edge_v1';
 export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   language = 'pt',
   onOpenExpense,
+  onOpenReceiptScan,
   onOpenIncome,
   onOpenBill,
   onOpenTransfer,
@@ -77,6 +80,20 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   }, [isOpen, onMenuToggle]);
 
   const actions = [
+    ...(onOpenReceiptScan
+      ? [
+          {
+            id: 'scan_ticket',
+            label: language === 'es' ? 'Escanear Ticket' : 'Escanear Ticket',
+            icon: Camera,
+            onClick: () => {
+              setIsOpen(false);
+              onMenuToggle?.(false);
+              onOpenReceiptScan();
+            },
+          },
+        ]
+      : []),
     {
       id: 'expense',
       label: language === 'es' ? 'Nuevo Gasto' : 'Novo Gasto',

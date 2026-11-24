@@ -15,6 +15,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { FinzyChatModal } from './components/FinzyChatModal';
 import { FinzyRemindersModal } from './components/FinzyRemindersModal';
 import { FloatingCalculatorModal } from './components/FloatingCalculatorModal';
+import { ReceiptScannerModal } from './components/ReceiptScannerModal';
 import { useReminders } from './hooks/useReminders';
 import {
   computeFinzyLivingContext,
@@ -88,6 +89,7 @@ export default function App() {
   const remindersHook = useReminders(currentLang);
   const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
 
   const { getCategoriesFor, addCategory } = useCategories();
   const sharedAccounts = useSharedAccounts();
@@ -645,6 +647,7 @@ export default function App() {
     setIsGlobalTxModalOpen(false);
     setIsGlobalTransferModalOpen(false);
     setIsVoiceSheetOpen(false);
+    setIsReceiptScannerOpen(false);
   }, [currentView]);
 
   const handleSquareClick = (squareId: number) => {
@@ -1006,6 +1009,25 @@ export default function App() {
         language={currentLang}
       />
 
+      {/* Zero-Storage Ticket / Receipt Scanner Modal */}
+      <ReceiptScannerModal
+        isOpen={isReceiptScannerOpen}
+        onRequestOpen={() => setIsReceiptScannerOpen(true)}
+        onClose={() => setIsReceiptScannerOpen(false)}
+        accounts={accounts}
+        categories={availableCategoriesList}
+        currency={activeCurrency}
+        language={currentLang}
+        onSaveExpense={async (data) => {
+          const res = await addExpense(data);
+          if (data.accountId) {
+            await adjustAccountBalanceForFinancialItem(data.accountId, -data.amount);
+          }
+          return res;
+        }}
+        onSaveBill={addBill}
+      />
+
       {/* Finzy Reminders & Live Alert Modal */}
       <FinzyRemindersModal
         isOpen={isRemindersModalOpen}
@@ -1213,6 +1235,9 @@ export default function App() {
       <QuickActionFAB
         language={currentLang}
         onMenuToggle={(isOpen) => setIsFabMenuOpen(isOpen)}
+        onOpenReceiptScan={() => {
+          window.dispatchEvent(new Event('sisfinz:trigger-ticket-camera'));
+        }}
         onOpenExpense={() => {
           setGlobalTxModalType('expense');
           setIsGlobalTxModalOpen(true);

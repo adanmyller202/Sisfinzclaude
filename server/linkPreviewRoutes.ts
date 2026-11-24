@@ -1,4 +1,5 @@
 import express from 'express';
+import { mountReceiptScanRoutes } from './receiptScanRoutes';
 
 export interface LinkPreviewMetadata {
   url: string;
@@ -281,9 +282,6 @@ function buildFallbackMetadata(parsedUrl: URL): LinkPreviewMetadata {
   };
 }
 
-/**
- * Instagram Layer A: Official /embed/ endpoint (works for public profiles & posts even when main HTML login-walls)
- */
 async function tryInstagramEmbedPage(
   ig: { username: string | null; postType: 'p' | 'reel' | 'tv' | null; shortcode: string | null },
   originalUrl: string,
@@ -314,7 +312,6 @@ async function tryInstagramEmbedPage(
     if (!resp.ok) return null;
     const html = (await resp.text()).slice(0, 450000);
 
-    // Extract profile_pic_url or EmbeddedMediaImage or HeaderAvatar img src
     const avatarMatch =
       html.match(/"profile_pic_url_hd"\s*:\s*"([^"]+)"/i) ||
       html.match(/"profile_pic_url"\s*:\s*"([^"]+)"/i) ||
@@ -376,9 +373,6 @@ async function tryInstagramEmbedPage(
   }
 }
 
-/**
- * Instagram Layer B: Public web_profile_info JSON endpoint
- */
 async function tryInstagramWebProfileInfo(
   username: string,
   originalUrl: string,
@@ -439,9 +433,6 @@ async function tryInstagramWebProfileInfo(
   }
 }
 
-/**
- * Instagram Layer C: Real profile avatar lookup via unavatar.io (fallback=false ensures NO fake image)
- */
 async function tryUnavatarInstagramImage(username: string): Promise<string | null> {
   const target = `https://unavatar.io/instagram/${encodeURIComponent(username)}?fallback=false`;
   const controller = new AbortController();
@@ -459,7 +450,6 @@ async function tryUnavatarInstagramImage(username: string): Promise<string | nul
     const ct = String(resp.headers.get('content-type') || '').toLowerCase();
     if (!ct.startsWith('image/')) return null;
     const buf = await resp.arrayBuffer();
-    // Ignore tiny placeholder pixels
     if (buf.byteLength < 1200) return null;
     return `/api/links/image?url=${encodeURIComponent(target)}`;
   } catch {
@@ -469,9 +459,6 @@ async function tryUnavatarInstagramImage(username: string): Promise<string | nul
   }
 }
 
-/**
- * Public Metadata Aggregator: Dub.co Metatags API
- */
 async function tryDubMetatags(
   targetUrl: string,
   originalUrl: string,
@@ -529,9 +516,6 @@ async function tryDubMetatags(
   }
 }
 
-/**
- * Public Metadata Aggregator: Microlink Open Graph API
- */
 async function tryMicrolinkPreview(
   targetUrl: string,
   originalUrl: string,
@@ -668,7 +652,6 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
 
   let bestResult: LinkPreviewMetadata = fallback;
 
-  // Special multi-source parallel resolution for Instagram profiles & posts
   if (ig.isInstagram) {
     const [embedRes, profileRes, dubRes, microlinkRes, unavatarImg] = await Promise.all([
       tryInstagramEmbedPage(ig, parsed.toString(), cleanParsed.toString()),
@@ -694,7 +677,6 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
       bestResult = bestPartial;
     }
 
-    // If we got a real avatar from unavatar.io, attach it to our best metadata!
     if (unavatarImg && !bestResult.image) {
       return {
         ...bestResult,
@@ -709,7 +691,6 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
     }
   }
 
-  // Standard websites: Direct Open Graph fetch first
   const userAgents = [
     'Mozilla/5.0 (compatible; SisFinzLinkPreview/1.0; +https://sisfinz.app)',
     'WhatsApp/2.24.16.76 A',
@@ -787,13 +768,13 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
     }
   }
 
-  // Fallback to Dub.co + Microlink for non-Instagram sites that block datacenter IPs
   if (!ig.isInstagram) {
     const [dubRes, microlinkRes] = await Promise.all([
       tryDubMetatags(cleanParsed.toString(), parsed.toString(), fallback),
       tryMicrolinkPreview(cleanParsed.toString(), parsed.toString(), fallback),
     ]);
-    const pick = [dubRes, microlinkRes].find((c) => c?.previewStatus === 'ok') ||
+    const pick =
+      [dubRes, microlinkRes].find((c) => c?.previewStatus === 'ok') ||
       [dubRes, microlinkRes].find((c) => c?.previewStatus === 'partial');
     if (pick) return pick;
   }
@@ -802,6 +783,9 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
 }
 
 export function mountLinkPreviewRoutes(app: express.Express) {
+  // Also mount receipt/ticket scanner endpoint here so server.ts stays untouched
+  mountReceiptScanRoutes(app);
+
   app.post('/api/links/preview', async (req, res) => {
     try {
       const rawUrl = String(req.body?.url || '').trim();
@@ -828,7 +812,6 @@ export function mountLinkPreviewRoutes(app: express.Express) {
     }
   });
 
-  // Safe image proxy so Instagram/Meta/unavatar images render reliably on iPhone/Web
   app.get('/api/links/image', async (req, res) => {
     const rawUrl = String(req.query?.url || '').trim();
     if (!rawUrl) {
