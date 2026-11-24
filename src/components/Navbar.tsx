@@ -98,20 +98,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     switch (currentView) {
       case 'planejar':
         return {
-          title: t.planejarTitle,
-          subtitle: t.planejarSubtitle,
+          title: t.planningTitle,
+          subtitle: t.planningSubtitle,
           icon: Calendar,
         };
       case 'goals':
         return {
-          title: activeGoal ? activeGoal.title : t.goalsTitle,
-          subtitle: activeGoal ? t.goalActiveSubtitle : t.goalsSubtitle,
+          title: activeGoal ? activeGoal.title : t.goalsCenterTitle,
+          subtitle: activeGoal ? t.myGoals : t.goalsCenterTitle,
           icon: Award,
         };
       case 'report':
         return {
-          title: t.reportTitle,
-          subtitle: t.reportSubtitle,
+          title: t.monthlyReportTitle,
+          subtitle: t.monthlyReportSubtitle,
           icon: TrendingUp,
         };
       case 'finance':
@@ -138,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenMenu}
               className="relative p-2.5 rounded-2xl text-emerald-800 hover:bg-emerald-50/80 transition-colors cursor-pointer shrink-0"
-              aria-label={t.openMenuAria}
+              aria-label={language === 'es' ? 'Abrir menú' : language === 'en' ? 'Open menu' : 'Abrir menu'}
             >
               <Menu className="w-5 h-5" />
               {hasPendingNotifications && (
