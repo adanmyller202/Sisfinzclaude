@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ArrowLeft,
   StickyNote,
@@ -14,12 +14,6 @@ import {
   Image as ImageIcon,
   CheckSquare,
   Check,
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Table as TableIcon,
-  Heading2,
   X,
   Cloud,
   Loader2,
@@ -30,29 +24,31 @@ import {
   Rocket,
   Heart,
   FileText,
-  PenTool,
   Lock,
   Unlock,
-  Mic,
-  MicOff,
   History,
   Share2,
   Copy,
   Download,
   Printer,
-  ScanLine,
+  Link2,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
+  NoteBlock,
   NoteFolder,
   NoteFolderColor,
   NoteFolderIcon,
   NoteItem,
   countWords,
+  createBlockId,
+  htmlToPlainText,
   useNotes,
 } from '../hooks/useNotes';
 import { NoteDrawingModal } from './NoteDrawingModal';
 import { NotePinModal } from './NotePinModal';
+import { SmartNoteEditor } from './SmartNoteEditor';
+import { SavedLinksLibrary } from './SavedLinksLibrary';
 
 interface NotesViewProps {
   isOpen: boolean;
@@ -60,7 +56,8 @@ interface NotesViewProps {
   language?: LanguageCode;
 }
 
-type SystemFolderKey = 'all' | 'pinned' | 'with_images' | 'trash';
+type NotesHomeTab = 'all_notes' | 'folders' | 'saved_links';
+type NotesQuickFilter = 'all' | 'pinned' | 'with_images' | 'trash';
 
 const FOLDER_ICONS: Array<{ id: NoteFolderIcon; icon: React.ComponentType<{ className?: string }> }> =
   [
@@ -139,17 +136,25 @@ function buildMarkdownFromNote(note: NoteItem): string {
   const lines: string[] = [];
   lines.push(`# ${note.title || 'Nota sem título'}`);
   lines.push('');
-  if (note.plainText) {
-    lines.push(note.plainText);
-    lines.push('');
-  }
-  if ((note.checklist || []).length > 0) {
-    lines.push('## Checklist');
-    for (const item of note.checklist) {
-      lines.push(`- [${item.checked ? 'x' : ' '}] ${item.text}`);
+
+  let numCounter = 0;
+  for (const blk of note.blocks || []) {
+    const text = htmlToPlainText(blk.html);
+    if (!text) continue;
+    if (blk.type === 'numbered') {
+      numCounter += 1;
+      lines.push(`${numCounter}. ${text}`);
+    } else {
+      numCounter = 0;
+      if (blk.type === 'heading') lines.push(`## ${text}`);
+      else if (blk.type === 'subheading') lines.push(`### ${text}`);
+      else if (blk.type === 'checklist') lines.push(`- [${blk.checked ? 'x' : ' '}] ${text}`);
+      else if (blk.type === 'bullet') lines.push(`- ${text}`);
+      else lines.push(text);
     }
-    lines.push('');
   }
+  lines.push('');
+
   if ((note.tables || []).length > 0) {
     for (const tbl of note.tables) {
       lines.push(`| ${tbl.headers.join(' | ')} |`);
@@ -169,6 +174,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
   language = 'pt',
 }) => {
   const isEs = language === 'es';
+  const reduceMotion = Boolean(useReducedMotion());
+
   const {
     notes,
     folders,
@@ -193,19 +200,20 @@ export const NotesView: React.FC<NotesViewProps> = ({
     flushPendingSaves,
   } = useNotes();
 
-  const [selectedFolder, setSelectedFolder] = useState<SystemFolderKey | string>('all');
+  const [activeTab, setActiveTab] = useState<NotesHomeTab>('all_notes');
+  const [quickFilter, setQuickFilter] = useState<NotesQuickFilter>('all');
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderIcon, setNewFolderIcon] = useState<NoteFolderIcon>('lightbulb');
   const [newFolderColor, setNewFolderColor] = useState<NoteFolderColor>('emerald');
 
-  const [newCheckItemText, setNewCheckItemText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  // Etapa 2 states
   const [isDrawingOpen, setIsDrawingOpen] = useState(false);
   const [pinModalState, setPinModalState] = useState<{
     open: boolean;
@@ -219,7 +227,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
 
-  const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -240,15 +247,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
     setIsDictating(false);
   };
-
-  // Sync contentEditable innerHTML when switching active note or restoring a version
-  useEffect(() => {
-    if (editorRef.current && activeNote) {
-      if (editorRef.current.innerHTML !== activeNote.bodyHtml) {
-        editorRef.current.innerHTML = activeNote.bodyHtml || '';
-      }
-    }
-  }, [activeNoteId]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -287,15 +285,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const filteredNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let base =
-      selectedFolder === 'trash'
+      selectedFolderId !== null
+        ? activeNotes.filter((n) => n.folderId === selectedFolderId)
+        : quickFilter === 'trash'
         ? trashedNotes
-        : selectedFolder === 'pinned'
+        : quickFilter === 'pinned'
         ? activeNotes.filter((n) => n.pinned)
-        : selectedFolder === 'with_images'
+        : quickFilter === 'with_images'
         ? activeNotes.filter((n) => (n.images || []).length > 0)
-        : selectedFolder === 'all'
-        ? activeNotes
-        : activeNotes.filter((n) => n.folderId === selectedFolder);
+        : activeNotes;
 
     if (q) {
       base = base.filter((n) => {
@@ -303,19 +301,18 @@ export const NotesView: React.FC<NotesViewProps> = ({
         if (n.locked && !unlockedIds[n.id]) {
           return `${n.title} ${folderName}`.toLowerCase().includes(q);
         }
-        const checklistText = (n.checklist || []).map((c) => c.text).join(' ');
-        const haystack = `${n.title} ${n.plainText} ${folderName} ${checklistText}`.toLowerCase();
+        const haystack = `${n.title} ${n.plainText} ${folderName}`.toLowerCase();
         return haystack.includes(q);
       });
     }
 
     return [...base].sort((a, b) => {
-      if (selectedFolder !== 'trash' && a.pinned !== b.pinned) {
+      if (quickFilter !== 'trash' && a.pinned !== b.pinned) {
         return a.pinned ? -1 : 1;
       }
       return b.updatedAt.localeCompare(a.updatedAt);
     });
-  }, [activeNotes, trashedNotes, selectedFolder, searchQuery, folderNameMap, unlockedIds]);
+  }, [activeNotes, trashedNotes, quickFilter, selectedFolderId, searchQuery, folderNameMap, unlockedIds]);
 
   const handleOpenNoteCard = (note: NoteItem) => {
     if (note.locked && !unlockedIds[note.id]) {
@@ -375,14 +372,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   };
 
   const handleCreateNote = async () => {
-    const targetFolderId =
-      selectedFolder === 'all' ||
-      selectedFolder === 'pinned' ||
-      selectedFolder === 'with_images' ||
-      selectedFolder === 'trash'
-        ? null
-        : selectedFolder;
-    const created = await createNote(targetFolderId);
+    const created = await createNote(selectedFolderId);
     setActiveNoteId(created.id);
   };
 
@@ -395,17 +385,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setIsHistoryOpen(false);
     setIsExportMenuOpen(false);
     setActiveNoteId(null);
-  };
-
-  const applyFormat = (cmd: string, value?: string) => {
-    if (!editorRef.current || !activeNote) return;
-    editorRef.current.focus();
-    try {
-      document.execCommand(cmd, false, value);
-      updateNote(activeNote.id, { bodyHtml: editorRef.current.innerHTML });
-    } catch {
-      // ignore unsupported formatting command
-    }
   };
 
   const handleToggleDictation = () => {
@@ -431,13 +410,24 @@ export const NotesView: React.FC<NotesViewProps> = ({
             finalTranscript += event.results[i][0].transcript + ' ';
           }
         }
-        if (finalTranscript.trim() && editorRef.current && activeNote) {
-          const existing = editorRef.current.innerHTML;
-          const nextHtml = existing
-            ? `${existing}${existing.endsWith(' ') ? '' : ' '}${finalTranscript.trim()}`
-            : finalTranscript.trim();
-          editorRef.current.innerHTML = nextHtml;
-          updateNote(activeNote.id, { bodyHtml: nextHtml });
+        if (finalTranscript.trim() && activeNote) {
+          const currentBlocks = activeNote.blocks || [];
+          const last = currentBlocks[currentBlocks.length - 1];
+          let nextBlocks: NoteBlock[];
+          if (last && last.type === 'paragraph') {
+            const sep = last.html ? ' ' : '';
+            nextBlocks = currentBlocks.map((b, i) =>
+              i === currentBlocks.length - 1
+                ? { ...b, html: `${b.html}${sep}${finalTranscript.trim()}` }
+                : b
+            );
+          } else {
+            nextBlocks = [
+              ...currentBlocks,
+              { id: createBlockId(), type: 'paragraph', html: finalTranscript.trim() },
+            ];
+          }
+          updateNote(activeNote.id, { blocks: nextBlocks }, true);
         }
       };
       rec.onerror = () => stopDictation();
@@ -448,34 +438,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
     } catch {
       stopDictation();
     }
-  };
-
-  const handleAddChecklistItem = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!activeNote) return;
-    const text = newCheckItemText.trim();
-    if (!text) return;
-    const nextItem = {
-      id: `nchk_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      text,
-      checked: false,
-    };
-    updateNote(activeNote.id, { checklist: [...(activeNote.checklist || []), nextItem] }, true);
-    setNewCheckItemText('');
-  };
-
-  const handleToggleChecklistItem = (itemId: string) => {
-    if (!activeNote) return;
-    const next = (activeNote.checklist || []).map((it) =>
-      it.id === itemId ? { ...it, checked: !it.checked } : it
-    );
-    updateNote(activeNote.id, { checklist: next }, true);
-  };
-
-  const handleDeleteChecklistItem = (itemId: string) => {
-    if (!activeNote) return;
-    const next = (activeNote.checklist || []).filter((it) => it.id !== itemId);
-    updateNote(activeNote.id, { checklist: next }, true);
   };
 
   const handleAddTable = () => {
@@ -528,7 +490,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       if (tbl.id !== tableId || tbl.headers.length >= 5) return tbl;
       return {
         ...tbl,
-        headers: [...tbl.headers, `${isEs ? 'Col' : 'Col'} ${tbl.headers.length + 1}`],
+        headers: [...tbl.headers, `Col ${tbl.headers.length + 1}`],
         rows: tbl.rows.map((r) => [...r, '']),
       };
     });
@@ -613,7 +575,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         });
         return;
       } catch {
-        // user canceled or unsupported
+        // ignore cancel
       }
     }
     await handleCopyNoteText();
@@ -643,12 +605,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setIsExportMenuOpen(false);
     const win = window.open('', '_blank', 'width=800,height=900');
     if (!win) return;
-    const checklistHtml =
-      (activeNote.checklist || []).length > 0
-        ? `<h3>Checklist</h3><ul>${activeNote.checklist
-            .map((c) => `<li>${c.checked ? '☑' : '☐'} ${c.text}</li>`)
-            .join('')}</ul>`
-        : '';
+    const blocksHtml = (activeNote.blocks || [])
+      .map((b) => {
+        if (b.type === 'heading') return `<h2>${b.html}</h2>`;
+        if (b.type === 'subheading') return `<h3>${b.html}</h3>`;
+        if (b.type === 'checklist') return `<p>${b.checked ? '☑' : '☐'} ${b.html}</p>`;
+        if (b.type === 'bullet') return `<p>• ${b.html}</p>`;
+        if (b.type === 'numbered') return `<p>- ${b.html}</p>`;
+        return `<p>${b.html}</p>`;
+      })
+      .join('');
     const imagesHtml =
       (activeNote.images || []).length > 0
         ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;">${activeNote.images
@@ -671,8 +637,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         <body>
           <h1>${activeNote.title || 'Nota sem título'}</h1>
           <div class="meta">SisFinz Notas • ${formatNoteDate(activeNote.updatedAt, isEs)}</div>
-          <div>${activeNote.bodyHtml || ''}</div>
-          ${checklistHtml}
+          <div>${blocksHtml}</div>
           ${imagesHtml}
         </body>
       </html>
@@ -692,17 +657,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
     });
     setNewFolderName('');
     setIsFolderModalOpen(false);
-    setSelectedFolder(created.id);
+    setSelectedFolderId(created.id);
+    setActiveTab('all_notes');
   };
 
   if (typeof document === 'undefined') return null;
 
   const activeWordCount = activeNote
-    ? countWords(
-        `${activeNote.title} ${activeNote.plainText} ${(activeNote.checklist || [])
-          .map((c) => c.text)
-          .join(' ')}`
-      )
+    ? countWords(`${activeNote.title} ${activeNote.plainText}`)
     : 0;
 
   return createPortal(
@@ -714,456 +676,626 @@ export const NotesView: React.FC<NotesViewProps> = ({
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 24 }}
           transition={{ type: 'spring', stiffness: 330, damping: 30 }}
-          className="fixed inset-0 z-[58] flex flex-col bg-[#F4F8F6] text-slate-900 overflow-hidden"
+          className="fixed inset-0 z-[58] flex flex-col bg-[#F5F9F7] text-slate-900 overflow-hidden"
         >
           <AnimatePresence mode="wait" initial={false}>
             {!activeNote ? (
-              /* LIBRARY & FOLDERS VIEW */
+              /* NOTES 2.0 HOME (3 AREAS: ALL NOTES, FOLDERS, SAVED LINKS) */
               <motion.div
-                key="notes-library"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.2 }}
+                key="notes-home"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
                 className="flex h-full flex-col overflow-hidden"
               >
-                {/* Header */}
+                {/* Clean Light Header */}
                 <div
-                  className="flex items-center justify-between gap-2 border-b border-emerald-100/90 bg-white/95 px-3.5 py-3 backdrop-blur-md shrink-0"
+                  className="border-b border-emerald-100/90 bg-white/95 px-3.5 pb-3 pt-3 shrink-0 space-y-3"
                   style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
                 >
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors cursor-pointer shrink-0"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    {isEs ? 'Volver' : 'Voltar'}
-                  </button>
+                  <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors cursor-pointer shrink-0"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      {isEs ? 'Volver' : 'Voltar'}
+                    </button>
 
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-sm">
-                      <StickyNote className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h1 className="truncate text-sm font-black tracking-tight text-slate-900">
-                        Notas SisFinz
-                      </h1>
-                      <p className="truncate text-[9.5px] font-bold uppercase tracking-wider text-emerald-700">
-                        {activeNotes.length}{' '}
-                        {activeNotes.length === 1 ? 'nota' : 'notas'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsFolderModalOpen(true)}
-                    className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
-                  >
-                    <FolderPlus className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>{isEs ? 'Carpeta' : 'Pasta'}</span>
-                  </button>
-                </div>
-
-                {/* Scrollable Library Content */}
-                <div className="flex-1 overflow-y-auto px-3.5 py-4">
-                  <div className="mx-auto max-w-2xl space-y-5 pb-24">
-                    {/* Smart Search Bar */}
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={
-                          isEs
-                            ? 'Buscar por título, contenido o carpeta...'
-                            : 'Buscar por título, conteúdo ou pasta...'
-                        }
-                        className="w-full rounded-2xl border border-slate-200/90 bg-white py-3 pl-10 pr-9 text-xs font-bold text-slate-900 placeholder:text-slate-400 shadow-2xs outline-none focus:border-emerald-500"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Folders Grid */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                          {isEs ? 'Carpetas' : 'Pastas'}
-                        </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-sm">
+                        <StickyNote className="h-4 w-4" />
                       </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {(
-                          [
-                            {
-                              id: 'all',
-                              label: isEs ? 'Todas las notas' : 'Todas as notas',
-                              count: activeNotes.length,
-                              icon: FileText,
-                              tone: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-                            },
-                            {
-                              id: 'pinned',
-                              label: isEs ? 'Fijadas' : 'Fixadas',
-                              count: pinnedCount,
-                              icon: Pin,
-                              tone: 'text-amber-700 bg-amber-50 border-amber-200',
-                            },
-                            {
-                              id: 'with_images',
-                              label: isEs ? 'Con imágenes' : 'Com imagens',
-                              count: withImagesCount,
-                              icon: ImageIcon,
-                              tone: 'text-sky-700 bg-sky-50 border-sky-200',
-                            },
-                            {
-                              id: 'trash',
-                              label: isEs ? 'Eliminadas' : 'Apagadas',
-                              count: trashedNotes.length,
-                              icon: Trash2,
-                              tone: 'text-rose-700 bg-rose-50 border-rose-200',
-                            },
-                          ] as const
-                        ).map((sys) => {
-                          const Icon = sys.icon;
-                          const active = selectedFolder === sys.id;
-                          return (
-                            <motion.button
-                              key={sys.id}
-                              type="button"
-                              whileTap={{ scale: 0.97 }}
-                              onClick={() => setSelectedFolder(sys.id)}
-                              className={`flex flex-col justify-between gap-2 rounded-2xl border p-3 text-left transition-all cursor-pointer ${
-                                active
-                                  ? 'border-emerald-500 bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                                  : 'border-slate-200/80 bg-white hover:border-emerald-300 shadow-2xs'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span
-                                  className={`flex h-7 w-7 items-center justify-center rounded-xl border ${
-                                    active
-                                      ? 'border-white/25 bg-white/20 text-white'
-                                      : sys.tone
-                                  }`}
-                                >
-                                  <Icon className="h-3.5 w-3.5" />
-                                </span>
-                                <span
-                                  className={`font-mono text-xs font-black ${
-                                    active ? 'text-white' : 'text-slate-900'
-                                  }`}
-                                >
-                                  {sys.count}
-                                </span>
-                              </div>
-                              <span
-                                className={`truncate text-[11px] font-black ${
-                                  active ? 'text-white' : 'text-slate-800'
-                                }`}
-                              >
-                                {sys.label}
-                              </span>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Custom Folders Row */}
-                      {folders.length > 0 && (
-                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
-                          {folders.map((fld) => {
-                            const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
-                            const count = activeNotes.filter((n) => n.folderId === fld.id).length;
-                            const active = selectedFolder === fld.id;
-                            return (
-                              <div
-                                key={fld.id}
-                                className={`inline-flex items-center gap-1.5 rounded-2xl border pl-3 pr-1.5 py-1.5 transition-all shrink-0 ${
-                                  active
-                                    ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                                    : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300'
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedFolder(fld.id)}
-                                  className="inline-flex items-center gap-1.5 text-xs font-black cursor-pointer"
-                                >
-                                  <span
-                                    className={`flex h-5 w-5 items-center justify-center rounded-lg ${
-                                      active
-                                        ? 'bg-white/20 text-white'
-                                        : `${palette.bg} ${palette.text}`
-                                    }`}
-                                  >
-                                    {renderFolderIcon(fld.icon, 'h-3 w-3')}
-                                  </span>
-                                  <span>{fld.name}</span>
-                                  <span
-                                    className={`font-mono text-[10px] ${
-                                      active ? 'text-emerald-100' : 'text-slate-400'
-                                    }`}
-                                  >
-                                    {count}
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (selectedFolder === fld.id) setSelectedFolder('all');
-                                    void deleteFolder(fld.id);
-                                  }}
-                                  className={`rounded-lg p-1 transition-colors cursor-pointer ${
-                                    active
-                                      ? 'text-white/75 hover:bg-white/15'
-                                      : 'text-slate-300 hover:text-rose-500'
-                                  }`}
-                                  aria-label="Excluir pasta"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Notes List Section */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                          {selectedFolder === 'trash'
+                      <div className="min-w-0">
+                        <h1 className="truncate text-sm font-black tracking-tight text-slate-900">
+                          Notas SisFinz
+                        </h1>
+                        <p className="truncate text-[9.5px] font-bold uppercase tracking-wider text-emerald-700">
+                          {activeTab === 'saved_links'
                             ? isEs
-                              ? 'Papelera'
-                              : 'Lixeira'
-                            : isEs
-                            ? 'Notas recientes'
-                            : 'Notas recentes'}
-                        </span>
-                        {selectedFolder === 'trash' && trashedNotes.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => void emptyTrash()}
-                            className="text-[10.5px] font-black text-rose-600 hover:underline cursor-pointer"
-                          >
-                            {isEs ? 'Vaciar papelera' : 'Esvaziar lixeira'}
-                          </button>
-                        )}
+                              ? 'Biblioteca Visual de Enlaces'
+                              : 'Biblioteca Visual de Links'
+                            : activeTab === 'folders'
+                            ? isEs
+                              ? 'Carpetas y Colecciones'
+                              : 'Pastas & Organização'
+                            : `${activeNotes.length} ${activeNotes.length === 1 ? 'nota' : 'notas'}`}
+                        </p>
                       </div>
+                    </div>
 
-                      {filteredNotes.length === 0 ? (
-                        <div className="rounded-3xl border border-dashed border-emerald-200 bg-white/80 p-8 text-center space-y-2">
-                          <StickyNote className="mx-auto h-7 w-7 text-emerald-500" />
-                          <div className="text-xs font-black text-slate-800">
-                            {selectedFolder === 'trash'
-                              ? isEs
-                                ? 'La papelera está vacía.'
-                                : 'A lixeira está vazia.'
-                              : isEs
-                              ? 'Aún no hay notas aquí.'
-                              : 'Nenhuma nota por aqui ainda.'}
-                          </div>
-                          {selectedFolder !== 'trash' && (
-                            <button
-                              type="button"
-                              onClick={handleCreateNote}
-                              className="mt-1 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-[11px] font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              {isEs ? 'Crear primera nota' : 'Criar primeira nota'}
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <AnimatePresence initial={false} mode="popLayout">
-                            {filteredNotes.map((note) => {
-                              const folder = note.folderId ? folderNameMap[note.folderId] : null;
-                              const checkTotal = (note.checklist || []).length;
-                              const checkDone = (note.checklist || []).filter((c) => c.checked).length;
-                              const imgCount = (note.images || []).length;
-                              const isTrashed = Boolean(note.deletedAt);
-                              const isLockedPreview = note.locked && !unlockedIds[note.id];
+                    {activeTab === 'folders' ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsFolderModalOpen(true)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-black text-emerald-800 hover:bg-emerald-100 cursor-pointer shrink-0"
+                      >
+                        <FolderPlus className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>{isEs ? 'Nueva' : 'Nova'}</span>
+                      </button>
+                    ) : (
+                      <div className="w-16 shrink-0" />
+                    )}
+                  </div>
 
-                              return (
-                                <motion.div
-                                  key={note.id}
-                                  layout
-                                  initial={{ opacity: 0, y: 10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.96 }}
-                                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                                  onClick={() => handleOpenNoteCard(note)}
-                                  className={`group rounded-2xl border p-3.5 transition-all cursor-pointer ${
-                                    note.pinned
-                                      ? 'border-emerald-300 bg-gradient-to-r from-emerald-50/60 via-white to-white shadow-xs'
-                                      : 'border-slate-200/80 bg-white hover:border-emerald-300 shadow-2xs'
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                      <div className="flex items-center gap-1.5">
-                                        {note.pinned && (
-                                          <Pin className="h-3.5 w-3.5 shrink-0 fill-emerald-600 text-emerald-600" />
-                                        )}
-                                        {note.locked && (
-                                          <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                        )}
-                                        <h3 className="truncate text-sm font-black text-slate-900">
-                                          {note.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
-                                        </h3>
-                                      </div>
-
-                                      <p className="line-clamp-2 text-xs font-medium text-slate-500">
-                                        {isLockedPreview
-                                          ? isEs
-                                            ? 'Nota protegida con PIN • Toca para desbloquear'
-                                            : 'Nota protegida com PIN • Toque para desbloquear'
-                                          : note.plainText ||
-                                            (checkTotal > 0
-                                              ? `${checkDone}/${checkTotal} ${
-                                                  isEs ? 'tareas' : 'itens na lista'
-                                                }`
-                                              : isEs
-                                              ? 'Toca para escribir...'
-                                              : 'Toque para escrever...')}
-                                      </p>
-
-                                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                        <span className="text-[10px] font-bold text-slate-400">
-                                          {formatNoteDate(note.updatedAt, isEs)}
-                                        </span>
-
-                                        {folder && (
-                                          <span
-                                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-black ${
-                                              FOLDER_COLORS[folder.color]?.bg || 'bg-emerald-50'
-                                            } ${
-                                              FOLDER_COLORS[folder.color]?.text || 'text-emerald-700'
-                                            } ${
-                                              FOLDER_COLORS[folder.color]?.border || 'border-emerald-200'
-                                            }`}
-                                          >
-                                            {renderFolderIcon(folder.icon, 'h-2.5 w-2.5')}
-                                            {folder.name}
-                                          </span>
-                                        )}
-
-                                        {!isLockedPreview && checkTotal > 0 && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[9.5px] font-bold text-slate-600">
-                                            <CheckSquare className="h-2.5 w-2.5 text-emerald-600" />
-                                            {checkDone}/{checkTotal}
-                                          </span>
-                                        )}
-
-                                        {!isLockedPreview && imgCount > 0 && (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-sky-700">
-                                            <ImageIcon className="h-2.5 w-2.5" />
-                                            {imgCount}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className="flex items-center gap-1 shrink-0"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {!isTrashed ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => togglePinNote(note.id)}
-                                            className={`rounded-xl p-1.5 transition-colors cursor-pointer ${
-                                              note.pinned
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : 'text-slate-300 hover:bg-slate-100 hover:text-slate-600'
-                                            }`}
-                                            aria-label="Fixar nota"
-                                          >
-                                            <Pin className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => softDeleteNote(note.id)}
-                                            className="rounded-xl p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition-colors cursor-pointer"
-                                            aria-label="Mover para lixeira"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => restoreNote(note.id)}
-                                            className="rounded-xl bg-emerald-50 p-1.5 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
-                                            title={isEs ? 'Restaurar' : 'Restaurar'}
-                                          >
-                                            <RotateCcw className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => void permanentlyDeleteNote(note.id)}
-                                            className="rounded-xl bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 cursor-pointer"
-                                            title={isEs ? 'Eliminar definitivamente' : 'Excluir definitivamente'}
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </AnimatePresence>
-                        </div>
-                      )}
+                  {/* 3-Area Elegant Segmented Navigation */}
+                  <div className="mx-auto max-w-2xl">
+                    <div className="grid grid-cols-3 gap-1 rounded-2xl border border-emerald-100 bg-[#F3F8F5] p-1">
+                      {(
+                        [
+                          {
+                            id: 'all_notes',
+                            label: isEs ? 'Todas las notas' : 'Todas as notas',
+                            icon: FileText,
+                          },
+                          {
+                            id: 'folders',
+                            label: isEs ? 'Pastas' : 'Pastas',
+                            icon: Folder,
+                          },
+                          {
+                            id: 'saved_links',
+                            label: isEs ? 'Links salvos' : 'Links salvos',
+                            icon: Link2,
+                          },
+                        ] as const
+                      ).map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = activeTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(tab.id);
+                              if (tab.id === 'all_notes') {
+                                setSelectedFolderId(null);
+                              }
+                            }}
+                            className={`relative isolate flex items-center justify-center gap-1.5 rounded-xl py-2 px-2 text-[11px] font-black transition-colors cursor-pointer ${
+                              isActive
+                                ? 'text-emerald-950'
+                                : 'text-slate-500 hover:text-emerald-800'
+                            }`}
+                          >
+                            {isActive && (
+                              <motion.span
+                                layoutId="notes-home-tab-pill"
+                                transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                                className="absolute inset-0 -z-10 rounded-xl bg-white border border-emerald-200/80 shadow-xs"
+                              />
+                            )}
+                            <Icon
+                              className={`h-3.5 w-3.5 shrink-0 ${
+                                isActive ? 'text-emerald-600' : 'text-slate-400'
+                              }`}
+                            />
+                            <span className="truncate">{tab.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                {/* Floating + New Note Button */}
-                {selectedFolder !== 'trash' && (
-                  <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.06 }}
-                    whileTap={{ scale: 0.92 }}
-                    onClick={handleCreateNote}
-                    style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
-                    className="fixed right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xl shadow-emerald-600/35 cursor-pointer"
-                    aria-label={isEs ? 'Nueva nota' : 'Nova nota'}
-                  >
-                    <Plus className="h-6 w-6 stroke-[2.8]" />
-                  </motion.button>
-                )}
+                {/* Main Content Area with Smooth Transitions Between the 3 Areas */}
+                <div className="flex-1 overflow-y-auto px-3.5 py-4">
+                  <div className="mx-auto max-w-2xl">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {activeTab === 'saved_links' ? (
+                        <motion.div
+                          key="area-saved-links"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <SavedLinksLibrary language={language} />
+                        </motion.div>
+                      ) : activeTab === 'folders' ? (
+                        <motion.div
+                          key="area-folders"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="space-y-5 pb-24"
+                        >
+                          {/* Smart System Folders */}
+                          <div className="space-y-2">
+                            <span className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              {isEs ? 'Inteligentes' : 'Pastas inteligentes'}
+                            </span>
+                            <div className="grid grid-cols-2 gap-2.5">
+                              {(
+                                [
+                                  {
+                                    id: 'all',
+                                    label: isEs ? 'Todas las notas' : 'Todas as notas',
+                                    count: activeNotes.length,
+                                    icon: FileText,
+                                    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                                  },
+                                  {
+                                    id: 'pinned',
+                                    label: isEs ? 'Fijadas' : 'Fixadas',
+                                    count: pinnedCount,
+                                    icon: Pin,
+                                    tone: 'bg-amber-50 text-amber-700 border-amber-200',
+                                  },
+                                  {
+                                    id: 'with_images',
+                                    label: isEs ? 'Con imágenes' : 'Com imagens',
+                                    count: withImagesCount,
+                                    icon: ImageIcon,
+                                    tone: 'bg-sky-50 text-sky-700 border-sky-200',
+                                  },
+                                  {
+                                    id: 'trash',
+                                    label: isEs ? 'Eliminadas' : 'Apagadas',
+                                    count: trashedNotes.length,
+                                    icon: Trash2,
+                                    tone: 'bg-rose-50 text-rose-700 border-rose-200',
+                                  },
+                                ] as const
+                              ).map((sys) => {
+                                const Icon = sys.icon;
+                                return (
+                                  <motion.button
+                                    key={sys.id}
+                                    type="button"
+                                    whileTap={{ scale: 0.97 }}
+                                    onClick={() => {
+                                      setSelectedFolderId(null);
+                                      setQuickFilter(sys.id);
+                                      setActiveTab('all_notes');
+                                    }}
+                                    className="flex flex-col justify-between gap-3 rounded-2xl border border-emerald-100 bg-white p-4 text-left shadow-2xs hover:border-emerald-300 hover:shadow-sm transition-all cursor-pointer"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span
+                                        className={`flex h-9 w-9 items-center justify-center rounded-xl border ${sys.tone}`}
+                                      >
+                                        <Icon className="h-4 w-4" />
+                                      </span>
+                                      <span className="font-mono text-base font-black text-slate-900">
+                                        {sys.count}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-black text-slate-800">
+                                      {sys.label}
+                                    </span>
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Custom Folders */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {isEs ? 'Mis carpetas' : 'Minhas pastas'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsFolderModalOpen(true)}
+                                className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 hover:underline cursor-pointer"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                {isEs ? 'Crear carpeta' : 'Criar pasta'}
+                              </button>
+                            </div>
+
+                            {folders.length === 0 ? (
+                              <div className="rounded-3xl border border-dashed border-emerald-200 bg-white p-7 text-center space-y-2">
+                                <Folder className="mx-auto h-7 w-7 text-emerald-500" />
+                                <p className="text-xs font-bold text-slate-600">
+                                  {isEs
+                                    ? 'Organiza tus notas en carpetas como Estudios, Trabajo o Proyectos.'
+                                    : 'Organize suas notas em pastas como Estudos, Trabalho, Ideias ou Projetos.'}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsFolderModalOpen(true)}
+                                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-emerald-700 cursor-pointer"
+                                >
+                                  <FolderPlus className="h-3.5 w-3.5" />
+                                  {isEs ? 'Nueva carpeta' : 'Nova pasta'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {folders.map((fld) => {
+                                  const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
+                                  const count = activeNotes.filter(
+                                    (n) => n.folderId === fld.id
+                                  ).length;
+                                  return (
+                                    <div
+                                      key={fld.id}
+                                      className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-100 bg-white p-3.5 shadow-2xs hover:border-emerald-300 transition-all"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedFolderId(fld.id);
+                                          setQuickFilter('all');
+                                          setActiveTab('all_notes');
+                                        }}
+                                        className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                                      >
+                                        <span
+                                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${palette.bg} ${palette.text} ${palette.border}`}
+                                        >
+                                          {renderFolderIcon(fld.icon, 'h-4 w-4')}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <div className="truncate text-sm font-black text-slate-900">
+                                            {fld.name}
+                                          </div>
+                                          <div className="text-[10.5px] font-bold text-slate-400">
+                                            {count} {count === 1 ? 'nota' : 'notas'}
+                                          </div>
+                                        </div>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void deleteFolder(fld.id)}
+                                        className="rounded-xl p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-500 cursor-pointer"
+                                        aria-label="Excluir pasta"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        /* AREA 1: ALL NOTES */
+                        <motion.div
+                          key="area-all-notes"
+                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          className="space-y-4 pb-24"
+                        >
+                          {/* Search Bar */}
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder={
+                                isEs
+                                  ? 'Buscar por título, contenido o carpeta...'
+                                  : 'Buscar por título, conteúdo ou pasta...'
+                              }
+                              className="w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-9 text-xs font-bold text-slate-900 placeholder:text-slate-400 shadow-2xs outline-none focus:border-emerald-500"
+                            />
+                            {searchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Active Folder Banner or Quick Filter Chips */}
+                          {selectedFolderId ? (
+                            <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2">
+                              <div className="flex items-center gap-2 text-xs font-black text-emerald-900">
+                                {renderFolderIcon(
+                                  folderNameMap[selectedFolderId]?.icon || 'folder',
+                                  'h-4 w-4 text-emerald-600'
+                                )}
+                                <span>{folderNameMap[selectedFolderId]?.name || 'Pasta'}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedFolderId(null)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[10.5px] font-black text-emerald-800 shadow-2xs cursor-pointer"
+                              >
+                                <X className="h-3 w-3" />
+                                {isEs ? 'Ver todas' : 'Ver todas'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                              {(
+                                [
+                                  { id: 'all', label: isEs ? 'Todas' : 'Todas', count: activeNotes.length },
+                                  { id: 'pinned', label: isEs ? 'Fijadas' : 'Fixadas', count: pinnedCount },
+                                  { id: 'with_images', label: isEs ? 'Con imágenes' : 'Com imagens', count: withImagesCount },
+                                  { id: 'trash', label: isEs ? 'Papelera' : 'Lixeira', count: trashedNotes.length },
+                                ] as const
+                              ).map((f) => {
+                                const active = quickFilter === f.id;
+                                return (
+                                  <button
+                                    key={f.id}
+                                    type="button"
+                                    onClick={() => setQuickFilter(f.id)}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                                      active
+                                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                                    }`}
+                                  >
+                                    <span>{f.label}</span>
+                                    <span
+                                      className={`font-mono text-[10px] ${
+                                        active ? 'text-emerald-100' : 'text-slate-400'
+                                      }`}
+                                    >
+                                      {f.count}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Trash Header */}
+                          {quickFilter === 'trash' && !selectedFolderId && trashedNotes.length > 0 && (
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[10.5px] font-bold text-slate-500">
+                                {isEs ? 'Notas en la papelera' : 'Notas na lixeira'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void emptyTrash()}
+                                className="text-[11px] font-black text-rose-600 hover:underline cursor-pointer"
+                              >
+                                {isEs ? 'Vaciar papelera' : 'Esvaziar lixeira'}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Notes List */}
+                          {filteredNotes.length === 0 ? (
+                            <div className="rounded-[1.75rem] border border-dashed border-emerald-200 bg-white p-8 text-center space-y-2.5">
+                              <StickyNote className="mx-auto h-7 w-7 text-emerald-500" />
+                              <div className="text-xs font-black text-slate-800">
+                                {quickFilter === 'trash'
+                                  ? isEs
+                                    ? 'La papelera está vacía.'
+                                    : 'A lixeira está vazia.'
+                                  : isEs
+                                  ? 'Aún no hay notas aquí.'
+                                  : 'Nenhuma nota por aqui ainda.'}
+                              </div>
+                              {quickFilter !== 'trash' && (
+                                <button
+                                  type="button"
+                                  onClick={handleCreateNote}
+                                  className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 cursor-pointer"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  {isEs ? 'Crear nota' : 'Criar nota'}
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <AnimatePresence initial={false} mode="popLayout">
+                                {filteredNotes.map((note) => {
+                                  const folder = note.folderId ? folderNameMap[note.folderId] : null;
+                                  const checkBlocks = (note.blocks || []).filter(
+                                    (b) => b.type === 'checklist'
+                                  );
+                                  const checkTotal = checkBlocks.length;
+                                  const checkDone = checkBlocks.filter((c) => c.checked).length;
+                                  const imgCount = (note.images || []).length;
+                                  const isTrashed = Boolean(note.deletedAt);
+                                  const isLockedPreview = note.locked && !unlockedIds[note.id];
+
+                                  return (
+                                    <motion.div
+                                      key={note.id}
+                                      layout={!reduceMotion}
+                                      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={reduceMotion ? undefined : { opacity: 0, scale: 0.96 }}
+                                      transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                                      onClick={() => handleOpenNoteCard(note)}
+                                      className={`group rounded-2xl border p-3.5 transition-all cursor-pointer ${
+                                        note.pinned
+                                          ? 'border-emerald-300 bg-gradient-to-r from-emerald-50/55 via-white to-white shadow-xs'
+                                          : 'border-slate-200/80 bg-white hover:border-emerald-300 shadow-2xs'
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                          <div className="flex items-center gap-1.5">
+                                            {note.pinned && (
+                                              <Pin className="h-3.5 w-3.5 shrink-0 fill-emerald-600 text-emerald-600" />
+                                            )}
+                                            {note.locked && (
+                                              <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                            )}
+                                            <h3 className="truncate text-sm font-black text-slate-900">
+                                              {note.title ||
+                                                (isEs ? 'Nota sin título' : 'Nota sem título')}
+                                            </h3>
+                                          </div>
+
+                                          <p className="line-clamp-2 text-xs font-medium text-slate-500">
+                                            {isLockedPreview
+                                              ? isEs
+                                                ? 'Nota protegida con PIN • Toca para desbloquear'
+                                                : 'Nota protegida com PIN • Toque para desbloquear'
+                                              : note.plainText ||
+                                                (checkTotal > 0
+                                                  ? `${checkDone}/${checkTotal} ${
+                                                      isEs ? 'tareas' : 'itens na lista'
+                                                    }`
+                                                  : isEs
+                                                  ? 'Toca para escribir...'
+                                                  : 'Toque para escrever...')}
+                                          </p>
+
+                                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                            <span className="text-[10px] font-bold text-slate-400">
+                                              {formatNoteDate(note.updatedAt, isEs)}
+                                            </span>
+
+                                            {folder && (
+                                              <span
+                                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-black ${
+                                                  FOLDER_COLORS[folder.color]?.bg || 'bg-emerald-50'
+                                                } ${
+                                                  FOLDER_COLORS[folder.color]?.text ||
+                                                  'text-emerald-700'
+                                                } ${
+                                                  FOLDER_COLORS[folder.color]?.border ||
+                                                  'border-emerald-200'
+                                                }`}
+                                              >
+                                                {renderFolderIcon(folder.icon, 'h-2.5 w-2.5')}
+                                                {folder.name}
+                                              </span>
+                                            )}
+
+                                            {!isLockedPreview && checkTotal > 0 && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-emerald-700">
+                                                <CheckSquare className="h-2.5 w-2.5" />
+                                                {checkDone}/{checkTotal}
+                                              </span>
+                                            )}
+
+                                            {!isLockedPreview && imgCount > 0 && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-sky-700">
+                                                <ImageIcon className="h-2.5 w-2.5" />
+                                                {imgCount}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div
+                                          className="flex items-center gap-1 shrink-0"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {!isTrashed ? (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => togglePinNote(note.id)}
+                                                className={`rounded-xl p-1.5 transition-colors cursor-pointer ${
+                                                  note.pinned
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : 'text-slate-300 hover:bg-slate-100 hover:text-slate-600'
+                                                }`}
+                                                aria-label="Fixar nota"
+                                              >
+                                                <Pin className="h-3.5 w-3.5" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => softDeleteNote(note.id)}
+                                                className="rounded-xl p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition-colors cursor-pointer"
+                                                aria-label="Mover para lixeira"
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => restoreNote(note.id)}
+                                                className="rounded-xl bg-emerald-50 p-1.5 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                                title={isEs ? 'Restaurar' : 'Restaurar'}
+                                              >
+                                                <RotateCcw className="h-3.5 w-3.5" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => void permanentlyDeleteNote(note.id)}
+                                                className="rounded-xl bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 cursor-pointer"
+                                                title={
+                                                  isEs
+                                                    ? 'Eliminar definitivamente'
+                                                    : 'Excluir definitivamente'
+                                                }
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  );
+                                })}
+                              </AnimatePresence>
+                            </div>
+                          )}
+
+                          {/* Floating + New Note Button */}
+                          {quickFilter !== 'trash' && (
+                            <motion.button
+                              type="button"
+                              whileHover={{ scale: 1.06 }}
+                              whileTap={{ scale: 0.92 }}
+                              onClick={handleCreateNote}
+                              style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+                              className="fixed right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xl shadow-emerald-600/35 cursor-pointer"
+                              aria-label={isEs ? 'Nueva nota' : 'Nova nota'}
+                            >
+                              <Plus className="h-6 w-6 stroke-[2.8]" />
+                            </motion.button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
               </motion.div>
             ) : (
-              /* FULL-SCREEN RICH EDITOR */
+              /* FULL-SCREEN SMART EDITOR */
               <motion.div
                 key={`note-editor-${activeNote.id}`}
-                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: 14, scale: 0.985 }}
                 transition={{ type: 'spring', stiffness: 360, damping: 30 }}
                 className="flex h-full flex-col bg-white overflow-hidden"
               >
                 {/* Editor Top Bar */}
                 <div
-                  className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white/95 px-3.5 py-2.5 backdrop-blur-md shrink-0"
+                  className="flex items-center justify-between gap-2 border-b border-emerald-100/80 bg-white px-3.5 py-2.5 shrink-0"
                   style={{ paddingTop: 'max(0.65rem, env(safe-area-inset-top, 0px))' }}
                 >
                   <button
@@ -1176,7 +1308,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </button>
 
                   {/* Auto-save indicator */}
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50/80 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
                     {saveState === 'saving' ? (
                       <>
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -1190,13 +1322,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     ) : (
                       <>
                         <Cloud className="h-3 w-3" />
-                        <span>{isEs ? 'Salvo' : 'Salvo'}</span>
+                        <span>{isEs ? 'Guardado' : 'Salvo'}</span>
                       </>
                     )}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0 relative">
-                    {/* Folder Selector */}
                     <select
                       value={activeNote.folderId || ''}
                       onChange={(e) =>
@@ -1225,8 +1356,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           title={
                             activeNote.locked
                               ? isEs
-                                ? 'Desbloquear nota'
-                                : 'Remover bloqueio'
+                                ? 'Quitar PIN'
+                                : 'Remover PIN'
                               : isEs
                               ? 'Bloquear con PIN'
                               : 'Bloquear com PIN'
@@ -1352,133 +1483,26 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Rich Formatting & Etapa 2 Tools Toolbar */}
-                {!activeNote.deletedAt && (
-                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-slate-100 bg-slate-50/75 px-3 py-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => applyFormat('bold')}
-                      className="rounded-xl bg-white border border-slate-200 p-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                      title="Negrito"
-                    >
-                      <Bold className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyFormat('italic')}
-                      className="rounded-xl bg-white border border-slate-200 p-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                      title="Itálico"
-                    >
-                      <Italic className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyFormat('formatBlock', 'h3')}
-                      className="rounded-xl bg-white border border-slate-200 p-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                      title="Subtítulo"
-                    >
-                      <Heading2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyFormat('insertUnorderedList')}
-                      className="rounded-xl bg-white border border-slate-200 p-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                      title="Marcadores"
-                    >
-                      <List className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyFormat('insertOrderedList')}
-                      className="rounded-xl bg-white border border-slate-200 p-2 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                      title="Lista numerada"
-                    >
-                      <ListOrdered className="h-3.5 w-3.5" />
-                    </button>
+                {/* Hidden File Inputs for Images & Document Scan */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => void handleImageFileSelect(e, 'photo')}
+                  className="hidden"
+                />
+                <input
+                  ref={scanInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => void handleImageFileSelect(e, 'scan')}
+                  className="hidden"
+                />
 
-                    <div className="mx-1 h-5 w-px bg-slate-200 shrink-0" />
-
-                    <button
-                      type="button"
-                      onClick={handleToggleDictation}
-                      className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition-all cursor-pointer shrink-0 ${
-                        isDictating
-                          ? 'border-rose-400 bg-rose-500 text-white shadow-sm animate-pulse'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700'
-                      }`}
-                      title={isEs ? 'Dictado por voz' : 'Ditado por voz'}
-                    >
-                      {isDictating ? (
-                        <MicOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Mic className="h-3.5 w-3.5 text-emerald-600" />
-                      )}
-                      <span>{isDictating ? (isEs ? 'Ouvindo...' : 'Ouvindo...') : isEs ? 'Dictar' : 'Ditar'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsDrawingOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                    >
-                      <PenTool className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{isEs ? 'Dibujar' : 'Desenhar'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => scanInputRef.current?.click()}
-                      disabled={isUploadingImage}
-                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                    >
-                      <ScanLine className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{isEs ? 'Escanear' : 'Escanear'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploadingImage}
-                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                    >
-                      {isUploadingImage ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                      ) : (
-                        <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
-                      )}
-                      <span>{isEs ? 'Imagen' : 'Imagem'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleAddTable}
-                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
-                    >
-                      <TableIcon className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{isEs ? 'Tabla' : 'Tabela'}</span>
-                    </button>
-
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => void handleImageFileSelect(e, 'photo')}
-                      className="hidden"
-                    />
-                    <input
-                      ref={scanInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => void handleImageFileSelect(e, 'scan')}
-                      className="hidden"
-                    />
-                  </div>
-                )}
-
-                {/* Full-Screen Scrollable Editor Canvas */}
-                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
-                  <div className="mx-auto max-w-2xl space-y-5 pb-20">
+                {/* Editor Body + Smart Blocks + Tables + Images */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-4 pb-24 space-y-4">
                     {/* Metadata */}
                     <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-400">
                       <span>{formatNoteDate(activeNote.updatedAt, isEs)}</span>
@@ -1494,7 +1518,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Title */}
+                    {/* Note Title */}
                     <input
                       type="text"
                       value={activeNote.title}
@@ -1504,113 +1528,30 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       className="w-full bg-transparent text-2xl font-black tracking-tight text-slate-900 placeholder:text-slate-300 outline-none"
                     />
 
-                    {/* Rich Text Body */}
-                    <div
-                      ref={editorRef}
-                      contentEditable={!activeNote.deletedAt}
-                      suppressContentEditableWarning
-                      onInput={(e) =>
-                        updateNote(activeNote.id, {
-                          bodyHtml: (e.currentTarget as HTMLDivElement).innerHTML,
-                        })
-                      }
-                      data-placeholder={
-                        isEs
-                          ? 'Empieza a escribir tus ideas, planes o apuntes...'
-                          : 'Comece a escrever suas ideias, anotações ou planos...'
-                      }
-                      className="min-h-[160px] text-sm leading-relaxed text-slate-800 outline-none [&_h3]:text-base [&_h3]:font-black [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300"
-                    />
-
-                    {/* Interactive Checklist Inside Note */}
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/35 p-3.5 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 text-[10.5px] font-black uppercase tracking-wider text-emerald-800">
-                          <CheckSquare className="h-3.5 w-3.5 text-emerald-600" />
-                          {isEs ? 'Lista de verificación' : 'Checklist da nota'}
-                        </span>
-                        {(activeNote.checklist || []).length > 0 && (
-                          <span className="font-mono text-[10px] font-black text-emerald-700">
-                            {(activeNote.checklist || []).filter((c) => c.checked).length}/
-                            {(activeNote.checklist || []).length}
-                          </span>
-                        )}
+                    {/* Smart Structured Block Editor (Checklists, Bullets, Numbered, Headings, Inline Format) */}
+                    <div className="-mx-4 sm:-mx-6">
+                      <div className="px-4 sm:px-6">
+                        <SmartNoteEditor
+                          blocks={activeNote.blocks}
+                          readOnly={Boolean(activeNote.deletedAt)}
+                          language={language}
+                          isUploadingImage={isUploadingImage}
+                          isDictating={isDictating}
+                          onChangeBlocks={(nextBlocks, immediate) =>
+                            updateNote(activeNote.id, { blocks: nextBlocks }, Boolean(immediate))
+                          }
+                          onTriggerImageUpload={() => fileInputRef.current?.click()}
+                          onTriggerScanUpload={() => scanInputRef.current?.click()}
+                          onOpenDrawing={() => setIsDrawingOpen(true)}
+                          onAddTable={handleAddTable}
+                          onToggleDictation={handleToggleDictation}
+                        />
                       </div>
-
-                      <div className="space-y-1.5">
-                        <AnimatePresence initial={false}>
-                          {(activeNote.checklist || []).map((item) => (
-                            <motion.div
-                              key={item.id}
-                              layout
-                              initial={{ opacity: 0, y: 6 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              className="flex items-center justify-between gap-2 rounded-xl bg-white border border-slate-200/80 px-3 py-2"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => handleToggleChecklistItem(item.id)}
-                                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
-                              >
-                                <motion.span
-                                  animate={{ scale: item.checked ? [1, 1.18, 1] : 1 }}
-                                  transition={{ duration: 0.2 }}
-                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                                    item.checked
-                                      ? 'border-emerald-600 bg-emerald-600 text-white'
-                                      : 'border-slate-300 bg-white text-transparent'
-                                  }`}
-                                >
-                                  <Check className="h-3 w-3 stroke-[3]" />
-                                </motion.span>
-                                <span
-                                  className={`truncate text-xs font-bold transition-all ${
-                                    item.checked ? 'text-slate-400 line-through' : 'text-slate-800'
-                                  }`}
-                                >
-                                  {item.text}
-                                </span>
-                              </button>
-                              {!activeNote.deletedAt && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteChecklistItem(item.id)}
-                                  className="rounded-lg p-1 text-slate-300 hover:text-rose-500 cursor-pointer"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-                      </div>
-
-                      {!activeNote.deletedAt && (
-                        <form onSubmit={handleAddChecklistItem} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={newCheckItemText}
-                            onChange={(e) => setNewCheckItemText(e.target.value)}
-                            placeholder={
-                              isEs ? 'Agregar ítem al checklist...' : 'Adicionar item ao checklist...'
-                            }
-                            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-emerald-500"
-                          />
-                          <button
-                            type="submit"
-                            disabled={!newCheckItemText.trim()}
-                            className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40 cursor-pointer"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
-                        </form>
-                      )}
                     </div>
 
-                    {/* Simple Tables Inside Note */}
+                    {/* Editable Tables */}
                     {(activeNote.tables || []).length > 0 && (
-                      <div className="space-y-3">
+                      <div className="space-y-3 pt-2">
                         {(activeNote.tables || []).map((tbl) => (
                           <div
                             key={tbl.id}
@@ -1700,9 +1641,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </div>
                     )}
 
-                    {/* Images, Drawings & Scanned Documents Grid */}
+                    {/* Attached Images, Drawings & Scans */}
                     {(activeNote.images || []).length > 0 && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                           {isEs ? 'Imágenes, dibujos y escaneos' : 'Imagens, desenhos e documentos'}
                         </span>
@@ -1715,11 +1656,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
                               <img
                                 src={img.url}
                                 alt={img.name}
+                                loading="lazy"
                                 onClick={() => setPreviewImageUrl(img.url)}
                                 className="h-full w-full object-cover cursor-pointer"
                               />
                               {img.kind && img.kind !== 'photo' && (
-                                <span className="absolute left-1.5 bottom-1.5 rounded-lg bg-slate-900/75 px-2 py-0.5 text-[9px] font-black uppercase text-white">
+                                <span className="absolute left-1.5 bottom-1.5 rounded-lg bg-white/90 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-900 shadow-xs">
                                   {img.kind === 'drawing'
                                     ? isEs
                                       ? 'Dibujo'
@@ -1733,7 +1675,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveImage(img.id)}
-                                  className="absolute right-1.5 top-1.5 rounded-lg bg-slate-900/70 p-1 text-white hover:bg-rose-600 cursor-pointer"
+                                  className="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1 text-slate-700 hover:bg-rose-500 hover:text-white shadow-xs cursor-pointer"
                                   aria-label="Remover anexo"
                                 >
                                   <X className="h-3 w-3" />
@@ -1750,7 +1692,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Version History Bottom Sheet */}
+          {/* Version History Sheet */}
           <AnimatePresence>
             {isHistoryOpen && activeNote && (
               <div className="fixed inset-0 z-[82] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -1759,13 +1701,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsHistoryOpen(false)}
-                  className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs"
+                  className="fixed inset-0 bg-emerald-950/15 backdrop-blur-[2px]"
                 />
                 <motion.div
                   initial={{ opacity: 0, y: 32 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 32 }}
-                  className="relative z-10 w-full max-w-md max-h-[75dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] bg-white shadow-2xl"
+                  className="relative z-10 w-full max-w-md max-h-[75dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white shadow-2xl"
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
                     <div className="flex items-center gap-2">
@@ -1811,9 +1753,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             type="button"
                             onClick={() => {
                               restoreVersionSnapshot(activeNote.id, ver);
-                              if (editorRef.current) {
-                                editorRef.current.innerHTML = ver.bodyHtml || '';
-                              }
                               setIsHistoryOpen(false);
                             }}
                             className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700 cursor-pointer shrink-0"
@@ -1838,14 +1777,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsFolderModalOpen(false)}
-                  className="absolute inset-0 bg-slate-900/45 backdrop-blur-xs"
+                  className="fixed inset-0 bg-emerald-950/15 backdrop-blur-[2px]"
                 />
                 <motion.form
                   initial={{ opacity: 0, y: 28 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 28 }}
                   onSubmit={handleCreateFolderSubmit}
-                  className="relative z-10 w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] bg-white p-5 shadow-2xl space-y-4"
+                  className="relative z-10 w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-2xl space-y-4"
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black text-slate-900">
@@ -1953,12 +1892,12 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setPreviewImageUrl(null)}
-                className="fixed inset-0 z-[92] flex items-center justify-center bg-slate-950/85 p-4"
+                className="fixed inset-0 z-[92] flex items-center justify-center bg-white/90 backdrop-blur-md p-4"
               >
                 <img
                   src={previewImageUrl}
                   alt="Preview"
-                  className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl"
+                  className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl border border-emerald-100"
                 />
               </motion.div>
             )}
