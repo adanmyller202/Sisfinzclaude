@@ -164,8 +164,10 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
     }
   };
 
-  const sizeStyle: React.CSSProperties | undefined =
-    typeof size === 'number' ? { width: size, height: size } : undefined;
+  const sizeStyle: React.CSSProperties = {
+    ...(typeof size === 'number' ? { width: size, height: size } : {}),
+    filter: `drop-shadow(0 4px 10px ${skin.glowColor})`,
+  };
   const sizeClass = typeof size === 'string' ? SIZE_CLASS_MAP[size] : '';
 
   const showSunglasses = routineState === 'franco_cool';
@@ -177,10 +179,6 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
       animate={getBodyAnimation()}
       style={sizeStyle}
       className={`relative inline-flex items-center justify-center shrink-0 select-none ${sizeClass} ${className}`}
-      style={{
-        ...(sizeStyle || {}),
-        filter: `drop-shadow(0 4px 10px ${skin.glowColor})`,
-      }}
       aria-label={`Finzy (${routineState !== 'normal' ? routineState : mood})`}
     >
       <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible pointer-events-none">
@@ -202,7 +200,6 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
           </radialGradient>
         </defs>
 
-        {/* Soft Aura Ring */}
         <path
           d="M32 24 C45 16, 68 18, 78 30 C88 42, 85 62, 72 74 C59 86, 38 84, 26 72 C14 60, 19 32, 32 24 Z"
           fill="none"
@@ -212,7 +209,6 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
           opacity="0.72"
         />
 
-        {/* Finzy Jelly Body */}
         <path
           d="M32 24 C45 16, 68 18, 78 30 C88 42, 85 62, 72 74 C59 86, 38 84, 26 72 C14 60, 19 32, 32 24 Z"
           fill={`url(#${uniquePrefix}_bodyGrad)`}
@@ -220,13 +216,11 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
           strokeWidth="2"
         />
 
-        {/* Top Gloss */}
         <path
           d="M34 27 C45 20, 62 22, 70 32 C60 30, 42 32, 34 27 Z"
           fill={`url(#${uniquePrefix}_highlight)`}
         />
 
-        {/* Cheeks */}
         {(showSunglasses || showProudShine || mood === 'happy' || mood === 'calm') && (
           <>
             <circle cx="32" cy="58" r="7.5" fill={`url(#${uniquePrefix}_blush)`} />
@@ -234,35 +228,121 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
           </>
         )}
 
-        {/* Eyes & Sunglasses */}
         {showSunglasses ? (
           <g>
-            {/* Cool Franco Sunglasses */}
-            <rect x="27" y="42" width="20" height="14" rx="5" fill="#0f172a" stroke="#f8fafc" strokeWidth="2" />
-            <rect x="53" y="42" width="20" height="14" rx="5" fill="#0f172a" stroke="#f8fafc" strokeWidth="2" />
-            <line x1="47" y1="47" x2="53" y2="47" stroke="#f8fafc" strokeWidth="2.5" strokeLinecap="round" />
-            <line x1="31" y1="45" x2="36" y2="52" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" />
-            <line x1="57" y1="45" x2="62" y2="52" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" />
-            <path d="M 43 61 Q 50 67 57 61" fill="none" stroke="#064e3b" strokeWidth="3.2" strokeLinecap="round" />
+            <rect
+              x="27"
+              y="42"
+              width="20"
+              height="14"
+              rx="5"
+              fill="#0f172a"
+              stroke="#f8fafc"
+              strokeWidth="2"
+            />
+            <rect
+              x="53"
+              y="42"
+              width="20"
+              height="14"
+              rx="5"
+              fill="#0f172a"
+              stroke="#f8fafc"
+              strokeWidth="2"
+            />
+            <line
+              x1="47"
+              y1="47"
+              x2="53"
+              y2="47"
+              stroke="#f8fafc"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+            <line
+              x1="31"
+              y1="45"
+              x2="36"
+              y2="52"
+              stroke="rgba(255,255,255,0.45)"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <line
+              x1="57"
+              y1="45"
+              x2="62"
+              y2="52"
+              stroke="rgba(255,255,255,0.45)"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 43 61 Q 50 67 57 61"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+            />
           </g>
         ) : showCoffeeMug ? (
           <g>
-            {/* Sleepy/Cozy Madrugada Eyes */}
-            <path d="M 36 50 Q 41 55 46 50" fill="none" stroke="#064e3b" strokeWidth="3.5" strokeLinecap="round" />
-            <path d="M 54 50 Q 59 55 64 50" fill="none" stroke="#064e3b" strokeWidth="3.5" strokeLinecap="round" />
+            <path
+              d="M 36 50 Q 41 55 46 50"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 54 50 Q 59 55 64 50"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
             <ellipse cx="50" cy="61" rx="3.2" ry="2.4" fill="#064e3b" />
           </g>
         ) : showProudShine ? (
           <g>
-            {/* Proud Happy Arcs */}
-            <path d="M 36 52 Q 42 45 48 52" fill="none" stroke="#064e3b" strokeWidth="3.8" strokeLinecap="round" />
-            <path d="M 52 52 Q 58 45 64 52" fill="none" stroke="#064e3b" strokeWidth="3.8" strokeLinecap="round" />
-            <path d="M 42 60 Q 50 67 58 60" fill="none" stroke="#064e3b" strokeWidth="3.4" strokeLinecap="round" />
+            <path
+              d="M 36 52 Q 42 45 48 52"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.8"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 52 52 Q 58 45 64 52"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.8"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 42 60 Q 50 67 58 60"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.4"
+              strokeLinecap="round"
+            />
           </g>
         ) : mood === 'sleeping' ? (
           <>
-            <path d="M 38 52 Q 42 56 46 52" fill="none" stroke="#064e3b" strokeWidth="3.5" strokeLinecap="round" />
-            <path d="M 54 52 Q 58 56 62 52" fill="none" stroke="#064e3b" strokeWidth="3.5" strokeLinecap="round" />
+            <path
+              d="M 38 52 Q 42 56 46 52"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 54 52 Q 58 56 62 52"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
             <ellipse cx="50" cy="62" rx="2.5" ry="3" fill="#064e3b" />
           </>
         ) : mood === 'scared' ? (
@@ -279,7 +359,13 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
             <line x1="64" y1="45" x2="54" y2="48" stroke="#064e3b" strokeWidth="3" strokeLinecap="round" />
             <circle cx="42" cy="52" r="3.5" fill="#064e3b" />
             <circle cx="58" cy="52" r="3.5" fill="#064e3b" />
-            <path d="M 43 63 Q 47 60 50 63 Q 53 66 57 62" fill="none" stroke="#064e3b" strokeWidth="2.8" strokeLinecap="round" />
+            <path
+              d="M 43 63 Q 47 60 50 63 Q 53 66 57 62"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="2.8"
+              strokeLinecap="round"
+            />
           </>
         ) : (
           <>
@@ -287,15 +373,35 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
             <circle cx="43.5" cy="48" r="1.5" fill="#ffffff" />
             <circle cx="58" cy="50" r="4.5" fill="#064e3b" />
             <circle cx="59.5" cy="48" r="1.5" fill="#ffffff" />
-            <path d="M 45 60 Q 50 65 55 60" fill="none" stroke="#064e3b" strokeWidth="3" strokeLinecap="round" />
+            <path
+              d="M 45 60 Q 50 65 55 60"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
           </>
         )}
 
-        {/* Cozy Coffee Mug for Late-Night / Madrugada Shifts */}
         {showCoffeeMug && (
           <g transform="translate(62, 62)">
-            <rect x="0" y="3" width="18" height="15" rx="4" fill="#ffffff" stroke="#064e3b" strokeWidth="2.2" />
-            <path d="M 18 6 H 21 A 3 3 0 0 1 21 14 H 18" fill="none" stroke="#064e3b" strokeWidth="2.2" strokeLinecap="round" />
+            <rect
+              x="0"
+              y="3"
+              width="18"
+              height="15"
+              rx="4"
+              fill="#ffffff"
+              stroke="#064e3b"
+              strokeWidth="2.2"
+            />
+            <path
+              d="M 18 6 H 21 A 3 3 0 0 1 21 14 H 18"
+              fill="none"
+              stroke="#064e3b"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
             {allowMotion && (
               <motion.path
                 d="M 6 0 Q 4 -3 6 -6 M 12 0 Q 10 -3 12 -6"
@@ -310,7 +416,6 @@ export const FinzyMascot: React.FC<FinzyMascotProps> = ({
           </g>
         )}
 
-        {/* Proud Streak Badge Star (no confetti, clean badge) */}
         {showProudShine && (
           <path
             d="M 73 16 L 75 21 L 80 23 L 75 25 L 73 30 L 71 25 L 66 23 L 71 21 Z"
