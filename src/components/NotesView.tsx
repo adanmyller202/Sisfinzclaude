@@ -9,9 +9,9 @@ import {
   Pin,
   Folder,
   FolderPlus,
+  FolderInput,
   Trash2,
   RotateCcw,
-  Image as ImageIcon,
   CheckSquare,
   Check,
   X,
@@ -275,6 +275,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [newFolderIcon, setNewFolderIcon] = useState<NoteFolderIcon>('lightbulb');
   const [newFolderColor, setNewFolderColor] = useState<NoteFolderColor>('emerald');
 
+  // Move Note to Folder modal state
+  const [moveModalNoteId, setMoveModalNoteId] = useState<string | null>(null);
+  const [moveTargetFolderId, setMoveTargetFolderId] = useState<string | null>(null);
+  const [isCreatingInMoveModal, setIsCreatingInMoveModal] = useState(false);
+  const [moveNewFolderName, setMoveNewFolderName] = useState('');
+  const [moveNewFolderIcon, setMoveNewFolderIcon] = useState<NoteFolderIcon>('folder');
+  const [moveNewFolderColor, setMoveNewFolderColor] = useState<NoteFolderColor>('emerald');
+
   const [isEditorMenuOpen, setIsEditorMenuOpen] = useState(false);
   const [isTagsPopoverOpen, setIsTagsPopoverOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -295,9 +303,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDictating, setIsDictating] = useState(false);
 
-  // Track virtual keyboard inset ONLY as extra bottom scroll padding inside the canvas,
-  // while keeping the outer full-screen backdrop 100% opaque (inset-0) so the underlying
-  // home screen can NEVER bleed through on iOS Safari!
   const [keyboardInset, setKeyboardInset] = useState<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -309,11 +314,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
     [notes, activeNoteId]
   );
 
+  const noteBeingMoved: NoteItem | null = useMemo(
+    () => notes.find((n) => n.id === moveModalNoteId) || null,
+    [notes, moveModalNoteId]
+  );
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     window.setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
-    }, 2000);
+    }, 2200);
   };
 
   const stopDictation = () => {
@@ -355,7 +365,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
     return () => window.clearInterval(timer);
   }, [activeNoteId, isReadingMode, saveVersionSnapshot]);
 
-  // Lock background page completely when Notes is open so iOS Safari never scrolls or shows the dashboard behind
   useEffect(() => {
     if (!isOpen) {
       stopDictation();
@@ -371,6 +380,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
       setIsTagsPopoverOpen(false);
       setIsTemplatePickerOpen(false);
       setContextMenuNoteId(null);
+      setMoveModalNoteId(null);
       setUnlockedIds({});
       return;
     }
@@ -485,6 +495,50 @@ export const NotesView: React.FC<NotesViewProps> = ({
       htmlToPlainText(b.html).toLowerCase().includes(q)
     ).length;
   }, [inNoteSearchQuery, activeNote]);
+
+  const handleOpenMoveModal = (note: NoteItem) => {
+    setContextMenuNoteId(null);
+    setIsEditorMenuOpen(false);
+    setMoveModalNoteId(note.id);
+    setMoveTargetFolderId(note.folderId ?? null);
+    setIsCreatingInMoveModal(false);
+    setMoveNewFolderName('');
+    setMoveNewFolderIcon('folder');
+    setMoveNewFolderColor('emerald');
+  };
+
+  const handleConfirmMoveNote = async () => {
+    if (!moveModalNoteId) return;
+
+    if (isCreatingInMoveModal && moveNewFolderName.trim()) {
+      const created = await createFolder({
+        name: moveNewFolderName.trim(),
+        icon: moveNewFolderIcon,
+        color: moveNewFolderColor,
+      });
+      updateNote(moveModalNoteId, { folderId: created.id }, true);
+      setMoveModalNoteId(null);
+      setIsCreatingInMoveModal(false);
+      setMoveNewFolderName('');
+      showToast(
+        isEs ? `Movida a "${created.name}"` : `Movida para "${created.name}"`
+      );
+      return;
+    }
+
+    updateNote(moveModalNoteId, { folderId: moveTargetFolderId }, true);
+    const destName = moveTargetFolderId ? folderNameMap[moveTargetFolderId]?.name : null;
+    setMoveModalNoteId(null);
+    showToast(
+      destName
+        ? isEs
+          ? `Movida a "${destName}"`
+          : `Movida para "${destName}"`
+        : isEs
+        ? 'Quitada de la carpeta'
+        : 'Removida da pasta'
+    );
+  };
 
   const handleOpenNoteCard = (note: NoteItem) => {
     setContextMenuNoteId(null);
@@ -939,7 +993,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        /* SOLID FULL-VIEWPORT OPAQUE SHELL: Guarantees underlying Home Dashboard NEVER shows through */
         <motion.div
           key="sisfinz-notes-root"
           initial={{ opacity: 0 }}
@@ -964,7 +1017,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 pb-4 pt-3 shrink-0 shadow-[0_10px_30px_rgba(6,78,59,0.16)]"
                   style={{ paddingTop: 'max(0.85rem, env(safe-area-inset-top, 0px))' }}
                 >
-                  {/* Decorative organic soft light blobs */}
                   <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/12 blur-2xl" />
                   <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-teal-300/15 blur-2xl" />
 
@@ -1041,21 +1093,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <div className="grid grid-cols-3 gap-1 rounded-2xl bg-emerald-950/20 border border-white/15 p-1 backdrop-blur-sm">
                       {(
                         [
-                          {
-                            id: 'all_notes',
-                            label: isEs ? 'Notas' : 'Notas',
-                            icon: FileText,
-                          },
-                          {
-                            id: 'folders',
-                            label: isEs ? 'Carpetas' : 'Pastas',
-                            icon: Folder,
-                          },
-                          {
-                            id: 'saved_links',
-                            label: isEs ? 'Links salvos' : 'Links salvos',
-                            icon: Link2,
-                          },
+                          { id: 'all_notes', label: 'Notas', icon: FileText },
+                          { id: 'folders', label: isEs ? 'Carpetas' : 'Pastas', icon: Folder },
+                          { id: 'saved_links', label: 'Links salvos', icon: Link2 },
                         ] as const
                       ).map((tab) => {
                         const Icon = tab.icon;
@@ -1133,7 +1173,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                   },
                                   {
                                     id: 'favorites',
-                                    label: isEs ? 'Favoritas' : 'Favoritas',
+                                    label: 'Favoritas',
                                     count: favoritesCount,
                                     icon: Heart,
                                     grad: 'from-rose-50 to-white border-rose-200/80',
@@ -1284,7 +1324,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           transition={{ duration: 0.2 }}
                           className="space-y-4 pb-28"
                         >
-                          {/* Search Bar (16px font on mobile) */}
+                          {/* Search Bar */}
                           <div className="relative">
                             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/70" />
                             <input
@@ -1309,7 +1349,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             )}
                           </div>
 
-                          {/* Quick Start Templates Carousel (1-Tap Note Creation) */}
+                          {/* Quick Start Templates Carousel */}
                           {quickFilter !== 'trash' && !searchQuery.trim() && (
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between px-1">
@@ -1353,7 +1393,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                 className="inline-flex items-center gap-1 rounded-xl bg-white px-2.5 py-1 text-[10.5px] font-black text-emerald-800 shadow-2xs cursor-pointer touch-manipulation"
                               >
                                 <X className="h-3 w-3" />
-                                {isEs ? 'Ver todas' : 'Ver todas'}
+                                Ver todas
                               </button>
                             </div>
                           ) : (
@@ -1500,7 +1540,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                           : 'from-white via-white to-[#F9FCFA] border-slate-200/80 hover:border-emerald-300'
                                       }`}
                                     >
-                                      {/* Top Accent Ribbon */}
                                       {accent && (
                                         <span
                                           className={`absolute left-4 right-4 top-0 h-[3px] rounded-b-full ${accent.accentBar}`}
@@ -1508,7 +1547,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                       )}
 
                                       <div className="space-y-2 min-w-0">
-                                        {/* Thumbnail Preview if note has image/drawing */}
                                         {!isLockedPreview && firstImg && notesLayout === 'grid' && (
                                           <div className="relative h-20 w-full overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
                                             <img
@@ -1525,7 +1563,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                           </div>
                                         )}
 
-                                        {/* Header & Context Menu */}
                                         <div className="flex items-start justify-between gap-1.5">
                                           <div className="flex items-center gap-1 min-w-0 flex-1">
                                             {note.pinned && (
@@ -1566,8 +1603,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                                       initial={{ opacity: 0, scale: 0.94, y: 4 }}
                                                       animate={{ opacity: 1, scale: 1, y: 0 }}
                                                       exit={{ opacity: 0, scale: 0.94, y: 4 }}
-                                                      className="absolute right-0 top-full mt-1 w-40 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-40"
+                                                      className="absolute right-0 top-full mt-1 w-44 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-40"
                                                     >
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleOpenMoveModal(note)}
+                                                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                                      >
+                                                        <FolderInput className="h-3.5 w-3.5 text-emerald-600" />
+                                                        {isEs ? 'Mover' : 'Mover'}
+                                                      </button>
                                                       <button
                                                         type="button"
                                                         onClick={() => {
@@ -1641,7 +1686,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                           </div>
                                         </div>
 
-                                        {/* Snippet */}
                                         <p className="line-clamp-3 text-[11.5px] font-medium text-slate-500 leading-relaxed break-words">
                                           {isLockedPreview
                                             ? isEs
@@ -1651,7 +1695,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                               (isEs ? 'Toca para escribir...' : 'Toque para escrever...')}
                                         </p>
 
-                                        {/* Mini Animated Checklist Progress Bar inside Card */}
                                         {!isLockedPreview && checkTotal > 0 && (
                                           <div className="space-y-1 pt-0.5">
                                             <div className="flex items-center justify-between text-[9.5px] font-black text-emerald-700">
@@ -1671,7 +1714,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                         )}
                                       </div>
 
-                                      {/* Footer Metadata */}
                                       <div className="flex flex-wrap items-center justify-between gap-1 pt-1.5 border-t border-slate-100/90">
                                         <span className="text-[9.5px] font-bold text-slate-400">
                                           {formatNoteDate(note.updatedAt, isEs)}
@@ -1737,7 +1779,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 className="flex h-full w-full max-w-full flex-col bg-[#EFF6F3] overflow-hidden"
               >
-                {/* Top Accent Line */}
                 {activeAccentStyle && (
                   <div className={`h-[3.5px] w-full shrink-0 ${activeAccentStyle.accentBar}`} />
                 )}
@@ -1757,7 +1798,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <span>Notas</span>
                   </motion.button>
 
-                  {/* Discreet Live Autosave Pill */}
                   <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50/80 px-2.5 py-1 text-[10px] font-bold text-emerald-700 shrink-0">
                     {saveState === 'saving' ? (
                       <>
@@ -1773,7 +1813,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     )}
                   </div>
 
-                  {/* Right Actions: Paper Texture, Reading Mode, Search, Favorite, More */}
                   <div className="flex items-center gap-1 shrink-0 relative">
                     {!activeNote.deletedAt ? (
                       <>
@@ -1785,7 +1824,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
                           }`}
-                          title={isEs ? 'Estilo de papel (liso/punteado/rayado)' : 'Estilo de papel (liso/pontilhado/pautado)'}
+                          title={isEs ? 'Estilo de papel' : 'Estilo de papel'}
                         >
                           <Grid2x2 className="h-4 w-4" />
                         </button>
@@ -1873,26 +1912,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl z-50"
                         >
                           <div className="px-2.5 py-1.5">
-                            <label className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                              {isEs ? 'Carpeta' : 'Pasta'}
-                            </label>
-                            <select
-                              value={activeNote.folderId || ''}
-                              onChange={(e) =>
-                                updateNote(activeNote.id, { folderId: e.target.value || null }, true)
-                              }
-                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[16px] sm:text-xs font-bold text-slate-800 outline-none"
-                            >
-                              <option value="">{isEs ? 'Sin carpeta' : 'Sem pasta'}</option>
-                              {folders.map((f) => (
-                                <option key={f.id} value={f.id}>
-                                  {f.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="px-2.5 py-1.5">
                             <span className="block text-[9.5px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
                               {isEs ? 'Color del cuaderno' : 'Cor do caderno'}
                             </span>
@@ -1932,6 +1951,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           </div>
 
                           <div className="my-1 h-px bg-slate-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMoveModal(activeNote)}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            <FolderInput className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Mover a carpeta' : 'Mover para pasta'}
+                          </button>
 
                           <button
                             type="button"
@@ -2103,7 +2131,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   className="hidden"
                 />
 
-                {/* Paper Desk Scrollable Surface (NEVER shrinks overlay; uses bottom padding for virtual keyboard) */}
+                {/* Paper Desk Scrollable Surface */}
                 <div
                   className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2.5 sm:px-5 py-3 sm:py-5"
                   style={{
@@ -2114,15 +2142,24 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     style={getPaperBackgroundStyle(activeNote.paperStyle || 'plain')}
                     className="mx-auto w-full max-w-2xl min-h-[calc(100dvh-140px)] rounded-[1.75rem] border border-emerald-200/70 bg-white px-4 sm:px-7 py-5 sm:py-7 shadow-[0_12px_36px_rgba(6,78,59,0.06)] space-y-3.5 min-w-0"
                   >
-                    {/* Metadata & Stats */}
+                    {/* Metadata & Interactive Folder Pill */}
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-400">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span>{formatNoteDate(activeNote.updatedAt, isEs)}</span>
-                        {activeNote.folderId && folderNameMap[activeNote.folderId] && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            {folderNameMap[activeNote.folderId].name}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenMoveModal(activeNote)}
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer touch-manipulation"
+                        >
+                          <FolderInput className="h-2.5 w-2.5 text-emerald-600" />
+                          <span>
+                            {activeNote.folderId && folderNameMap[activeNote.folderId]
+                              ? folderNameMap[activeNote.folderId].name
+                              : isEs
+                              ? 'Mover a carpeta'
+                              : 'Mover p/ pasta'}
                           </span>
-                        )}
+                        </button>
                       </div>
                       <span className="font-mono text-[10.5px] text-slate-400">
                         {activeWordCount} pal. • {activeCharCount} car.
@@ -2368,10 +2405,240 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[98] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg"
+                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[98] rounded-full bg-emerald-900 px-4 py-2 text-xs font-bold text-white shadow-lg whitespace-nowrap"
               >
                 {toastMessage}
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* MOVE NOTE TO FOLDER MODAL (Select existing folder or create new folder inline + "Mover aqui") */}
+          <AnimatePresence>
+            {moveModalNoteId && noteBeingMoved && (
+              <div className="fixed inset-0 z-[88] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setMoveModalNoteId(null)}
+                  className="fixed inset-0 bg-emerald-950/25 backdrop-blur-[2px]"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 32, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 28, scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                  className="relative z-10 w-full max-w-md max-h-[85dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] border border-emerald-100 bg-white shadow-2xl"
+                >
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between border-b border-emerald-100 px-5 py-4 shrink-0 bg-gradient-to-r from-emerald-50/80 to-white">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                        <FolderInput className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-black text-slate-900">
+                          {isEs ? 'Mover nota a carpeta' : 'Mover nota para pasta'}
+                        </h3>
+                        <p className="truncate text-[11px] font-semibold text-slate-500">
+                          {noteBeingMoved.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMoveModalNoteId(null)}
+                      className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Folder List + Inline New Folder Creator */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                    {/* Option: No Folder */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingInMoveModal(false);
+                        setMoveTargetFolderId(null);
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all cursor-pointer touch-manipulation ${
+                        !isCreatingInMoveModal && moveTargetFolderId === null
+                          ? 'border-emerald-600 bg-emerald-50/80 shadow-2xs'
+                          : 'border-slate-200/80 bg-white hover:border-emerald-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                          <FileText className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-black text-slate-900">
+                            {isEs ? 'Sin carpeta' : 'Sem pasta'}
+                          </div>
+                          <div className="text-[10.5px] font-medium text-slate-400">
+                            {isEs ? 'Dejar solo en Todas las notas' : 'Deixar apenas em Todas as notas'}
+                          </div>
+                        </div>
+                      </div>
+                      {!isCreatingInMoveModal && moveTargetFolderId === null && (
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                          <Check className="h-3.5 w-3.5 stroke-[3]" />
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Existing Folders */}
+                    {folders.map((fld) => {
+                      const palette = FOLDER_COLORS[fld.color] || FOLDER_COLORS.emerald;
+                      const count = activeNotes.filter((n) => n.folderId === fld.id).length;
+                      const selected = !isCreatingInMoveModal && moveTargetFolderId === fld.id;
+                      return (
+                        <button
+                          key={fld.id}
+                          type="button"
+                          onClick={() => {
+                            setIsCreatingInMoveModal(false);
+                            setMoveTargetFolderId(fld.id);
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all cursor-pointer touch-manipulation ${
+                            selected
+                              ? 'border-emerald-600 bg-emerald-50/80 shadow-2xs'
+                              : 'border-slate-200/80 bg-white hover:border-emerald-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${palette.bg} ${palette.text} ${palette.border}`}
+                            >
+                              {renderFolderIcon(fld.icon, 'h-4 w-4')}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-black text-slate-900">
+                                {fld.name}
+                              </div>
+                              <div className="text-[10.5px] font-medium text-slate-400">
+                                {count} {count === 1 ? 'nota' : 'notas'}
+                              </div>
+                            </div>
+                          </div>
+                          {selected && (
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                              <Check className="h-3.5 w-3.5 stroke-[3]" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {/* Create New Folder Inline Section */}
+                    <div className="pt-1">
+                      {!isCreatingInMoveModal ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsCreatingInMoveModal(true)}
+                          className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 py-3 text-xs font-black text-emerald-800 hover:bg-emerald-50 transition-colors cursor-pointer touch-manipulation"
+                        >
+                          <FolderPlus className="h-4 w-4 text-emerald-600" />
+                          <span>{isEs ? 'Crear nueva carpeta' : 'Criar nova pasta'}</span>
+                        </button>
+                      ) : (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="rounded-2xl border-2 border-emerald-500 bg-emerald-50/40 p-3.5 space-y-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-900">
+                              <FolderPlus className="h-3.5 w-3.5 text-emerald-600" />
+                              {isEs ? 'Nueva carpeta' : 'Nova pasta'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsCreatingInMoveModal(false)}
+                              className="rounded-lg p-1 text-slate-400 hover:bg-white cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <input
+                            type="text"
+                            autoFocus
+                            value={moveNewFolderName}
+                            onChange={(e) => setMoveNewFolderName(e.target.value)}
+                            placeholder={
+                              isEs ? 'Ej: Recetas, Trabajo, Viaje...' : 'Ex: Receitas, Trabalho, Viagem...'
+                            }
+                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-[16px] sm:text-xs font-bold text-slate-900 outline-none focus:border-emerald-500"
+                          />
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {FOLDER_ICONS.map((ic) => {
+                              const Icon = ic.icon;
+                              const active = moveNewFolderIcon === ic.id;
+                              return (
+                                <button
+                                  key={ic.id}
+                                  type="button"
+                                  onClick={() => setMoveNewFolderIcon(ic.id)}
+                                  className={`flex h-8 w-8 items-center justify-center rounded-xl border cursor-pointer touch-manipulation ${
+                                    active
+                                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                                      : 'border-slate-200 bg-white text-slate-500'
+                                  }`}
+                                >
+                                  <Icon className="h-3.5 w-3.5" />
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {(Object.keys(FOLDER_COLORS) as NoteFolderColor[]).map((col) => (
+                              <button
+                                key={col}
+                                type="button"
+                                onClick={() => setMoveNewFolderColor(col)}
+                                className={`h-6 w-6 rounded-full ${FOLDER_COLORS[col].dot} cursor-pointer transition-transform touch-manipulation ${
+                                  moveNewFolderColor === col
+                                    ? 'ring-2 ring-offset-2 ring-slate-800 scale-110'
+                                    : ''
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sticky Bottom Confirm Action: "Mover aqui" */}
+                  <div
+                    className="border-t border-slate-100 bg-white p-4 shrink-0"
+                    style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
+                  >
+                    <button
+                      type="button"
+                      disabled={isCreatingInMoveModal && !moveNewFolderName.trim()}
+                      onClick={() => void handleConfirmMoveNote()}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-emerald-600/20 hover:opacity-95 disabled:opacity-40 cursor-pointer touch-manipulation"
+                    >
+                      <FolderInput className="h-4 w-4" />
+                      <span>
+                        {isCreatingInMoveModal
+                          ? isEs
+                            ? 'Crear y mover aquí'
+                            : 'Criar e mover aqui'
+                          : isEs
+                          ? 'Mover aquí'
+                          : 'Mover aqui'}
+                      </span>
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
 

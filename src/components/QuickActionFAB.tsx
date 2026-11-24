@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, animate } from 'motion/react';
 import {
   Plus,
@@ -27,8 +27,69 @@ interface QuickActionFABProps {
   bottomOffsetClass?: string;
 }
 
-const EDGE_STORAGE_KEY = 'sisfinz_quick_fab_edge_v1';
-const FAB_SIZE_PX = 48;
+const POS_STORAGE_KEY = 'sisfinz_quick_fab_pos_v2';
+const LEGACY_EDGE_KEY = 'sisfinz_quick_fab_edge_v1';
+const FAB_SIZE = 48;
+
+interface StoredFabPos {
+  side: 'left' | 'right';
+  yRatio: number; // 0 (top safe bound) -> 1 (bottom safe bound)
+}
+
+function loadStoredPos(): StoredFabPos {
+  if (typeof window === 'undefined') return { side: 'right', yRatio: 1 };
+  try {
+    const raw = localStorage.getItem(POS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const side = parsed?.side === 'left' ? 'left' : 'right';
+      const yRatio =
+        typeof parsed?.yRatio === 'number' && Number.isFinite(parsed.yRatio)
+          ? Math.max(0, Math.min(1, parsed.yRatio))
+          : 1;
+      return { side, yRatio };
+    }
+    const legacy = localStorage.getItem(LEGACY_EDGE_KEY);
+    if (legacy === 'left') return { side: 'left', yRatio: 1 };
+  } catch {
+    // ignore storage errors
+  }
+  return { side: 'right', yRatio: 1 };
+}
+
+function getSafeBounds() {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 390;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 844;
+  const edgeMargin = vw >= 640 ? 24 : 16;
+
+  // Detect top navbar height if mounted so the FAB never overlaps the top bar
+  let topGuard = 86;
+  let bottomGuard = 94;
+  if (typeof document !== 'undefined') {
+    const headerEl = document.querySelector('header');
+    if (headerEl) {
+      const rect = headerEl.getBoundingClientRect();
+      if (rect.bottom > 40 && rect.bottom < vh * 0.35) {
+        topGuard = Math.max(topGuard, Math.ceil(rect.bottom) + 12);
+      }
+    }
+    const bottomNavEl = document.querySelector('nav.fixed.bottom-0, [data-bottom-nav="true"]');
+    if (bottomNavEl) {
+      const rect = bottomNavEl.getBoundingClientRect();
+      const navHeight = vh - rect.top;
+      if (navHeight > 40 && navHeight < vh * 0.35) {
+        bottomGuard = Math.max(bottomGuard, Math.ceil(navHeight) + 14);
+      }
+    }
+  }
+
+  const leftX = edgeMargin;
+  const rightX = Math.max(edgeMargin, vw - FAB_SIZE - edgeMargin);
+  const minY = topGuard;
+  const maxY = Math.max(minY + 40, vh - FAB_SIZE - bottomGuard);
+
+  return { vw, vh, leftX, rightX, minY, maxY };
+}
 
 export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   language = 'pt',
@@ -40,44 +101,55 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   onOpenSharedBill,
   onOpenCalculator,
   onMenuToggle,
-  bottomOffsetClass = 'bottom-20 sm:bottom-22',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [dockSide, setDockSide] = useState<'right' | 'left'>(() => {
-    if (typeof window === 'undefined') return 'right';
-    try {
-      const saved = localStorage.getItem(EDGE_STORAGE_KEY);
-      return saved === 'left' ? 'left' : 'right';
-    } catch {
-      return 'right';
-    }
-  });
-  const [viewportWidth, setViewportWidth] = useState<number>(() =>
-    typeof window !== 'undefined' ? window.innerWidth : 390
+  const initialStored = useRef<StoredFabPos>(loadStoredPos());
+  const [dockSide, setDockSide] = useState<'left' | 'right'>(initialStored.current.side);
+  const [openDownwards, setOpenDownwards] = useState<boolean>(
+    initialStored.current.yRatio < 0.45
   );
+  const [viewport, setViewport] = useState(() => {
+    const b = getSafeBounds();
+    return { vw: b.vw, vh: b.vh };
+  });
 
-  const x = useMotionValue(0);
+  const initialBounds = getSafeBounds();
+  const initialX =
+    initialStored.current.side === 'left' ? initialBounds.leftX : initialBounds.rightX;
+  const initialY =
+    initialBounds.minY +
+    initialStored.current.yRatio * Math.max(0, initialBounds.maxY - initialBounds.minY);
+
+  const x = useMotionValue(initialX);
+  const y = useMotionValue(initialY);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const draggedRef = useRef(false);
-  const pendingSnapFromXRef = useRef<number | null>(null);
+  const yRatioRef = useRef<number>(initialStored.current.yRatio);
+  const dockSideRef = useRef<'left' | 'right'>(initialStored.current.side);
+
+  const syncToViewport = useCallback(() => {
+    const b = getSafeBounds();
+    setViewport({ vw: b.vw, vh: b.vh });
+    const targetX = dockSideRef.current === 'left' ? b.leftX : b.rightX;
+    const targetY = b.minY + yRatioRef.current * Math.max(0, b.maxY - b.minY);
+    x.set(targetX);
+    y.set(targetY);
+    setOpenDownwards(yRatioRef.current < 0.45);
+  }, [x, y]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handleResize = () => setViewportWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (pendingSnapFromXRef.current !== null) {
-      const startX = pendingSnapFromXRef.current;
-      pendingSnapFromXRef.current = null;
-      x.set(startX);
-      animate(x, 0, { type: 'spring', stiffness: 460, damping: 32 });
-    } else {
-      x.set(0);
-    }
-  }, [dockSide, x]);
+    // Sync once after mount so header/bottom-nav measurements are exact
+    const raf = window.requestAnimationFrame(syncToViewport);
+    window.addEventListener('resize', syncToViewport);
+    window.addEventListener('orientationchange', syncToViewport);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', syncToViewport);
+      window.removeEventListener('orientationchange', syncToViewport);
+    };
+  }, [syncToViewport]);
 
   const toggleMenu = () => {
     if (draggedRef.current) {
@@ -180,72 +252,81 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   ];
 
   const isLeft = dockSide === 'left';
-  const edgeMargin = viewportWidth >= 640 ? 24 : 16;
-  const maxTravel = Math.max(0, viewportWidth - FAB_SIZE_PX - edgeMargin * 2);
 
   return (
     <motion.div
       ref={containerRef}
-      drag={!isOpen ? 'x' : false}
-      dragConstraints={isLeft ? { left: 0, right: maxTravel } : { left: -maxTravel, right: 0 }}
+      drag={!isOpen}
+      dragConstraints={{
+        left: 0,
+        right: Math.max(0, viewport.vw - FAB_SIZE),
+        top: 0,
+        bottom: Math.max(0, viewport.vh - FAB_SIZE),
+      }}
       dragElastic={0.08}
       dragMomentum={false}
       onDragStart={() => {
         draggedRef.current = false;
       }}
       onDrag={(_e, info) => {
-        if (Math.abs(info.offset.x) > 6) {
+        if (Math.abs(info.offset.x) > 6 || Math.abs(info.offset.y) > 6) {
           draggedRef.current = true;
         }
       }}
       onDragEnd={(_e, info) => {
-        const currentX = x.get();
-        const threshold = Math.min(72, maxTravel * 0.35);
+        const b = getSafeBounds();
+        const curX = x.get();
+        const curY = y.get();
 
-        let nextSide: 'left' | 'right' = dockSide;
-        if (!isLeft && (currentX < -threshold || info.velocity.x < -300)) {
-          nextSide = 'left';
-        } else if (isLeft && (currentX > threshold || info.velocity.x > 300)) {
-          nextSide = 'right';
-        }
+        // Always snap strictly to the left or right lateral edge (never stay in the middle)
+        const centerX = curX + FAB_SIZE / 2;
+        let nextSide: 'left' | 'right' = centerX < b.vw / 2 ? 'left' : 'right';
+        if (info.velocity.x < -380) nextSide = 'left';
+        else if (info.velocity.x > 380) nextSide = 'right';
 
-        if (nextSide !== dockSide) {
-          pendingSnapFromXRef.current =
-            nextSide === 'left'
-              ? Math.max(0, Math.min(maxTravel, maxTravel + currentX))
-              : Math.min(0, Math.max(-maxTravel, currentX - maxTravel));
-          setDockSide(nextSide);
-          try {
-            localStorage.setItem(EDGE_STORAGE_KEY, nextSide);
-          } catch {
-            // ignore
-          }
-        } else {
-          animate(x, 0, { type: 'spring', stiffness: 460, damping: 32 });
+        const targetX = nextSide === 'left' ? b.leftX : b.rightX;
+
+        // Always clamp vertical position out of the top & bottom menu zones
+        const targetY = Math.max(b.minY, Math.min(b.maxY, curY));
+        const nextRatio =
+          b.maxY > b.minY ? Math.max(0, Math.min(1, (targetY - b.minY) / (b.maxY - b.minY))) : 1;
+
+        dockSideRef.current = nextSide;
+        yRatioRef.current = nextRatio;
+        setDockSide(nextSide);
+        setOpenDownwards(nextRatio < 0.45);
+
+        animate(x, targetX, { type: 'spring', stiffness: 460, damping: 32 });
+        animate(y, targetY, { type: 'spring', stiffness: 460, damping: 32 });
+
+        try {
+          localStorage.setItem(
+            POS_STORAGE_KEY,
+            JSON.stringify({ side: nextSide, yRatio: nextRatio })
+          );
+          localStorage.setItem(LEGACY_EDGE_KEY, nextSide);
+        } catch {
+          // ignore
         }
 
         window.setTimeout(() => {
           draggedRef.current = false;
         }, 80);
       }}
-      style={{
-        x,
-        marginBottom: 'env(safe-area-inset-bottom, 0px)',
-      }}
-      className={`fixed ${
-        isLeft ? 'left-4 sm:left-6 items-start' : 'right-4 sm:right-6 items-end'
-      } z-[64] flex flex-col gap-2 print:hidden touch-pan-y ${bottomOffsetClass}`}
+      style={{ x, y }}
+      className="fixed top-0 left-0 z-[64] print:hidden select-none touch-none"
     >
+      {/* Contextual Action Menu (opens upwards when docked low, downwards when docked high) */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            initial={{ opacity: 0, y: openDownwards ? -10 : 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            exit={{ opacity: 0, y: openDownwards ? -8 : 8, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-            className={`flex flex-col ${
-              isLeft ? 'items-start' : 'items-end'
-            } gap-1.5 max-h-[62dvh] overflow-y-auto no-scrollbar`}
+            className={`absolute ${isLeft ? 'left-0 items-start' : 'right-0 items-end'} ${
+              openDownwards ? 'top-full mt-2.5' : 'bottom-full mb-2.5'
+            } flex flex-col gap-1.5 max-h-[58dvh] overflow-y-auto no-scrollbar`}
           >
             {actions.map((act, idx) => {
               const Icon = act.icon;
@@ -253,9 +334,9 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
                 <motion.button
                   key={act.id}
                   type="button"
-                  initial={{ opacity: 0, x: isLeft ? -16 : 16, scale: 0.96 }}
+                  initial={{ opacity: 0, x: isLeft ? -14 : 14, scale: 0.96 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: isLeft ? -12 : 12, scale: 0.96 }}
+                  exit={{ opacity: 0, x: isLeft ? -10 : 10, scale: 0.96 }}
                   transition={{
                     delay: idx * 0.025,
                     type: 'spring',
@@ -267,10 +348,10 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
                   onClick={act.onClick}
                   className={`flex ${
                     isLeft ? 'flex-row-reverse' : 'flex-row'
-                  } items-center gap-3 px-3.5 py-2 rounded-2xl text-xs font-extrabold text-emerald-950 bg-white border-2 border-emerald-400 shadow-[0_6px_18px_rgba(16,185,129,0.18)] hover:bg-emerald-50/50 transition-all cursor-pointer shrink-0`}
+                  } items-center gap-3 px-3.5 py-2 rounded-2xl text-xs font-extrabold text-emerald-950 bg-white border-2 border-emerald-400 shadow-[0_6px_18px_rgba(16,185,129,0.18)] hover:bg-emerald-50/50 transition-all cursor-pointer shrink-0 whitespace-nowrap`}
                 >
                   <span className="tracking-tight">{act.label}</span>
-                  <div className="w-7 h-7 rounded-xl bg-emerald-500/15 border border-emerald-400 text-emerald-700 flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-500/15 border border-emerald-400 text-emerald-700 flex items-center justify-center shrink-0">
                     <Icon className="w-3.5 h-3.5 stroke-[2.4]" />
                   </div>
                 </motion.button>
