@@ -30,6 +30,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LaborAgendaView } from './labor/LaborAgendaView';
 import { SmartChecklistView } from './SmartChecklistView';
+import { TransactionType } from './TransactionModal';
 
 type DrawerViewId =
   | 'finance'
@@ -66,6 +67,9 @@ interface NavigationDrawerModalProps {
   onOpenProfileModal: () => void;
   onOpenRemindersModal?: () => void;
   onOpenCalculator?: () => void;
+  onOpenQuickTx?: (type: TransactionType) => void;
+  onOpenQuickTransfer?: () => void;
+  onOpenQuickVoice?: () => void;
   externalChecklistOpen?: boolean;
   onExternalChecklistClose?: () => void;
   language?: LanguageCode;
@@ -94,6 +98,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   onOpenProfileModal,
   onOpenRemindersModal,
   onOpenCalculator,
+  onOpenQuickTx,
+  onOpenQuickTransfer,
+  onOpenQuickVoice,
   externalChecklistOpen = false,
   onExternalChecklistClose,
   language = 'pt',
@@ -831,6 +838,12 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         onClose={() => setIsLaborAgendaOpen(false)}
         language={language}
         onOpenCalculator={onOpenCalculator}
+        onOpenExpense={onOpenQuickTx ? () => onOpenQuickTx('expense') : undefined}
+        onOpenIncome={onOpenQuickTx ? () => onOpenQuickTx('income') : undefined}
+        onOpenBill={onOpenQuickTx ? () => onOpenQuickTx('bill') : undefined}
+        onOpenTransfer={onOpenQuickTransfer}
+        onOpenSharedBill={() => onChangeView('shared_accounts')}
+        onOpenVoice={onOpenQuickVoice}
       />
 
       <SmartChecklistView

@@ -1116,6 +1116,12 @@ export default function App() {
         onOpenProfileModal={() => setIsProfileOpen(true)}
         onOpenRemindersModal={() => setIsRemindersModalOpen(true)}
         onOpenCalculator={() => setIsCalculatorOpen(true)}
+        onOpenQuickTx={(txType) => {
+          setGlobalTxModalType(txType);
+          setIsGlobalTxModalOpen(true);
+        }}
+        onOpenQuickTransfer={() => setIsGlobalTransferModalOpen(true)}
+        onOpenQuickVoice={() => setIsVoiceTriggered(true)}
         externalChecklistOpen={isDrawerChecklistOpen}
         onExternalChecklistClose={() => setIsDrawerChecklistOpen(false)}
         language={currentLang}

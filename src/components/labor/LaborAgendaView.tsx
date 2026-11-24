@@ -25,12 +25,19 @@ import {
 import { formatCurrency } from '../../utils/currency';
 import { getCurrentMonthStr } from '../../utils/finance';
 import { LaborJobDetail } from './LaborJobDetail';
+import { QuickActionFAB } from '../QuickActionFAB';
 
 interface LaborAgendaViewProps {
   isOpen: boolean;
   onClose: () => void;
   language?: LanguageCode;
   onOpenCalculator?: () => void;
+  onOpenExpense?: () => void;
+  onOpenIncome?: () => void;
+  onOpenBill?: () => void;
+  onOpenTransfer?: () => void;
+  onOpenSharedBill?: () => void;
+  onOpenVoice?: () => void;
 }
 
 export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
@@ -38,6 +45,12 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   onClose,
   language = 'pt',
   onOpenCalculator,
+  onOpenExpense,
+  onOpenIncome,
+  onOpenBill,
+  onOpenTransfer,
+  onOpenSharedBill,
+  onOpenVoice,
 }) => {
   const {
     jobs,
@@ -101,6 +114,14 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   };
 
   if (typeof document === 'undefined') return null;
+
+  const triggerOrFallback = (fn?: () => void) => {
+    if (fn) {
+      fn();
+    } else {
+      onClose();
+    }
+  };
 
   return createPortal(
     <AnimatePresence>
@@ -187,7 +208,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
-                    className="space-y-4 pb-16"
+                    className="space-y-4 pb-24"
                   >
                     <div className="px-1">
                       <h2 className="text-lg font-black tracking-tight text-slate-900">
@@ -291,20 +312,19 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
             </div>
           </div>
 
-          {/* Floating + FAB available inside Labor Agenda as well */}
+          {/* Full Glass QuickActionFAB inside Labor Agenda with all actions */}
           {onOpenCalculator && (
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.06 }}
-              whileTap={{ scale: 0.92 }}
-              onClick={onOpenCalculator}
-              style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
-              className="fixed right-4 z-[62] flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xl shadow-emerald-600/35 cursor-pointer"
-              aria-label="Abrir Calculadora"
-              title="Calculadora Rápida"
-            >
-              <Plus className="h-6 w-6 stroke-[2.8]" />
-            </motion.button>
+            <QuickActionFAB
+              language={language}
+              bottomOffsetClass="bottom-5 sm:bottom-6"
+              onOpenExpense={() => triggerOrFallback(onOpenExpense)}
+              onOpenIncome={() => triggerOrFallback(onOpenIncome)}
+              onOpenBill={() => triggerOrFallback(onOpenBill)}
+              onOpenTransfer={() => triggerOrFallback(onOpenTransfer)}
+              onOpenSharedBill={() => triggerOrFallback(onOpenSharedBill)}
+              onOpenVoice={() => triggerOrFallback(onOpenVoice)}
+              onOpenCalculator={onOpenCalculator}
+            />
           )}
 
           {/* Create New Job Modal */}
