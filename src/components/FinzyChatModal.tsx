@@ -339,7 +339,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="glass-overlay"
+            className="glass-overlay !z-0"
             onClick={onClose}
           />
 
