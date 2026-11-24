@@ -18,6 +18,8 @@ import { AvulsoDepositModal } from './components/AvulsoDepositModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProfileModal } from './components/ProfileModal';
 import { FinzyChatModal } from './components/FinzyChatModal';
+import { FinzyRemindersModal } from './components/FinzyRemindersModal';
+import { useReminders } from './hooks/useReminders';
 import {
   computeFinzyLivingContext,
   getSavedFinzySkinId,
@@ -87,6 +89,9 @@ export default function App() {
 
   const currentLang = settings.language || 'pt';
   const t = getTranslations(currentLang);
+
+  const remindersHook = useReminders(currentLang);
+  const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
 
   const { getCategoriesFor, addCategory } = useCategories();
   const sharedAccounts = useSharedAccounts();
@@ -730,6 +735,8 @@ export default function App() {
         onOpenNewGoalModal={() => setIsNewGoalOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenChecklist={() => setIsDrawerChecklistOpen(true)}
+        onOpenReminders={() => setIsRemindersModalOpen(true)}
+        remindersBadgeCount={remindersHook.pendingCount}
         onOpenFinzyChat={() => setIsFinzyChatOpen(true)}
         hasPendingNotifications={
           sharedAccounts.pendingReceivedInvitationsCount > 0 ||
@@ -996,7 +1003,24 @@ export default function App() {
         </div>
       )}
 
-      {/* Finzy Assistant Chat Modal (opened via Finzy Vivo modal or header chat trigger) */}
+      {/* Finzy Reminders & Live Alert Modal */}
+      <FinzyRemindersModal
+        isOpen={isRemindersModalOpen}
+        onClose={() => setIsRemindersModalOpen(false)}
+        language={currentLang}
+        reminders={remindersHook.reminders}
+        activeAlert={remindersHook.activeAlert}
+        notifPermission={remindersHook.notifPermission}
+        onAddReminder={remindersHook.addReminder}
+        onToggleComplete={remindersHook.toggleCompleteReminder}
+        onSnooze={remindersHook.snoozeReminder}
+        onDismissAlert={remindersHook.dismissAlert}
+        onDelete={remindersHook.deleteReminder}
+        onRequestNotifPermission={remindersHook.requestSystemNotificationPermission}
+        onTestAlert={() => remindersHook.triggerTestFinzyAlert()}
+      />
+
+      {/* Finzy Assistant Chat Modal */}
       <FinzyChatModal
         isOpen={isFinzyChatOpen}
         onClose={() => setIsFinzyChatOpen(false)}
@@ -1029,7 +1053,6 @@ export default function App() {
         onCreateGoal={handleSaveNewGoal}
       />
 
-      {/* Deposit Modal */}
       <DepositModal
         isOpen={activeSquareId !== null}
         square={currentSquareObj}
@@ -1082,9 +1105,11 @@ export default function App() {
           sharedAccounts.pendingReceivedInvitationsCount +
           sharedAccounts.unreadNotificationsCount
         }
+        remindersPendingCount={remindersHook.pendingCount}
         onOpenMoneChat={() => setIsFinzyChatOpen(true)}
         onOpenSettingsModal={() => setIsSettingsOpen(true)}
         onOpenProfileModal={() => setIsProfileOpen(true)}
+        onOpenRemindersModal={() => setIsRemindersModalOpen(true)}
         externalChecklistOpen={isDrawerChecklistOpen}
         onExternalChecklistClose={() => setIsDrawerChecklistOpen(false)}
         language={currentLang}

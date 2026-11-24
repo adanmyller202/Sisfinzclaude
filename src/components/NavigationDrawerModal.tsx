@@ -25,6 +25,7 @@ import {
   Check,
   Briefcase,
   CheckSquare,
+  Bell,
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LaborAgendaView } from './labor/LaborAgendaView';
@@ -45,19 +46,25 @@ type DrawerViewId =
   | 'freedom'
   | 'daily_pace'
   | 'labor_agenda'
-  | 'smart_checklists';
+  | 'smart_checklists'
+  | 'finzy_reminders';
 
 interface NavigationDrawerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentView: Exclude<DrawerViewId, 'labor_agenda' | 'smart_checklists'>;
+  currentView: Exclude<
+    DrawerViewId,
+    'labor_agenda' | 'smart_checklists' | 'finzy_reminders'
+  >;
   onChangeView: (view: any) => void;
   goalsCount: number;
   savingsCount: number;
   sharedPendingCount?: number;
+  remindersPendingCount?: number;
   onOpenMoneChat: () => void;
   onOpenSettingsModal: () => void;
   onOpenProfileModal: () => void;
+  onOpenRemindersModal?: () => void;
   externalChecklistOpen?: boolean;
   onExternalChecklistClose?: () => void;
   language?: LanguageCode;
@@ -82,7 +89,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   onChangeView,
   savingsCount,
   sharedPendingCount = 0,
+  remindersPendingCount = 0,
   onOpenProfileModal,
+  onOpenRemindersModal,
   externalChecklistOpen = false,
   onExternalChecklistClose,
   language = 'pt',
@@ -230,6 +239,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       } else if (view === 'smart_checklists') {
         onClose();
         setIsChecklistOpen(true);
+      } else if (view === 'finzy_reminders') {
+        onClose();
+        onOpenRemindersModal?.();
       } else {
         onChangeView(view);
         onClose();
@@ -248,6 +260,16 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             ? 'Turnos, fichaje, sueldo y propinas'
             : 'Turnos, ponto, salário e propinas',
         icon: Briefcase,
+      },
+      {
+        id: 'finzy_reminders',
+        label: language === 'es' ? 'Lembretes Importantes' : 'Lembretes Importantes',
+        desc:
+          language === 'es'
+            ? 'Avisos del Finzy, soneca y repetición'
+            : 'Avisos do Finzy, soneca e repetição',
+        icon: Bell,
+        badge: remindersPendingCount,
       },
       {
         id: 'smart_checklists',
@@ -272,11 +294,18 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         badge: sharedPendingCount,
       },
     ],
-    [language, sharedPendingCount]
+    [language, sharedPendingCount, remindersPendingCount]
   );
 
   const shortcutCatalog: NavItemDef[] = useMemo(
     () => [
+      {
+        id: 'finzy_reminders',
+        label: language === 'es' ? 'Lembretes Importantes' : 'Lembretes Importantes',
+        desc: language === 'es' ? 'Avisos del Finzy' : 'Avisos do Finzy',
+        icon: Bell,
+        badge: remindersPendingCount,
+      },
       {
         id: 'smart_checklists',
         label: language === 'es' ? 'Checklists Reutilizables' : 'Checklists Reutilizáveis',
@@ -345,7 +374,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         icon: Wallet,
       },
     ],
-    [language, savingsCount, t.financialControl]
+    [language, savingsCount, remindersPendingCount, t.financialControl]
   );
 
   const activeShortcutItems = useMemo(
@@ -393,7 +422,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             : 'hover:bg-emerald-500/10 text-slate-700'
         }`}
       >
-        {/* Sliding Pastel Highlight Pill with Top Rim & Soft Glow (inspired by sliding menu capsule) */}
         {isHighlighted && (
           <motion.span
             layoutId="sisfinz-nav-active-fill"
@@ -403,7 +431,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           />
         )}
 
-        {/* Subtle Ripple Ring when Tapped */}
         {isSelected && !reduceMotion && (
           <motion.span
             initial={{ opacity: 0.55, scale: 0.94 }}
@@ -423,11 +450,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
               duration: reduceMotion ? 0.01 : 0.28,
               ease: [0.22, 1, 0.36, 1],
             }}
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-              isHighlighted
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                : 'bg-emerald-600 text-white shadow-2xs'
-            }`}
+            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors bg-emerald-600 text-white shadow-2xs"
           >
             <Icon className="w-5 h-5" />
           </motion.div>
@@ -502,7 +525,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                       transition={{ duration: reduceMotion ? 0.01 : 0.22, ease: [0.22, 1, 0.36, 1] }}
                       className="flex flex-col h-full min-h-0"
                     >
-                      {/* Header */}
                       <div className="p-5 border-b border-slate-200 flex items-center justify-between shrink-0 relative overflow-hidden bg-white">
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent pointer-events-none" />
                         <div className="flex items-center gap-3.5 relative z-10">
@@ -532,7 +554,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         </button>
                       </div>
 
-                      {/* User Profile Card */}
                       <div className="px-4 pt-4 pb-2 shrink-0">
                         <button
                           type="button"
@@ -565,7 +586,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         </button>
                       </div>
 
-                      {/* Scrollable Menu Content */}
                       <div
                         className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-3 space-y-6"
                         style={{
@@ -647,7 +667,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Footer */}
                       <div className="p-4 border-t border-slate-200 bg-white shrink-0">
                         <button
                           type="button"
