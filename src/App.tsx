@@ -18,7 +18,6 @@ import { AvulsoDepositModal } from './components/AvulsoDepositModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProfileModal } from './components/ProfileModal';
 import { FinzyChatModal } from './components/FinzyChatModal';
-import { FinzyMascot } from './components/FinzyMascot';
 import {
   computeFinzyLivingContext,
   getSavedFinzySkinId,
@@ -52,7 +51,7 @@ import { useFinanceControl } from './hooks/useFinanceControl';
 import { useSharedAccounts } from './hooks/useSharedAccounts';
 import { useCategories } from './hooks/useCategories';
 import { useFiftyTwoWeekChallenge } from './hooks/useFiftyTwoWeekChallenge';
-import { Sparkles, Loader2, CheckCircle2, Undo2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Undo2 } from 'lucide-react';
 import { getTranslations } from './utils/i18n';
 import { db } from './firebase/config';
 import { collection, doc, getDocs, getDoc, setDoc } from 'firebase/firestore';
@@ -800,25 +799,6 @@ export default function App() {
                     onSquareClick={handleSquareClick}
                     selectedSquareId={activeSquareId}
                     fiftyTwoChallenge={fiftyTwoChallenge}
-                    accounts={accounts}
-                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
-                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
-                    onRedeemChallenge={async (challenge, accountId) => {
-                      const today = new Date().toISOString().slice(0, 10);
-                      const createdIncome = await addIncome({
-                        name: `Resgate: ${challenge.title}`,
-                        amount: Number(challenge.totalTarget) || 0,
-                        expectedDate: today,
-                        expectedDay: Number(today.slice(8, 10)),
-                        category: 'Metas',
-                        recurrence: 'none',
-                        startMonth: today.slice(0, 7),
-                        accountId,
-                      });
-                      if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
-                      await toggleIncomeReceived(createdIncome.id, today.slice(0, 7), true, today);
-                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
-                    }}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
@@ -891,25 +871,6 @@ export default function App() {
                     onCreateChallenge={fiftyTwoChallenge.createChallenge}
                     onCompleteWeek={fiftyTwoChallenge.completeWeek}
                     onUndoWeek={fiftyTwoChallenge.undoWeek}
-                    accounts={accounts}
-                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
-                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
-                    onRedeemChallenge={async (challenge, accountId) => {
-                      const today = new Date().toISOString().slice(0, 10);
-                      const createdIncome = await addIncome({
-                        name: `Resgate: ${challenge.title}`,
-                        amount: Number(challenge.totalTarget) || 0,
-                        expectedDate: today,
-                        expectedDay: Number(today.slice(8, 10)),
-                        category: 'Metas',
-                        recurrence: 'none',
-                        startMonth: today.slice(0, 7),
-                        accountId,
-                      });
-                      if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
-                      await toggleIncomeReceived(createdIncome.id, today.slice(0, 7), true, today);
-                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
-                    }}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
@@ -1035,27 +996,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Finzy Assistant Action Button */}
-      <button
-        type="button"
-        onClick={() => setIsFinzyChatOpen(true)}
-        className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer group print:hidden mb-[env(safe-area-inset-bottom,0px)]"
-        title={`Finzy • ${finzyMoodLabel}`}
-      >
-        <div className="relative shrink-0 flex items-center justify-center">
-          <FinzyMascot
-            mood={finzyMoodObj.mood}
-            routineState={finzyLiving.routineState}
-            skinId={skinId}
-            size="sm"
-            className="w-5.5 h-5.5"
-          />
-          <Sparkles className="w-2.5 h-2.5 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
-        </div>
-        <span className="tracking-wide">Finzy</span>
-      </button>
-
-      {/* Finzy Assistant Chat Modal */}
+      {/* Finzy Assistant Chat Modal (opened via Finzy Vivo modal or header chat trigger) */}
       <FinzyChatModal
         isOpen={isFinzyChatOpen}
         onClose={() => setIsFinzyChatOpen(false)}
