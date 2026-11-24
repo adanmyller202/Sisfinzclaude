@@ -12,8 +12,7 @@ import {
   Check,
   AlertTriangle,
 } from 'lucide-react';
-import { LanguageCode } from '../types';
-import { MoneMood } from '../types';
+import { LanguageCode, MoneMood } from '../types';
 import {
   FINZY_SKINS,
   FinzyMascot,
@@ -187,7 +186,9 @@ export const FinzyLivingModal: React.FC<FinzyLivingModalProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500">
                     <BatteryCharging className="h-3.5 w-3.5 text-emerald-600" />
-                    {isEs ? 'Conteo del Franco & Anel de Energía' : 'Contagem do Franco & Anel de Energia'}
+                    {isEs
+                      ? 'Conteo del Franco & Anel de Energía'
+                      : 'Contagem do Franco & Anel de Energia'}
                   </span>
                   <span className="rounded-full bg-purple-100 px-2.5 py-0.5 font-mono text-[10px] font-black text-purple-800">
                     {franco.restHoursThisWeek}h {isEs ? 'descanso' : 'folga'}
@@ -196,7 +197,7 @@ export const FinzyLivingModal: React.FC<FinzyLivingModalProps> = ({
 
                 <div className="flex items-center gap-4">
                   {/* Animated Energy Ring */}
-                  <div className="relative flex h-22 w-22 shrink-0 items-center justify-center">
+                  <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
                     <svg className="h-full w-full -rotate-90" viewBox="0 0 84 84">
                       <circle
                         cx="42"

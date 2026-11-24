@@ -1,4 +1,4 @@
-import { CurrencyCode, LanguageCode } from '../types';
+import { LanguageCode } from '../types';
 import { LaborJob } from '../types/labor';
 import {
   calculateMonthlyAudit,
@@ -96,7 +96,6 @@ export function computeFinzyLivingContext(
 
   const primaryJob = jobs.find((j) => Boolean(j.activeShift)) || jobs[0] || null;
 
-  // Compute punctuality streak & unlocked skins
   let streakCount = 0;
   let bestStreak = 0;
   if (primaryJob) {
@@ -115,7 +114,11 @@ export function computeFinzyLivingContext(
     if (raw) {
       const saved = JSON.parse(raw) as Partial<FinzyStreakState>;
       bestStreak = Math.max(streakCount, Number(saved.bestStreak) || 0);
-      if (streakCount === 0 && saved.lastEvaluatedDate === todayStr && (saved.currentStreak || 0) > 0) {
+      if (
+        streakCount === 0 &&
+        saved.lastEvaluatedDate === todayStr &&
+        (saved.currentStreak || 0) > 0
+      ) {
         streakCount = Number(saved.currentStreak) || 0;
       }
     } else {
@@ -146,7 +149,6 @@ export function computeFinzyLivingContext(
   if (bestStreak >= 14) unlockedSkins.push('cyber_cyan');
   if (bestStreak >= 21) unlockedSkins.push('sakura_rose');
 
-  // Compute Franco Countdown & Energy Ring
   let isFrancoToday = false;
   let nextFrancoDateStr: string | null = null;
   let daysUntilFranco = 0;
@@ -157,7 +159,6 @@ export function computeFinzyLivingContext(
     const todaySched = getScheduleForDate(primaryJob, todayStr);
     isFrancoToday = Boolean(!todaySched.isUnset && todaySched.isOff);
 
-    // Search up to 21 days ahead for next Franco
     for (let d = 0; d <= 21; d++) {
       const candDate = shiftDateByDays(todayStr, d);
       const sch = getScheduleForDate(primaryJob, candDate);
@@ -168,7 +169,6 @@ export function computeFinzyLivingContext(
       }
     }
 
-    // Estimate worked hours over the past 7 days
     let sumMins = 0;
     for (let back = 0; back < 7; back++) {
       const pastDate = shiftDateByDays(todayStr, -back);
@@ -187,7 +187,6 @@ export function computeFinzyLivingContext(
     }
     workedHoursThisWeek = Math.round((sumMins / 60) * 10) / 10;
 
-    // Count consecutive days worked/scheduled right up to today
     for (let back = 0; back < 14; back++) {
       const dStr = shiftDateByDays(todayStr, -back);
       const hasShift = (primaryJob.shifts || []).some((s) => s.date === dStr);
@@ -210,7 +209,6 @@ export function computeFinzyLivingContext(
     ? 34
     : Math.max(25, Math.min(95, Math.round(100 - consecutiveDaysStreak * 9)));
 
-  // Determine Finzy's living routine reaction
   const recentMadrugadaShift = Boolean(
     primaryJob &&
       (primaryJob.shifts || []).some((s) => {
