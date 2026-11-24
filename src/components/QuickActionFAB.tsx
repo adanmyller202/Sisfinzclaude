@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { motion, AnimatePresence, useMotionValue, animate } from 'motion/react';
 import {
   Plus,
   X,
@@ -28,6 +28,7 @@ interface QuickActionFABProps {
 }
 
 const EDGE_STORAGE_KEY = 'sisfinz_quick_fab_edge_v1';
+const FAB_SIZE_PX = 48;
 
 export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   language = 'pt',
@@ -51,10 +52,32 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
       return 'right';
     }
   });
-  const [dragOffsetX, setDragOffsetX] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 390
+  );
 
+  const x = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggedRef = useRef(false);
+  const pendingSnapFromXRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (pendingSnapFromXRef.current !== null) {
+      const startX = pendingSnapFromXRef.current;
+      pendingSnapFromXRef.current = null;
+      x.set(startX);
+      animate(x, 0, { type: 'spring', stiffness: 460, damping: 32 });
+    } else {
+      x.set(0);
+    }
+  }, [dockSide, x]);
 
   const toggleMenu = () => {
     if (draggedRef.current) {
@@ -157,43 +180,58 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   ];
 
   const isLeft = dockSide === 'left';
+  const edgeMargin = viewportWidth >= 640 ? 24 : 16;
+  const maxTravel = Math.max(0, viewportWidth - FAB_SIZE_PX - edgeMargin * 2);
 
   return (
     <motion.div
       ref={containerRef}
-      drag="x"
-      dragConstraints={{ left: -320, right: 320 }}
-      dragElastic={0.14}
+      drag={!isOpen ? 'x' : false}
+      dragConstraints={isLeft ? { left: 0, right: maxTravel } : { left: -maxTravel, right: 0 }}
+      dragElastic={0.08}
       dragMomentum={false}
       onDragStart={() => {
-        draggedRef.current = true;
+        draggedRef.current = false;
+      }}
+      onDrag={(_e, info) => {
+        if (Math.abs(info.offset.x) > 6) {
+          draggedRef.current = true;
+        }
       }}
       onDragEnd={(_e, info) => {
-        const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
-        const currentApproxX = isLeft ? 20 + info.point.x : vw - 36 + info.offset.x;
-        const nextSide: 'left' | 'right' =
-          info.offset.x < -55 || currentApproxX < vw * 0.45
-            ? 'left'
-            : info.offset.x > 55 || currentApproxX > vw * 0.55
-            ? 'right'
-            : dockSide;
+        const currentX = x.get();
+        const threshold = Math.min(72, maxTravel * 0.35);
 
-        setDockSide(nextSide);
-        setDragOffsetX(0);
-        try {
-          localStorage.setItem(EDGE_STORAGE_KEY, nextSide);
-        } catch {
-          // ignore
+        let nextSide: 'left' | 'right' = dockSide;
+        if (!isLeft && (currentX < -threshold || info.velocity.x < -300)) {
+          nextSide = 'left';
+        } else if (isLeft && (currentX > threshold || info.velocity.x > 300)) {
+          nextSide = 'right';
         }
+
+        if (nextSide !== dockSide) {
+          pendingSnapFromXRef.current =
+            nextSide === 'left'
+              ? Math.max(0, Math.min(maxTravel, maxTravel + currentX))
+              : Math.min(0, Math.max(-maxTravel, currentX - maxTravel));
+          setDockSide(nextSide);
+          try {
+            localStorage.setItem(EDGE_STORAGE_KEY, nextSide);
+          } catch {
+            // ignore
+          }
+        } else {
+          animate(x, 0, { type: 'spring', stiffness: 460, damping: 32 });
+        }
+
         window.setTimeout(() => {
           draggedRef.current = false;
         }, 80);
       }}
       style={{
-        x: dragOffsetX,
+        x,
         marginBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
-      transition={{ type: 'spring', stiffness: 460, damping: 32 }}
       className={`fixed ${
         isLeft ? 'left-4 sm:left-6 items-start' : 'right-4 sm:right-6 items-end'
       } z-[64] flex flex-col gap-2 print:hidden touch-pan-y ${bottomOffsetClass}`}
@@ -254,7 +292,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
         }}
-        className={`w-14 h-14 rounded-full flex items-center justify-center text-emerald-950 border-2 border-emerald-400/90 shadow-[0_8px_22px_rgba(16,185,129,0.22),inset_0_1px_1px_rgba(255,255,255,0.75)] transition-all cursor-grab active:cursor-grabbing ${
+        className={`w-12 h-12 rounded-full flex items-center justify-center text-emerald-950 border-2 border-emerald-400/90 shadow-[0_8px_22px_rgba(16,185,129,0.22),inset_0_1px_1px_rgba(255,255,255,0.75)] transition-all cursor-grab active:cursor-grabbing ${
           isOpen ? 'ring-2 ring-emerald-400/60' : ''
         }`}
         aria-label={language === 'es' ? 'Acciones rápidas' : 'Ações rápidas'}
@@ -268,7 +306,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
               exit={{ rotate: 90, opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.16 }}
             >
-              <X className="w-6 h-6 stroke-[2.5]" />
+              <X className="w-5 h-5 stroke-[2.5]" />
             </motion.div>
           ) : (
             <motion.div
@@ -278,7 +316,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
               exit={{ rotate: -90, opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.16 }}
             >
-              <Plus className="w-6 h-6 stroke-[2.6]" />
+              <Plus className="w-5 h-5 stroke-[2.6]" />
             </motion.div>
           )}
         </AnimatePresence>
