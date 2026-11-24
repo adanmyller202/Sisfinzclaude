@@ -15,10 +15,10 @@ interface Props {
   onCompleteWeek: (challengeId: string, weekNumber: number, accountId: string, adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>, planCurrency?: CurrencyCode) => Promise<void>;
   onUndoWeek: (challengeId: string, weekNumber: number, returnAccountId: string, adjustAccountBalanceFn: (accountId: string, amountDelta: number) => Promise<void>, deleteExpenseFn: (expenseId: string) => Promise<void>) => Promise<void>;
   onUpdateStorageLocation?: (challengeId: string, storageLocation: string) => Promise<void>;
-  accounts: AccountItem[];
-  onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
+  accounts?: AccountItem[];
+  onAdjustAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>;
   onDeleteChallenge: (challengeId: string) => Promise<void>;
-  onRedeemChallenge: (challenge: FiftyTwoWeekChallenge, accountId: string) => Promise<void>;
+  onRedeemChallenge?: (challenge: FiftyTwoWeekChallenge, accountId: string) => Promise<void>;
   onAddExpense: (exp: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<ExpenseItem>;
   onDeleteExpense: (expenseId: string) => Promise<void>; onReturnToFinance?: () => void;
 }
@@ -29,7 +29,7 @@ const addDaysISO = (iso: string, days: number) => {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 };
 
-export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onUpdateStorageLocation, accounts = [], onAdjustAccountBalance, onDeleteChallenge, onRedeemChallenge, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
+export const FiftyTwoWeekChallengeView: React.FC<Props> = ({ currency, language='pt', activeChallenge, challenges, onSelectChallenge, onCreateChallenge, onCompleteWeek, onUndoWeek, onUpdateStorageLocation, accounts = [], onAdjustAccountBalance = async () => {}, onDeleteChallenge, onRedeemChallenge = async () => {}, onAddExpense, onDeleteExpense, onReturnToFinance }) => {
   // Guard against accounts being temporarily undefined while Firebase data loads.
   const safeAccounts = Array.isArray(accounts) ? accounts : [];
   const defaultPlanCurrency = safeAccounts.find(a=>a.isActive!==false&&a.currency===currency)?.currency || safeAccounts.find(a=>a.isActive!==false)?.currency || currency;
