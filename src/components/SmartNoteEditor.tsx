@@ -728,6 +728,60 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
     }
   };
 
+  const handleAdjustFontSize = (direction: 'increase' | 'decrease') => {
+    if (effectiveReadOnly) return;
+
+    const selection = window.getSelection();
+    const root = editorRootRef.current;
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !root) return;
+
+    const range = selection.getRangeAt(0);
+    if (!root.contains(range.commonAncestorContainer)) return;
+
+    const selectedText = selection.toString();
+    if (!selectedText.trim()) return;
+
+    const startNode =
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.startContainer as HTMLElement)
+        : range.startContainer.parentElement;
+    const currentSize = startNode
+      ? parseFloat(window.getComputedStyle(startNode).fontSize) || 16
+      : 16;
+    const nextSize = Math.min(48, Math.max(10, currentSize + (direction === 'increase' ? 2 : -2)));
+    if (nextSize === currentSize) return;
+
+    const targetBlock = Object.entries(blockElsRef.current).find(([, el]) =>
+      Boolean(el && el.contains(range.commonAncestorContainer))
+    );
+    if (!targetBlock) return;
+
+    try {
+      const fragment = range.extractContents();
+      const sizeWrapper = document.createElement('span');
+      sizeWrapper.style.fontSize = `${nextSize}px`;
+      sizeWrapper.appendChild(fragment);
+      range.insertNode(sizeWrapper);
+
+      const updatedRange = document.createRange();
+      updatedRange.selectNodeContents(sizeWrapper);
+      selection.removeAllRanges();
+      selection.addRange(updatedRange);
+
+      const [targetId, targetEl] = targetBlock;
+      if (targetEl) {
+        const next = safeBlocks.map((block) =>
+          block.id === targetId ? { ...block, html: targetEl.innerHTML } : block
+        );
+        commitBlocks(next, false, true);
+        setFocusedBlockId(targetId);
+      }
+      refreshSelectionUI();
+    } catch {
+      // Keep the editor unchanged if the browser cannot safely format this selection.
+    }
+  };
+
   const handleInsertInlineLink = (e: React.FormEvent) => {
     e.preventDefault();
     const rawUrl = linkUrlInput.trim();
@@ -1359,6 +1413,26 @@ export const SmartNoteEditor: React.FC<SmartNoteEditorProps> = ({
             className="fixed z-[95] flex flex-col items-center gap-1.5 pointer-events-auto"
           >
             <div className="flex items-center gap-0.5 rounded-2xl border border-emerald-200 bg-white px-1.5 py-1 shadow-[0_10px_28px_rgba(6,78,59,0.16)]">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleAdjustFontSize('decrease')}
+                className="rounded-xl px-2 py-2 text-[12px] font-black text-slate-700 hover:bg-slate-100 cursor-pointer touch-manipulation"
+                title={isEs ? 'Disminuir tamaño de fuente' : 'Diminuir tamanho da fonte'}
+                aria-label={isEs ? 'Disminuir tamaño de fuente' : 'Diminuir tamanho da fonte'}
+              >
+                A−
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleAdjustFontSize('increase')}
+                className="rounded-xl px-2 py-2 text-[12px] font-black text-emerald-700 hover:bg-emerald-50 cursor-pointer touch-manipulation"
+                title={isEs ? 'Aumentar tamaño de fuente' : 'Aumentar tamanho da fonte'}
+                aria-label={isEs ? 'Aumentar tamaño de fuente' : 'Aumentar tamanho da fonte'}
+              >
+                A+
+              </button>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
