@@ -65,6 +65,7 @@ interface NavigationDrawerModalProps {
   onOpenSettingsModal: () => void;
   onOpenProfileModal: () => void;
   onOpenRemindersModal?: () => void;
+  onOpenCalculator?: () => void;
   externalChecklistOpen?: boolean;
   onExternalChecklistClose?: () => void;
   language?: LanguageCode;
@@ -92,6 +93,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   remindersPendingCount = 0,
   onOpenProfileModal,
   onOpenRemindersModal,
+  onOpenCalculator,
   externalChecklistOpen = false,
   onExternalChecklistClose,
   language = 'pt',
@@ -828,6 +830,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         isOpen={isLaborAgendaOpen}
         onClose={() => setIsLaborAgendaOpen(false)}
         language={language}
+        onOpenCalculator={onOpenCalculator}
       />
 
       <SmartChecklistView

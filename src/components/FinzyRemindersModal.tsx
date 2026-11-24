@@ -92,14 +92,20 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
   const [dueDate, setDueDate] = useState(todayStr);
   const [dueTime, setDueTime] = useState(() => getDefaultTimeStr());
   const [category, setCategory] = useState<ReminderCategory>('routine');
-  const [repeat, setRepeat] = useState<ReminderRepeat>('none');
+  const [repeat, setRepeat] = useState<ReminderRepeat>('daily');
   const [important, setImportant] = useState(true);
-  const [filterMode, setFilterMode] = useState<'pending' | 'done' | 'all'>('pending');
+  const [filterMode, setFilterMode] = useState<'pending' | 'recurring' | 'done' | 'all'>('pending');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const recurringCount = useMemo(
+    () => reminders.filter((r) => r.repeat !== 'none').length,
+    [reminders]
+  );
 
   const filteredReminders = useMemo(() => {
     return reminders.filter((r) => {
       if (filterMode === 'pending') return r.status === 'pending';
+      if (filterMode === 'recurring') return r.repeat !== 'none';
       if (filterMode === 'done') return r.status === 'done';
       return true;
     });
@@ -167,7 +173,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
 
   return (
     <>
-      {/* Full-Screen / Sheet Lembretes Manager */}
       {createPortal(
         <AnimatePresence>
           {isOpen && (
@@ -179,7 +184,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
               transition={{ type: 'spring', stiffness: 330, damping: 30 }}
               className="fixed inset-0 z-[58] flex flex-col bg-[#F4F8F6] text-slate-900 overflow-hidden"
             >
-              {/* Top Header */}
               <div
                 className="flex items-center justify-between gap-2 border-b border-emerald-100/90 bg-white/95 px-3.5 py-3 backdrop-blur-md shrink-0"
                 style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
@@ -202,7 +206,9 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                       {isEs ? 'Lembretes Importantes' : 'Lembretes Importantes'}
                     </h1>
                     <p className="truncate text-[9.5px] font-bold uppercase tracking-wider text-emerald-700">
-                      {isEs ? 'Avisos del Finzy • Soneca & Repetición' : 'Avisos do Finzy • Soneca & Repetição'}
+                      {isEs
+                        ? 'Avisos del Finzy • Recurrentes & Soneca'
+                        : 'Avisos do Finzy • Recorrentes & Soneca'}
                     </p>
                   </div>
                 </div>
@@ -211,14 +217,12 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                   type="button"
                   onClick={onTestAlert}
                   className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[10.5px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
-                  title={isEs ? 'Probar aviso del Finzy' : 'Testar aviso do Finzy'}
                 >
                   <Volume2 className="h-3.5 w-3.5 text-emerald-600" />
                   <span>{isEs ? 'Probar' : 'Testar'}</span>
                 </button>
               </div>
 
-              {/* Body */}
               <div className="flex-1 overflow-y-auto px-3.5 py-3.5">
                 <div className="mx-auto max-w-xl space-y-3.5 pb-16">
                   {/* System Notification Permission Banner */}
@@ -242,8 +246,8 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                         </div>
                         <div className="text-[10px] font-semibold text-slate-500 truncate">
                           {isEs
-                            ? 'Finzy te avisa a la hora marcada con opción de posponer'
-                            : 'Finzy te avisa na hora marcada com opção de adiar'}
+                            ? 'Incluye recordatorios recurrentes diarios, semanales y mensuales'
+                            : 'Inclui lembretes recorrentes diários, semanais e mensais'}
                         </div>
                       </div>
                     </div>
@@ -325,38 +329,59 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(['routine', 'work', 'personal', 'health'] as const).map((cat) => {
-                          const meta = categoryBadge(cat);
-                          const active = category === cat;
+                    {/* Recurrence Selector Pills */}
+                    <div className="space-y-1.5">
+                      <span className="inline-flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wider text-slate-400">
+                        <Repeat className="h-3 w-3 text-emerald-600" />
+                        {isEs ? 'Repetição do lembrete' : 'Repetição (Recorrente)'}
+                      </span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(
+                          [
+                            { id: 'none', label: isEs ? 'Único' : 'Único' },
+                            { id: 'daily', label: isEs ? 'Diario' : 'Diário' },
+                            { id: 'weekly', label: isEs ? 'Semanal' : 'Semanal' },
+                            { id: 'monthly', label: isEs ? 'Mensual' : 'Mensal' },
+                          ] as const
+                        ).map((opt) => {
+                          const active = repeat === opt.id;
                           return (
                             <button
-                              key={cat}
+                              key={opt.id}
                               type="button"
-                              onClick={() => setCategory(cat)}
-                              className={`rounded-lg px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                              onClick={() => setRepeat(opt.id)}
+                              className={`rounded-xl py-1.5 text-[10px] font-black transition-all cursor-pointer ${
                                 active
                                   ? 'bg-emerald-600 text-white shadow-2xs'
                                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                               }`}
                             >
-                              {meta.label}
+                              {opt.label}
                             </button>
                           );
                         })}
                       </div>
+                    </div>
 
-                      <select
-                        value={repeat}
-                        onChange={(e) => setRepeat(e.target.value as ReminderRepeat)}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10.5px] font-black text-slate-700"
-                      >
-                        <option value="none">{isEs ? 'Una vez' : 'Uma vez'}</option>
-                        <option value="daily">{isEs ? 'Cada día' : 'Todo dia'}</option>
-                        <option value="weekly">{isEs ? 'Cada semana' : 'Toda semana'}</option>
-                        <option value="monthly">{isEs ? 'Cada mes' : 'Todo mês'}</option>
-                      </select>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {(['routine', 'work', 'personal', 'health'] as const).map((cat) => {
+                        const meta = categoryBadge(cat);
+                        const active = category === cat;
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setCategory(cat)}
+                            className={`rounded-lg px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                              active
+                                ? 'bg-slate-900 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {meta.label}
+                          </button>
+                        );
+                      })}
                     </div>
 
                     <input
@@ -380,14 +405,19 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                     </motion.button>
                   </form>
 
-                  {/* Filter Switcher */}
-                  <div className="flex items-center gap-1.5 rounded-2xl bg-white/85 p-1 border border-slate-200/70 w-fit">
+                  {/* Filter Switcher (including Recorrentes) */}
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-white/85 p-1 border border-slate-200/70 w-fit">
                     {(
                       [
                         {
                           id: 'pending',
                           label: isEs ? 'Activos' : 'Ativos',
                           count: reminders.filter((r) => r.status === 'pending').length,
+                        },
+                        {
+                          id: 'recurring',
+                          label: isEs ? 'Recurrentes' : 'Recorrentes',
+                          count: recurringCount,
                         },
                         {
                           id: 'done',
@@ -401,7 +431,7 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                         key={f.id}
                         type="button"
                         onClick={() => setFilterMode(f.id)}
-                        className={`rounded-xl px-3 py-1 text-[10.5px] font-black transition-all cursor-pointer ${
+                        className={`rounded-xl px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
                           filterMode === f.id
                             ? 'bg-emerald-600 text-white shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-100'
@@ -499,7 +529,7 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                                     </span>
 
                                     {repText && (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black text-emerald-700 border border-emerald-200/70">
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200/80">
                                         <Repeat className="h-2.5 w-2.5" />
                                         {repText}
                                       </span>
@@ -596,7 +626,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Quick Snooze Chips */}
                   <div className="grid grid-cols-3 gap-1.5">
                     <button
                       type="button"

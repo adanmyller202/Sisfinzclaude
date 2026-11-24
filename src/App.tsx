@@ -19,6 +19,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ProfileModal } from './components/ProfileModal';
 import { FinzyChatModal } from './components/FinzyChatModal';
 import { FinzyRemindersModal } from './components/FinzyRemindersModal';
+import { FloatingCalculatorModal } from './components/FloatingCalculatorModal';
 import { useReminders } from './hooks/useReminders';
 import {
   computeFinzyLivingContext,
@@ -92,6 +93,7 @@ export default function App() {
 
   const remindersHook = useReminders(currentLang);
   const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
   const { getCategoriesFor, addCategory } = useCategories();
   const sharedAccounts = useSharedAccounts();
@@ -1003,6 +1005,13 @@ export default function App() {
         </div>
       )}
 
+      {/* Floating Calculator Pop-Up (Simple <-> Scientific with staggered key choreography) */}
+      <FloatingCalculatorModal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+        language={currentLang}
+      />
+
       {/* Finzy Reminders & Live Alert Modal */}
       <FinzyRemindersModal
         isOpen={isRemindersModalOpen}
@@ -1110,6 +1119,7 @@ export default function App() {
         onOpenSettingsModal={() => setIsSettingsOpen(true)}
         onOpenProfileModal={() => setIsProfileOpen(true)}
         onOpenRemindersModal={() => setIsRemindersModalOpen(true)}
+        onOpenCalculator={() => setIsCalculatorOpen(true)}
         externalChecklistOpen={isDrawerChecklistOpen}
         onExternalChecklistClose={() => setIsDrawerChecklistOpen(false)}
         language={currentLang}
@@ -1222,6 +1232,7 @@ export default function App() {
           setCurrentView('shared_accounts');
         }}
         onOpenVoice={() => setIsVoiceTriggered(true)}
+        onOpenCalculator={() => setIsCalculatorOpen(true)}
       />
 
       <VoiceConfirmationSheet

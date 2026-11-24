@@ -30,12 +30,14 @@ interface LaborAgendaViewProps {
   isOpen: boolean;
   onClose: () => void;
   language?: LanguageCode;
+  onOpenCalculator?: () => void;
 }
 
 export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   isOpen,
   onClose,
   language = 'pt',
+  onOpenCalculator,
 }) => {
   const {
     jobs,
@@ -44,13 +46,11 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
     deleteJob,
     recordTipToSisFinz,
     syncSalaryToSisFinz,
-    registerSalaryAdvanceIncome,
   } = useLaborAgenda();
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Create job form
   const [companyName, setCompanyName] = useState('');
   const [role, setRole] = useState('Pizzero');
   const [baseSalary, setBaseSalary] = useState('');
@@ -60,7 +60,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
   const [tipWeekday, setTipWeekday] = useState<DayOfWeekKey>('wed');
   const [defaultAccountId, setDefaultAccountId] = useState('');
 
-  // Lock background scroll while full-screen Jornada Laboral view is open
   useEffect(() => {
     if (!isOpen) return;
     const prevOverflow = document.body.style.overflow;
@@ -70,7 +69,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
     };
   }, [isOpen]);
 
-  // Reset selected job if it gets deleted
   useEffect(() => {
     if (selectedJobId && !jobs.some((j) => j.id === selectedJobId)) {
       setSelectedJobId(null);
@@ -181,7 +179,6 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                       }}
                       onRecordTipToSisFinz={recordTipToSisFinz}
                       onSyncSalaryToSisFinz={syncSalaryToSisFinz}
-                      onRegisterSalaryAdvanceIncome={registerSalaryAdvanceIncome}
                     />
                   </motion.div>
                 ) : (
@@ -211,7 +208,7 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                             Organize sua rotina de trabalho
                           </h3>
                           <p className="mx-auto mt-1 max-w-xs text-xs font-medium text-slate-500">
-                            Cadastre sua empresa e posto (ex.: Pizzero) para controlar seu ponto, conferência de horas do RH, projeção salarial e propinas direto no seu saldo.
+                            Cadastre sua empresa e posto (ex.: Pizzero) para ter ponto animado, conferência de horas do RH, projeção salarial e propinas direto no seu saldo.
                           </p>
                         </div>
                         <button
@@ -265,14 +262,10 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
                                 {isRunning ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-black uppercase text-white">
                                     <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                                    Entrada marcada às {job.activeShift?.startTime}
-                                  </span>
-                                ) : todaySched.isUnset ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-500">
-                                    Sem cronograma esta semana
+                                    Em turno desde {job.activeShift?.startTime}
                                   </span>
                                 ) : todaySched.isOff ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-[10px] font-black uppercase text-purple-800">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-800">
                                     Hoje: Franco
                                   </span>
                                 ) : (
@@ -297,6 +290,22 @@ export const LaborAgendaView: React.FC<LaborAgendaViewProps> = ({
               </AnimatePresence>
             </div>
           </div>
+
+          {/* Floating + FAB available inside Labor Agenda as well */}
+          {onOpenCalculator && (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.92 }}
+              onClick={onOpenCalculator}
+              style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+              className="fixed right-4 z-[62] flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xl shadow-emerald-600/35 cursor-pointer"
+              aria-label="Abrir Calculadora"
+              title="Calculadora Rápida"
+            >
+              <Plus className="h-6 w-6 stroke-[2.8]" />
+            </motion.button>
+          )}
 
           {/* Create New Job Modal */}
           <AnimatePresence>
