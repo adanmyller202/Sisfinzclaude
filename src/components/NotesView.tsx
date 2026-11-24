@@ -30,6 +30,17 @@ import {
   Rocket,
   Heart,
   FileText,
+  PenTool,
+  Lock,
+  Unlock,
+  Mic,
+  MicOff,
+  History,
+  Share2,
+  Copy,
+  Download,
+  Printer,
+  ScanLine,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
@@ -40,6 +51,8 @@ import {
   countWords,
   useNotes,
 } from '../hooks/useNotes';
+import { NoteDrawingModal } from './NoteDrawingModal';
+import { NotePinModal } from './NotePinModal';
 
 interface NotesViewProps {
   isOpen: boolean;
@@ -122,6 +135,34 @@ function formatNoteDate(iso: string, isEs: boolean): string {
   }
 }
 
+function buildMarkdownFromNote(note: NoteItem): string {
+  const lines: string[] = [];
+  lines.push(`# ${note.title || 'Nota sem título'}`);
+  lines.push('');
+  if (note.plainText) {
+    lines.push(note.plainText);
+    lines.push('');
+  }
+  if ((note.checklist || []).length > 0) {
+    lines.push('## Checklist');
+    for (const item of note.checklist) {
+      lines.push(`- [${item.checked ? 'x' : ' '}] ${item.text}`);
+    }
+    lines.push('');
+  }
+  if ((note.tables || []).length > 0) {
+    for (const tbl of note.tables) {
+      lines.push(`| ${tbl.headers.join(' | ')} |`);
+      lines.push(`| ${tbl.headers.map(() => '---').join(' | ')} |`);
+      for (const row of tbl.rows) {
+        lines.push(`| ${row.join(' | ')} |`);
+      }
+      lines.push('');
+    }
+  }
+  return lines.join('\n').trim();
+}
+
 export const NotesView: React.FC<NotesViewProps> = ({
   isOpen,
   onClose,
@@ -132,9 +173,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
     notes,
     folders,
     saveState,
+    hasPinConfigured,
+    setNotePin,
+    verifyNotePin,
     createNote,
     updateNote,
+    saveVersionSnapshot,
+    restoreVersionSnapshot,
     togglePinNote,
+    toggleLockNote,
     softDeleteNote,
     restoreNote,
     permanentlyDeleteNote,
@@ -142,6 +189,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     createFolder,
     deleteFolder,
     uploadNoteImage,
+    uploadDrawingDataUrl,
     flushPendingSaves,
   } = useNotes();
 
@@ -157,15 +205,43 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
+  // Etapa 2 states
+  const [isDrawingOpen, setIsDrawingOpen] = useState(false);
+  const [pinModalState, setPinModalState] = useState<{
+    open: boolean;
+    mode: 'create' | 'unlock';
+    targetNoteId: string | null;
+    action: 'open' | 'lock';
+  }>({ open: false, mode: 'unlock', targetNoteId: null, action: 'open' });
+  const [unlockedIds, setUnlockedIds] = useState<Record<string, boolean>>({});
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [copiedFeedback, setCopiedFeedback] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
+
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const activeNote: NoteItem | null = useMemo(
     () => notes.find((n) => n.id === activeNoteId) || null,
     [notes, activeNoteId]
   );
 
-  // Sync contentEditable innerHTML only when switching active note
+  const stopDictation = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    setIsDictating(false);
+  };
+
+  // Sync contentEditable innerHTML when switching active note or restoring a version
   useEffect(() => {
     if (editorRef.current && activeNote) {
       if (editorRef.current.innerHTML !== activeNote.bodyHtml) {
@@ -176,9 +252,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
+      stopDictation();
       void flushPendingSaves();
       setActiveNoteId(null);
       setPreviewImageUrl(null);
+      setIsHistoryOpen(false);
+      setIsExportMenuOpen(false);
+      setUnlockedIds({});
       return;
     }
     const prevOverflow = document.body.style.overflow;
@@ -220,6 +300,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
     if (q) {
       base = base.filter((n) => {
         const folderName = n.folderId ? folderNameMap[n.folderId]?.name || '' : '';
+        if (n.locked && !unlockedIds[n.id]) {
+          return `${n.title} ${folderName}`.toLowerCase().includes(q);
+        }
         const checklistText = (n.checklist || []).map((c) => c.text).join(' ');
         const haystack = `${n.title} ${n.plainText} ${folderName} ${checklistText}`.toLowerCase();
         return haystack.includes(q);
@@ -232,7 +315,64 @@ export const NotesView: React.FC<NotesViewProps> = ({
       }
       return b.updatedAt.localeCompare(a.updatedAt);
     });
-  }, [activeNotes, trashedNotes, selectedFolder, searchQuery, folderNameMap]);
+  }, [activeNotes, trashedNotes, selectedFolder, searchQuery, folderNameMap, unlockedIds]);
+
+  const handleOpenNoteCard = (note: NoteItem) => {
+    if (note.locked && !unlockedIds[note.id]) {
+      setPinModalState({
+        open: true,
+        mode: hasPinConfigured ? 'unlock' : 'create',
+        targetNoteId: note.id,
+        action: 'open',
+      });
+      return;
+    }
+    setActiveNoteId(note.id);
+  };
+
+  const handleRequestToggleLock = () => {
+    if (!activeNote) return;
+    if (activeNote.locked) {
+      toggleLockNote(activeNote.id, false);
+      return;
+    }
+    if (!hasPinConfigured) {
+      setPinModalState({
+        open: true,
+        mode: 'create',
+        targetNoteId: activeNote.id,
+        action: 'lock',
+      });
+    } else {
+      toggleLockNote(activeNote.id, true);
+      setUnlockedIds((prev) => ({ ...prev, [activeNote.id]: true }));
+    }
+  };
+
+  const handlePinSubmit = async (pin: string): Promise<boolean> => {
+    const targetId = pinModalState.targetNoteId;
+    if (!targetId) return false;
+
+    if (pinModalState.mode === 'create') {
+      await setNotePin(pin);
+      if (pinModalState.action === 'lock') {
+        toggleLockNote(targetId, true);
+        setUnlockedIds((prev) => ({ ...prev, [targetId]: true }));
+      } else {
+        setUnlockedIds((prev) => ({ ...prev, [targetId]: true }));
+        setActiveNoteId(targetId);
+      }
+      return true;
+    }
+
+    const ok = await verifyNotePin(pin);
+    if (!ok) return false;
+    setUnlockedIds((prev) => ({ ...prev, [targetId]: true }));
+    if (pinModalState.action === 'open') {
+      setActiveNoteId(targetId);
+    }
+    return true;
+  };
 
   const handleCreateNote = async () => {
     const targetFolderId =
@@ -247,7 +387,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
   };
 
   const handleCloseEditor = async () => {
+    stopDictation();
+    if (activeNote) {
+      saveVersionSnapshot(activeNote.id);
+    }
     await flushPendingSaves();
+    setIsHistoryOpen(false);
+    setIsExportMenuOpen(false);
     setActiveNoteId(null);
   };
 
@@ -259,6 +405,48 @@ export const NotesView: React.FC<NotesViewProps> = ({
       updateNote(activeNote.id, { bodyHtml: editorRef.current.innerHTML });
     } catch {
       // ignore unsupported formatting command
+    }
+  };
+
+  const handleToggleDictation = () => {
+    if (!activeNote) return;
+    if (isDictating) {
+      stopDictation();
+      return;
+    }
+
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return;
+
+    try {
+      const rec = new SpeechRec();
+      rec.lang = isEs ? 'es-AR' : 'pt-BR';
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+        if (finalTranscript.trim() && editorRef.current && activeNote) {
+          const existing = editorRef.current.innerHTML;
+          const nextHtml = existing
+            ? `${existing}${existing.endsWith(' ') ? '' : ' '}${finalTranscript.trim()}`
+            : finalTranscript.trim();
+          editorRef.current.innerHTML = nextHtml;
+          updateNote(activeNote.id, { bodyHtml: nextHtml });
+        }
+      };
+      rec.onerror = () => stopDictation();
+      rec.onend = () => setIsDictating(false);
+      recognitionRef.current = rec;
+      rec.start();
+      setIsDictating(true);
+    } catch {
+      stopDictation();
     }
   };
 
@@ -356,13 +544,31 @@ export const NotesView: React.FC<NotesViewProps> = ({
     );
   };
 
-  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    kind: 'photo' | 'scan'
+  ) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !activeNote) return;
     setIsUploadingImage(true);
     try {
-      const attachment = await uploadNoteImage(activeNote.id, file);
+      const attachment = await uploadNoteImage(activeNote.id, file, kind);
+      updateNote(
+        activeNote.id,
+        { images: [...(activeNote.images || []), attachment] },
+        true
+      );
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleSaveDrawing = async (dataUrl: string) => {
+    if (!activeNote) return;
+    setIsUploadingImage(true);
+    try {
+      const attachment = await uploadDrawingDataUrl(activeNote.id, dataUrl);
       updateNote(
         activeNote.id,
         { images: [...(activeNote.images || []), attachment] },
@@ -380,6 +586,100 @@ export const NotesView: React.FC<NotesViewProps> = ({
       { images: (activeNote.images || []).filter((img) => img.id !== imageId) },
       true
     );
+  };
+
+  const handleCopyNoteText = async () => {
+    if (!activeNote) return;
+    const text = buildMarkdownFromNote(activeNote);
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopiedFeedback(true);
+      window.setTimeout(() => setCopiedFeedback(false), 1800);
+    } catch {
+      // ignore
+    }
+    setIsExportMenuOpen(false);
+  };
+
+  const handleShareNote = async () => {
+    if (!activeNote) return;
+    const text = buildMarkdownFromNote(activeNote);
+    setIsExportMenuOpen(false);
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: activeNote.title || 'Nota SisFinz',
+          text,
+        });
+        return;
+      } catch {
+        // user canceled or unsupported
+      }
+    }
+    await handleCopyNoteText();
+  };
+
+  const handleDownloadNote = (ext: 'md' | 'txt') => {
+    if (!activeNote) return;
+    const content = buildMarkdownFromNote(activeNote);
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTitle = (activeNote.title || 'nota-sisfinz')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 40);
+    a.href = url;
+    a.download = `${safeTitle || 'nota-sisfinz'}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setIsExportMenuOpen(false);
+  };
+
+  const handlePrintNotePdf = () => {
+    if (!activeNote) return;
+    setIsExportMenuOpen(false);
+    const win = window.open('', '_blank', 'width=800,height=900');
+    if (!win) return;
+    const checklistHtml =
+      (activeNote.checklist || []).length > 0
+        ? `<h3>Checklist</h3><ul>${activeNote.checklist
+            .map((c) => `<li>${c.checked ? '☑' : '☐'} ${c.text}</li>`)
+            .join('')}</ul>`
+        : '';
+    const imagesHtml =
+      (activeNote.images || []).length > 0
+        ? `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;">${activeNote.images
+            .map(
+              (img) =>
+                `<img src="${img.url}" style="max-width:260px;border-radius:10px;border:1px solid #e2e8f0;" />`
+            )
+            .join('')}</div>`
+        : '';
+    win.document.write(`
+      <html>
+        <head>
+          <title>${activeNote.title || 'Nota SisFinz'}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 32px; color: #0f172a; line-height: 1.6; }
+            h1 { color: #065f46; margin-bottom: 4px; }
+            .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          <h1>${activeNote.title || 'Nota sem título'}</h1>
+          <div class="meta">SisFinz Notas • ${formatNoteDate(activeNote.updatedAt, isEs)}</div>
+          <div>${activeNote.bodyHtml || ''}</div>
+          ${checklistHtml}
+          ${imagesHtml}
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => win.print(), 250);
   };
 
   const handleCreateFolderSubmit = async (e: React.FormEvent) => {
@@ -447,17 +747,11 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     </div>
                     <div className="min-w-0">
                       <h1 className="truncate text-sm font-black tracking-tight text-slate-900">
-                        {isEs ? 'Notas SisFinz' : 'Notas SisFinz'}
+                        Notas SisFinz
                       </h1>
                       <p className="truncate text-[9.5px] font-bold uppercase tracking-wider text-emerald-700">
                         {activeNotes.length}{' '}
-                        {activeNotes.length === 1
-                          ? isEs
-                            ? 'nota'
-                            : 'nota'
-                          : isEs
-                          ? 'notas'
-                          : 'notas'}
+                        {activeNotes.length === 1 ? 'nota' : 'notas'}
                       </p>
                     </div>
                   </div>
@@ -608,7 +902,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                 >
                                   <span
                                     className={`flex h-5 w-5 items-center justify-center rounded-lg ${
-                                      active ? 'bg-white/20 text-white' : `${palette.bg} ${palette.text}`
+                                      active
+                                        ? 'bg-white/20 text-white'
+                                        : `${palette.bg} ${palette.text}`
                                     }`}
                                   >
                                     {renderFolderIcon(fld.icon, 'h-3 w-3')}
@@ -699,6 +995,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                               const checkDone = (note.checklist || []).filter((c) => c.checked).length;
                               const imgCount = (note.images || []).length;
                               const isTrashed = Boolean(note.deletedAt);
+                              const isLockedPreview = note.locked && !unlockedIds[note.id];
 
                               return (
                                 <motion.div
@@ -708,7 +1005,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.96 }}
                                   transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                                  onClick={() => setActiveNoteId(note.id)}
+                                  onClick={() => handleOpenNoteCard(note)}
                                   className={`group rounded-2xl border p-3.5 transition-all cursor-pointer ${
                                     note.pinned
                                       ? 'border-emerald-300 bg-gradient-to-r from-emerald-50/60 via-white to-white shadow-xs'
@@ -721,20 +1018,27 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                         {note.pinned && (
                                           <Pin className="h-3.5 w-3.5 shrink-0 fill-emerald-600 text-emerald-600" />
                                         )}
+                                        {note.locked && (
+                                          <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                        )}
                                         <h3 className="truncate text-sm font-black text-slate-900">
                                           {note.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
                                         </h3>
                                       </div>
 
                                       <p className="line-clamp-2 text-xs font-medium text-slate-500">
-                                        {note.plainText ||
-                                          (checkTotal > 0
-                                            ? `${checkDone}/${checkTotal} ${
-                                                isEs ? 'tareas' : 'itens na lista'
-                                              }`
-                                            : isEs
-                                            ? 'Toca para escribir...'
-                                            : 'Toque para escrever...')}
+                                        {isLockedPreview
+                                          ? isEs
+                                            ? 'Nota protegida con PIN • Toca para desbloquear'
+                                            : 'Nota protegida com PIN • Toque para desbloquear'
+                                          : note.plainText ||
+                                            (checkTotal > 0
+                                              ? `${checkDone}/${checkTotal} ${
+                                                  isEs ? 'tareas' : 'itens na lista'
+                                                }`
+                                              : isEs
+                                              ? 'Toca para escribir...'
+                                              : 'Toque para escrever...')}
                                       </p>
 
                                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -757,14 +1061,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                           </span>
                                         )}
 
-                                        {checkTotal > 0 && (
+                                        {!isLockedPreview && checkTotal > 0 && (
                                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[9.5px] font-bold text-slate-600">
                                             <CheckSquare className="h-2.5 w-2.5 text-emerald-600" />
                                             {checkDone}/{checkTotal}
                                           </span>
                                         )}
 
-                                        {imgCount > 0 && (
+                                        {!isLockedPreview && imgCount > 0 && (
                                           <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-mono text-[9.5px] font-bold text-sky-700">
                                             <ImageIcon className="h-2.5 w-2.5" />
                                             {imgCount}
@@ -868,7 +1172,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer shrink-0"
                   >
                     <ArrowLeft className="h-4 w-4" />
-                    {isEs ? 'Notas' : 'Notas'}
+                    Notas
                   </button>
 
                   {/* Auto-save indicator */}
@@ -878,22 +1182,27 @@ export const NotesView: React.FC<NotesViewProps> = ({
                         <Loader2 className="h-3 w-3 animate-spin" />
                         <span>{isEs ? 'Guardando...' : 'Salvando...'}</span>
                       </>
+                    ) : copiedFeedback ? (
+                      <>
+                        <Check className="h-3 w-3" />
+                        <span>{isEs ? 'Copiado' : 'Copiado'}</span>
+                      </>
                     ) : (
                       <>
                         <Cloud className="h-3 w-3" />
-                        <span>{isEs ? 'Guardado' : 'Salvo'}</span>
+                        <span>{isEs ? 'Salvo' : 'Salvo'}</span>
                       </>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 relative">
                     {/* Folder Selector */}
                     <select
                       value={activeNote.folderId || ''}
                       onChange={(e) =>
                         updateNote(activeNote.id, { folderId: e.target.value || null }, true)
                       }
-                      className="max-w-[115px] rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10.5px] font-black text-slate-700 outline-none"
+                      className="hidden sm:block max-w-[110px] rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10.5px] font-black text-slate-700 outline-none"
                     >
                       <option value="">{isEs ? 'Sin carpeta' : 'Sem pasta'}</option>
                       {folders.map((f) => (
@@ -907,6 +1216,52 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       <>
                         <button
                           type="button"
+                          onClick={handleRequestToggleLock}
+                          className={`rounded-xl p-2 transition-colors cursor-pointer ${
+                            activeNote.locked
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-slate-100 text-slate-500 hover:text-slate-800'
+                          }`}
+                          title={
+                            activeNote.locked
+                              ? isEs
+                                ? 'Desbloquear nota'
+                                : 'Remover bloqueio'
+                              : isEs
+                              ? 'Bloquear con PIN'
+                              : 'Bloquear com PIN'
+                          }
+                        >
+                          {activeNote.locked ? (
+                            <Lock className="h-4 w-4" />
+                          ) : (
+                            <Unlock className="h-4 w-4" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            saveVersionSnapshot(activeNote.id);
+                            setIsHistoryOpen(true);
+                          }}
+                          className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
+                          title={isEs ? 'Historial de versiones' : 'Histórico de versões'}
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsExportMenuOpen((v) => !v)}
+                          className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
+                          title={isEs ? 'Compartir / Exportar' : 'Compartilhar / Exportar'}
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => togglePinNote(activeNote.id)}
                           className={`rounded-xl p-2 transition-colors cursor-pointer ${
                             activeNote.pinned
@@ -916,17 +1271,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           aria-label="Fixar nota"
                         >
                           <Pin className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            softDeleteNote(activeNote.id);
-                            setActiveNoteId(null);
-                          }}
-                          className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                          aria-label="Apagar nota"
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </button>
                       </>
                     ) : (
@@ -939,10 +1283,76 @@ export const NotesView: React.FC<NotesViewProps> = ({
                         {isEs ? 'Restaurar' : 'Restaurar'}
                       </button>
                     )}
+
+                    {/* Export & Share Dropdown */}
+                    <AnimatePresence>
+                      {isExportMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                          className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl z-40"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => void handleShareNote()}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                          >
+                            <Share2 className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Compartir' : 'Compartilhar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyNoteText()}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Copiar texto' : 'Copiar texto'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadNote('md')}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Exportar Markdown (.md)' : 'Exportar Markdown (.md)'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadNote('txt')}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Exportar Texto (.txt)' : 'Exportar Texto (.txt)'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePrintNotePdf}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-emerald-600" />
+                            {isEs ? 'Imprimir / PDF' : 'Imprimir / PDF'}
+                          </button>
+                          <div className="my-1 h-px bg-slate-100" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsExportMenuOpen(false);
+                              softDeleteNote(activeNote.id);
+                              setActiveNoteId(null);
+                            }}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {isEs ? 'Mover a papelera' : 'Mover para lixeira'}
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
-                {/* Rich Formatting Toolbar */}
+                {/* Rich Formatting & Etapa 2 Tools Toolbar */}
                 {!activeNote.deletedAt && (
                   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-slate-100 bg-slate-50/75 px-3 py-2 shrink-0">
                     <button
@@ -990,6 +1400,43 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
                     <button
                       type="button"
+                      onClick={handleToggleDictation}
+                      className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-black transition-all cursor-pointer shrink-0 ${
+                        isDictating
+                          ? 'border-rose-400 bg-rose-500 text-white shadow-sm animate-pulse'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700'
+                      }`}
+                      title={isEs ? 'Dictado por voz' : 'Ditado por voz'}
+                    >
+                      {isDictating ? (
+                        <MicOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Mic className="h-3.5 w-3.5 text-emerald-600" />
+                      )}
+                      <span>{isDictating ? (isEs ? 'Ouvindo...' : 'Ouvindo...') : isEs ? 'Dictar' : 'Ditar'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDrawingOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
+                    >
+                      <PenTool className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>{isEs ? 'Dibujar' : 'Desenhar'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => scanInputRef.current?.click()}
+                      disabled={isUploadingImage}
+                      className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
+                    >
+                      <ScanLine className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>{isEs ? 'Escanear' : 'Escanear'}</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploadingImage}
                       className="inline-flex items-center gap-1 rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0"
@@ -1015,7 +1462,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       ref={fileInputRef}
                       type="file"
                       accept="image/*"
-                      onChange={handleImageFileSelect}
+                      onChange={(e) => void handleImageFileSelect(e, 'photo')}
+                      className="hidden"
+                    />
+                    <input
+                      ref={scanInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => void handleImageFileSelect(e, 'scan')}
                       className="hidden"
                     />
                   </div>
@@ -1180,7 +1635,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                       onClick={() => handleAddTableCol(tbl.id)}
                                       className="rounded-lg bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 cursor-pointer"
                                     >
-                                      + {isEs ? 'Col' : 'Col'}
+                                      + Col
                                     </button>
                                   )}
                                   <button
@@ -1245,11 +1700,11 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </div>
                     )}
 
-                    {/* Images Attachments Grid */}
+                    {/* Images, Drawings & Scanned Documents Grid */}
                     {(activeNote.images || []).length > 0 && (
                       <div className="space-y-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                          {isEs ? 'Imágenes adjuntas' : 'Imagens anexadas'}
+                          {isEs ? 'Imágenes, dibujos y escaneos' : 'Imagens, desenhos e documentos'}
                         </span>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {(activeNote.images || []).map((img) => (
@@ -1263,12 +1718,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                 onClick={() => setPreviewImageUrl(img.url)}
                                 className="h-full w-full object-cover cursor-pointer"
                               />
+                              {img.kind && img.kind !== 'photo' && (
+                                <span className="absolute left-1.5 bottom-1.5 rounded-lg bg-slate-900/75 px-2 py-0.5 text-[9px] font-black uppercase text-white">
+                                  {img.kind === 'drawing'
+                                    ? isEs
+                                      ? 'Dibujo'
+                                      : 'Desenho'
+                                    : isEs
+                                    ? 'Escaneo'
+                                    : 'Scanner'}
+                                </span>
+                              )}
                               {!activeNote.deletedAt && (
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveImage(img.id)}
                                   className="absolute right-1.5 top-1.5 rounded-lg bg-slate-900/70 p-1 text-white hover:bg-rose-600 cursor-pointer"
-                                  aria-label="Remover imagem"
+                                  aria-label="Remover anexo"
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -1281,6 +1747,85 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Version History Bottom Sheet */}
+          <AnimatePresence>
+            {isHistoryOpen && activeNote && (
+              <div className="fixed inset-0 z-[82] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs"
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 32 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 32 }}
+                  className="relative z-10 w-full max-w-md max-h-[75dvh] flex flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] bg-white shadow-2xl"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <History className="h-4 w-4 text-emerald-600" />
+                      <h3 className="text-sm font-black text-slate-900">
+                        {isEs ? 'Historial de versiones' : 'Histórico de versões'}
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsHistoryOpen(false)}
+                      className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {(activeNote.versions || []).length === 0 ? (
+                      <div className="py-8 text-center text-xs font-semibold text-slate-400">
+                        {isEs
+                          ? 'Aún no hay versiones guardadas para esta nota.'
+                          : 'Nenhuma versão anterior salva ainda.'}
+                      </div>
+                    ) : (
+                      (activeNote.versions || []).map((ver) => (
+                        <div
+                          key={ver.id}
+                          className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 p-3 bg-slate-50/70"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[10px] font-black text-emerald-700">
+                              {formatNoteDate(ver.savedAt, isEs)}
+                            </div>
+                            <div className="truncate text-xs font-black text-slate-900 mt-0.5">
+                              {ver.title || (isEs ? 'Sin título' : 'Sem título')}
+                            </div>
+                            <div className="line-clamp-2 text-[11px] font-medium text-slate-500 mt-0.5">
+                              {ver.plainText || '—'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              restoreVersionSnapshot(activeNote.id, ver);
+                              if (editorRef.current) {
+                                editorRef.current.innerHTML = ver.bodyHtml || '';
+                              }
+                              setIsHistoryOpen(false);
+                            }}
+                            className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700 cursor-pointer shrink-0"
+                          >
+                            {isEs ? 'Restaurar' : 'Restaurar'}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
 
@@ -1383,6 +1928,23 @@ export const NotesView: React.FC<NotesViewProps> = ({
             )}
           </AnimatePresence>
 
+          {/* Freehand Drawing Modal */}
+          <NoteDrawingModal
+            isOpen={isDrawingOpen}
+            onClose={() => setIsDrawingOpen(false)}
+            onSaveDrawing={handleSaveDrawing}
+            language={language}
+          />
+
+          {/* PIN Lock / Unlock Modal */}
+          <NotePinModal
+            isOpen={pinModalState.open}
+            mode={pinModalState.mode}
+            onClose={() => setPinModalState((s) => ({ ...s, open: false }))}
+            onSubmitPin={handlePinSubmit}
+            language={language}
+          />
+
           {/* Image Lightbox */}
           <AnimatePresence>
             {previewImageUrl && (
@@ -1391,7 +1953,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setPreviewImageUrl(null)}
-                className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/85 p-4"
+                className="fixed inset-0 z-[92] flex items-center justify-center bg-slate-950/85 p-4"
               >
                 <img
                   src={previewImageUrl}

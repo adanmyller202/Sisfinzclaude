@@ -34,6 +34,7 @@ export interface NoteImageAttachment {
   id: string;
   url: string;
   name: string;
+  kind?: 'photo' | 'drawing' | 'scan';
   storagePath?: string;
   createdAt: string;
 }
@@ -44,6 +45,14 @@ export interface NoteTable {
   rows: string[][];
 }
 
+export interface NoteVersionSnapshot {
+  id: string;
+  title: string;
+  bodyHtml: string;
+  plainText: string;
+  savedAt: string;
+}
+
 export interface NoteItem {
   id: string;
   title: string;
@@ -51,9 +60,11 @@ export interface NoteItem {
   plainText: string;
   folderId: string | null;
   pinned: boolean;
+  locked: boolean;
   checklist: NoteChecklistItem[];
   images: NoteImageAttachment[];
   tables: NoteTable[];
+  versions: NoteVersionSnapshot[];
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +72,7 @@ export interface NoteItem {
 
 const NOTES_STORAGE_PREFIX = 'sisfinz_notes_v1_';
 const FOLDERS_STORAGE_PREFIX = 'sisfinz_note_folders_v1_';
+const PIN_STORAGE_PREFIX = 'sisfinz_notes_pin_hash_v1_';
 
 export function htmlToPlainText(html: string): string {
   if (!html) return '';
@@ -78,7 +90,32 @@ export function countWords(text: string): number {
   return clean.split(/\s+/).filter(Boolean).length;
 }
 
-async function compressImageToDataUrl(file: File, maxDim = 1024): Promise<string> {
+async function hashPin(pin: string): Promise<string> {
+  const salted = `sisfinz_note_pin_v1:${pin}`;
+  if (typeof window !== 'undefined' && window.crypto?.subtle) {
+    try {
+      const buf = new TextEncoder().encode(salted);
+      const digest = await window.crypto.subtle.digest('SHA-256', buf);
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    } catch {
+      // fallback below
+    }
+  }
+  let h = 2166136261;
+  for (let i = 0; i < salted.length; i++) {
+    h ^= salted.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `fnv_${(h >>> 0).toString(16)}`;
+}
+
+async function compressImageToDataUrl(
+  file: File,
+  maxDim = 1024,
+  enhanceDocument = false
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Falha ao ler imagem'));
@@ -97,8 +134,11 @@ async function compressImageToDataUrl(file: File, maxDim = 1024): Promise<string
           resolve(String(reader.result || ''));
           return;
         }
+        if (enhanceDocument) {
+          ctx.filter = 'contrast(1.38) brightness(1.06) grayscale(0.85)';
+        }
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.78));
+        resolve(canvas.toDataURL('image/jpeg', enhanceDocument ? 0.85 : 0.78));
       };
       img.src = String(reader.result || '');
     };
@@ -106,11 +146,24 @@ async function compressImageToDataUrl(file: File, maxDim = 1024): Promise<string
   });
 }
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const parts = dataUrl.split(',');
+  const mimeMatch = parts[0]?.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+  const binary = atob(parts[1] || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
 export function useNotes() {
   const { user } = useAuth();
   const uid = user?.uid || auth.currentUser?.uid || null;
   const notesStorageKey = `${NOTES_STORAGE_PREFIX}${uid || 'guest'}`;
   const foldersStorageKey = `${FOLDERS_STORAGE_PREFIX}${uid || 'guest'}`;
+  const pinStorageKey = `${PIN_STORAGE_PREFIX}${uid || 'guest'}`;
 
   const [notes, setNotes] = useState<NoteItem[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -140,6 +193,15 @@ export function useNotes() {
     return [];
   });
 
+  const [hasPinConfigured, setHasPinConfigured] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return Boolean(localStorage.getItem(pinStorageKey));
+    } catch {
+      return false;
+    }
+  });
+
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
 
   const notesRef = useRef<NoteItem[]>(notes);
@@ -149,6 +211,15 @@ export function useNotes() {
 
   const debounceTimersRef = useRef<Record<string, number>>({});
   const pendingWritesRef = useRef<Record<string, NoteItem>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setHasPinConfigured(Boolean(localStorage.getItem(pinStorageKey)));
+    } catch {
+      setHasPinConfigured(false);
+    }
+  }, [pinStorageKey]);
 
   const saveNotesLocal = useCallback(
     (next: NoteItem[]) => {
@@ -194,9 +265,11 @@ export function useNotes() {
             plainText: data.plainText || htmlToPlainText(data.bodyHtml || ''),
             folderId: data.folderId ?? null,
             pinned: Boolean(data.pinned),
+            locked: Boolean(data.locked),
             checklist: Array.isArray(data.checklist) ? data.checklist : [],
             images: Array.isArray(data.images) ? data.images : [],
             tables: Array.isArray(data.tables) ? data.tables : [],
+            versions: Array.isArray(data.versions) ? data.versions : [],
             deletedAt: data.deletedAt ?? null,
             createdAt: data.createdAt || new Date().toISOString(),
             updatedAt: data.updatedAt || new Date().toISOString(),
@@ -273,6 +346,33 @@ export function useNotes() {
     };
   }, [flushPendingSaves]);
 
+  const setNotePin = useCallback(
+    async (pin: string) => {
+      const hashed = await hashPin(pin);
+      try {
+        localStorage.setItem(pinStorageKey, hashed);
+      } catch {
+        // ignore
+      }
+      setHasPinConfigured(true);
+    },
+    [pinStorageKey]
+  );
+
+  const verifyNotePin = useCallback(
+    async (pin: string): Promise<boolean> => {
+      try {
+        const stored = localStorage.getItem(pinStorageKey);
+        if (!stored) return false;
+        const hashed = await hashPin(pin);
+        return stored === hashed;
+      } catch {
+        return false;
+      }
+    },
+    [pinStorageKey]
+  );
+
   const createNote = useCallback(
     async (folderId: string | null = null): Promise<NoteItem> => {
       const nowIso = new Date().toISOString();
@@ -283,9 +383,11 @@ export function useNotes() {
         plainText: '',
         folderId,
         pinned: false,
+        locked: false,
         checklist: [],
         images: [],
         tables: [],
+        versions: [],
         deletedAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -356,11 +458,65 @@ export function useNotes() {
     [saveNotesLocal, persistNoteRemote]
   );
 
+  const saveVersionSnapshot = useCallback(
+    (noteId: string) => {
+      const current = notesRef.current.find((n) => n.id === noteId);
+      if (!current) return;
+      if (!current.title.trim() && !current.plainText.trim()) return;
+
+      const existing = current.versions || [];
+      const latest = existing[0];
+      if (
+        latest &&
+        latest.title === current.title &&
+        latest.bodyHtml === current.bodyHtml
+      ) {
+        return;
+      }
+
+      const snap: NoteVersionSnapshot = {
+        id: `ver_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        title: current.title,
+        bodyHtml: current.bodyHtml,
+        plainText: current.plainText,
+        savedAt: new Date().toISOString(),
+      };
+      const nextVersions = [snap, ...existing].slice(0, 10);
+      updateNote(noteId, { versions: nextVersions }, true);
+    },
+    [updateNote]
+  );
+
+  const restoreVersionSnapshot = useCallback(
+    (noteId: string, version: NoteVersionSnapshot) => {
+      const current = notesRef.current.find((n) => n.id === noteId);
+      if (!current) return;
+      saveVersionSnapshot(noteId);
+      updateNote(
+        noteId,
+        {
+          title: version.title,
+          bodyHtml: version.bodyHtml,
+          plainText: version.plainText,
+        },
+        true
+      );
+    },
+    [saveVersionSnapshot, updateNote]
+  );
+
   const togglePinNote = useCallback(
     (noteId: string) => {
       const target = notesRef.current.find((n) => n.id === noteId);
       if (!target) return;
       updateNote(noteId, { pinned: !target.pinned }, true);
+    },
+    [updateNote]
+  );
+
+  const toggleLockNote = useCallback(
+    (noteId: string, locked: boolean) => {
+      updateNote(noteId, { locked }, true);
     },
     [updateNote]
   );
@@ -461,9 +617,16 @@ export function useNotes() {
   );
 
   const uploadNoteImage = useCallback(
-    async (noteId: string, file: File): Promise<NoteImageAttachment> => {
+    async (
+      noteId: string,
+      file: File,
+      kind: 'photo' | 'scan' = 'photo'
+    ): Promise<NoteImageAttachment> => {
       const nowIso = new Date().toISOString();
       const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+
+      const processedDataUrl =
+        kind === 'scan' ? await compressImageToDataUrl(file, 1400, true) : null;
 
       if (uid) {
         try {
@@ -471,16 +634,41 @@ export function useNotes() {
           const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
           const path = `users/${uid}/note_attachments/${noteId}/${id}_${safeName}`;
           const fileRef = storageRef(storage, path);
-          await uploadBytes(fileRef, file);
+          const payload = processedDataUrl ? dataUrlToBlob(processedDataUrl) : file;
+          await uploadBytes(fileRef, payload);
           const url = await getDownloadURL(fileRef);
-          return { id, url, name: file.name, storagePath: path, createdAt: nowIso };
+          return { id, url, name: file.name, kind, storagePath: path, createdAt: nowIso };
         } catch {
           // Fallback to compressed data URL if Storage is unavailable/offline
         }
       }
 
-      const dataUrl = await compressImageToDataUrl(file);
-      return { id, url: dataUrl, name: file.name, createdAt: nowIso };
+      const dataUrl = processedDataUrl || (await compressImageToDataUrl(file));
+      return { id, url: dataUrl, name: file.name, kind, createdAt: nowIso };
+    },
+    [uid]
+  );
+
+  const uploadDrawingDataUrl = useCallback(
+    async (noteId: string, dataUrl: string): Promise<NoteImageAttachment> => {
+      const nowIso = new Date().toISOString();
+      const id = `drw_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      const name = `desenho_${id}.png`;
+
+      if (uid) {
+        try {
+          const storage = getStorage();
+          const path = `users/${uid}/note_attachments/${noteId}/${name}`;
+          const fileRef = storageRef(storage, path);
+          await uploadBytes(fileRef, dataUrlToBlob(dataUrl));
+          const url = await getDownloadURL(fileRef);
+          return { id, url, name, kind: 'drawing', storagePath: path, createdAt: nowIso };
+        } catch {
+          // Fallback to data URL offline
+        }
+      }
+
+      return { id, url: dataUrl, name, kind: 'drawing', createdAt: nowIso };
     },
     [uid]
   );
@@ -489,9 +677,15 @@ export function useNotes() {
     notes,
     folders,
     saveState,
+    hasPinConfigured,
+    setNotePin,
+    verifyNotePin,
     createNote,
     updateNote,
+    saveVersionSnapshot,
+    restoreVersionSnapshot,
     togglePinNote,
+    toggleLockNote,
     softDeleteNote,
     restoreNote,
     permanentlyDeleteNote,
@@ -499,6 +693,7 @@ export function useNotes() {
     createFolder,
     deleteFolder,
     uploadNoteImage,
+    uploadDrawingDataUrl,
     flushPendingSaves,
   };
 }
