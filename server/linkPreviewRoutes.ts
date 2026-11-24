@@ -14,6 +14,23 @@ export interface LinkPreviewMetadata {
   previewStatus: 'ok' | 'partial' | 'fallback';
 }
 
+const RESERVED_IG_SEGMENTS = new Set([
+  'p',
+  'reel',
+  'reels',
+  'stories',
+  'explore',
+  'tv',
+  'accounts',
+  'direct',
+  'about',
+  'legal',
+  'developer',
+  'api',
+  'static',
+  'graphql',
+]);
+
 function isBlockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase().trim();
   if (!h) return true;
@@ -129,6 +146,15 @@ function cleanTrackingParams(parsed: URL): URL {
   return copy;
 }
 
+function extractInstagramUsername(parsed: URL): string | null {
+  const domain = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  if (domain !== 'instagram.com' && !domain.endsWith('.instagram.com')) return null;
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const first = segments[0]?.toLowerCase();
+  if (!first || RESERVED_IG_SEGMENTS.has(first)) return null;
+  return segments[0].replace(/^@/, '');
+}
+
 function isGenericInstagramImage(imageUrl: string | null): boolean {
   if (!imageUrl) return true;
   const lower = imageUrl.toLowerCase();
@@ -137,7 +163,8 @@ function isGenericInstagramImage(imageUrl: string | null): boolean {
     lower.includes('/static/images/ico/') ||
     lower.includes('instagram_logo') ||
     lower.includes('ig-logo') ||
-    lower.includes('rsrc.php/')
+    lower.includes('rsrc.php/') ||
+    lower.includes('static.xx.fbcdn.net/rsrc.php')
   );
 }
 
@@ -145,9 +172,13 @@ function isGenericLoginDescription(text: string): boolean {
   const lower = text.toLowerCase();
   return (
     lower.includes('crie uma conta ou entre no instagram') ||
+    lower.includes('bem-vindo novamente ao instagram') ||
+    lower.includes('cadastre-se para conferir') ||
     lower.includes('create an account or log in to instagram') ||
-    lower.includes('crea una cuenta o inicia sesión en instagram') ||
     lower.includes('welcome back to instagram') ||
+    lower.includes('sign in to check out what your friends') ||
+    lower.includes('crea una cuenta o inicia sesión en instagram') ||
+    lower.includes('te damos la bienvenida de nuevo a instagram') ||
     lower.includes('inicia sesión para ver fotos') ||
     lower.includes('entre no instagram para ver')
   );
@@ -160,7 +191,8 @@ function isGenericLoginTitle(text: string): boolean {
     lower === 'instagram' ||
     lower === 'login • instagram' ||
     lower === 'entrar • instagram' ||
-    lower === 'iniciar sesión • instagram'
+    lower === 'iniciar sesión • instagram' ||
+    lower === 'instagram.com'
   );
 }
 
@@ -177,23 +209,24 @@ function needsImageProxy(imageUrl: string): boolean {
   }
 }
 
+function wrapImageUrl(imageUrl: string | null, isInstagram: boolean): string | null {
+  if (!imageUrl) return null;
+  if (isInstagram && isGenericInstagramImage(imageUrl)) return null;
+  if (needsImageProxy(imageUrl)) {
+    return `/api/links/image?url=${encodeURIComponent(imageUrl)}`;
+  }
+  return imageUrl;
+}
+
 function buildFallbackMetadata(parsedUrl: URL): LinkPreviewMetadata {
   const domain = parsedUrl.hostname.replace(/^www\./i, '');
   const isInstagram = domain === 'instagram.com' || domain.endsWith('.instagram.com');
+  const igUser = extractInstagramUsername(parsedUrl);
   const segments = parsedUrl.pathname.split('/').filter(Boolean);
-  let fallbackTitle = domain;
-  let isProfile = false;
 
+  let fallbackTitle = domain;
   if (isInstagram) {
-    if (
-      segments[0] &&
-      !['p', 'reel', 'reels', 'stories', 'explore', 'tv', 'accounts'].includes(segments[0])
-    ) {
-      fallbackTitle = `@${segments[0]}`;
-      isProfile = true;
-    } else {
-      fallbackTitle = 'Publicação no Instagram';
-    }
+    fallbackTitle = igUser ? `@${igUser} • Instagram` : 'Publicação no Instagram';
   } else if (segments.length > 0) {
     const lastSeg = decodeURIComponent(segments[segments.length - 1])
       .replace(/[-_]+/g, ' ')
@@ -214,15 +247,77 @@ function buildFallbackMetadata(parsedUrl: URL): LinkPreviewMetadata {
     image: null,
     favicon: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
     isInstagram,
-    isProfile,
+    isProfile: Boolean(igUser),
     previewStatus: 'fallback',
   };
+}
+
+/**
+ * Layer 1 for Instagram Profiles: public web_profile_info endpoint
+ */
+async function tryInstagramWebProfileInfo(
+  username: string,
+  originalUrl: string,
+  normalizedUrl: string
+): Promise<LinkPreviewMetadata | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch(
+      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
+      {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+          'x-ig-app-id': '936619743392459',
+          Accept: 'application/json',
+          'Accept-Language': 'pt-BR,pt;q=0.9,es-AR;q=0.8,en;q=0.7',
+          Referer: `https://www.instagram.com/${username}/`,
+        },
+      }
+    );
+
+    if (!resp.ok) return null;
+    const json: any = await resp.json().catch(() => null);
+    const user = json?.data?.user;
+    if (!user) return null;
+
+    const fullName = String(user.full_name || '').trim();
+    const handle = String(user.username || username).trim();
+    const bio = String(user.biography || '').trim();
+    const rawPic = String(user.profile_pic_url_hd || user.profile_pic_url || '').trim();
+    const image = wrapImageUrl(rawPic || null, true);
+
+    const title = fullName
+      ? `${fullName} (@${handle}) • Perfil de Instagram`
+      : `@${handle} • Perfil de Instagram`;
+
+    return {
+      url: originalUrl,
+      normalizedUrl,
+      domain: 'instagram.com',
+      siteName: 'Instagram',
+      title: title.slice(0, 180),
+      description: bio.slice(0, 280),
+      image,
+      favicon: 'https://www.google.com/s2/favicons?domain=instagram.com&sz=128',
+      isInstagram: true,
+      isProfile: true,
+      previewStatus: image ? 'ok' : 'partial',
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchHtmlHeadWithUserAgent(
   targetUrl: string,
   userAgent: string,
-  timeoutMs = 6500
+  timeoutMs = 5500
 ): Promise<{ html: string; finalUrl: string } | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -274,6 +369,71 @@ async function fetchHtmlHeadWithUserAgent(
   }
 }
 
+/**
+ * Layer 3: Public Open Graph fallback via Microlink (bypasses datacenter IP login walls cleanly)
+ */
+async function tryMicrolinkPreview(
+  targetUrl: string,
+  originalUrl: string,
+  fallback: LinkPreviewMetadata
+): Promise<LinkPreviewMetadata | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const resp = await fetch(
+      `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`,
+      {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+        },
+      }
+    );
+    if (!resp.ok) return null;
+    const json: any = await resp.json().catch(() => null);
+    const data = json?.data;
+    if (!data) return null;
+
+    const rawTitle = decodeHtmlEntities(String(data.title || ''));
+    const rawDesc = decodeHtmlEntities(String(data.description || ''));
+    const rawImage = String(data.image?.url || data.logo?.url || '').trim();
+    const rawLogo = String(data.logo?.url || '').trim();
+    const siteName = decodeHtmlEntities(String(data.publisher || fallback.siteName));
+
+    const image = wrapImageUrl(rawImage || null, fallback.isInstagram);
+    const title = !isGenericLoginTitle(rawTitle) ? rawTitle : fallback.title;
+    const description = isGenericLoginDescription(rawDesc) ? '' : rawDesc.slice(0, 280);
+
+    const previewStatus: LinkPreviewMetadata['previewStatus'] = image
+      ? 'ok'
+      : description || title !== fallback.title
+      ? 'partial'
+      : 'fallback';
+
+    if (previewStatus === 'fallback') return null;
+
+    return {
+      url: originalUrl,
+      normalizedUrl: targetUrl,
+      domain: fallback.domain,
+      siteName: (siteName || fallback.siteName).slice(0, 80),
+      title: title.slice(0, 180),
+      description,
+      image,
+      favicon:
+        (rawLogo && !isGenericInstagramImage(rawLogo) ? rawLogo : null) || fallback.favicon,
+      isInstagram: fallback.isInstagram,
+      isProfile: fallback.isProfile,
+      previewStatus,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPreviewMetadata> {
   let candidate = rawUrl.trim();
   if (!/^https?:\/\//i.test(candidate)) {
@@ -290,17 +450,30 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
 
   const cleanParsed = cleanTrackingParams(parsed);
   const fallback = buildFallbackMetadata(cleanParsed);
+  const igUsername = extractInstagramUsername(cleanParsed);
 
-  // For Instagram/Meta links, use official Open Graph preview crawler User-Agents so Meta returns real profile/post metadata instead of the login wall
+  // Layer 1: Direct Instagram public profile metadata JSON
+  if (igUsername) {
+    const profileMeta = await tryInstagramWebProfileInfo(
+      igUsername,
+      parsed.toString(),
+      cleanParsed.toString()
+    );
+    if (profileMeta && profileMeta.previewStatus === 'ok') {
+      return profileMeta;
+    }
+  }
+
+  // Layer 2: Direct HTML Open Graph fetch (avoiding spoofed facebookexternalhit on Meta domains)
   const userAgents = fallback.isInstagram
     ? [
-        'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        'WhatsApp/2.23.20.0',
-        'Twitterbot/1.0',
+        'WhatsApp/2.24.16.76 A',
+        'TelegramBot (like TwitterBot)',
+        'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
       ]
     : [
         'Mozilla/5.0 (compatible; SisFinzLinkPreview/1.0; +https://sisfinz.app)',
-        'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        'WhatsApp/2.24.16.76 A',
       ];
 
   let bestResult: LinkPreviewMetadata = fallback;
@@ -334,12 +507,7 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
     const rawFavicon = extractFaviconHref(html);
 
     const resolvedImage = resolveAbsoluteUrl(rawImage, finalUrl);
-    const validImage =
-      resolvedImage && !(isInstagram && isGenericInstagramImage(resolvedImage))
-        ? needsImageProxy(resolvedImage)
-          ? `/api/links/image?url=${encodeURIComponent(resolvedImage)}`
-          : resolvedImage
-        : null;
+    const validImage = wrapImageUrl(resolvedImage, isInstagram);
 
     const cleanTitleCandidate =
       (!isGenericLoginTitle(ogTitle) && ogTitle) ||
@@ -381,6 +549,18 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
     }
   }
 
+  // Layer 3: Public Microlink Open Graph fallback (handles sites that block GCP datacenter IPs)
+  const microlinkResult = await tryMicrolinkPreview(
+    cleanParsed.toString(),
+    parsed.toString(),
+    fallback
+  );
+  if (microlinkResult) {
+    if (microlinkResult.previewStatus === 'ok' || bestResult.previewStatus === 'fallback') {
+      return microlinkResult;
+    }
+  }
+
   return bestResult;
 }
 
@@ -411,7 +591,7 @@ export function mountLinkPreviewRoutes(app: express.Express) {
     }
   });
 
-  // Safe image proxy so Instagram/Meta CDN images (which send CORP: same-origin) render reliably on iPhone/Web
+  // Safe image proxy so Instagram/Meta CDN images render reliably on iPhone/Web without CORP blocks
   app.get('/api/links/image', async (req, res) => {
     const rawUrl = String(req.query?.url || '').trim();
     if (!rawUrl) {
@@ -440,8 +620,9 @@ export function mountLinkPreviewRoutes(app: express.Express) {
         signal: controller.signal,
         headers: {
           'User-Agent':
-            'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
           Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          Referer: 'https://www.instagram.com/',
         },
       });
 
