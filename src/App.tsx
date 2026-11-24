@@ -800,6 +800,25 @@ export default function App() {
                     onSquareClick={handleSquareClick}
                     selectedSquareId={activeSquareId}
                     fiftyTwoChallenge={fiftyTwoChallenge}
+                    accounts={accounts}
+                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
+                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
+                    onRedeemChallenge={async (challenge, accountId) => {
+                      const today = new Date().toISOString().slice(0, 10);
+                      const createdIncome = await addIncome({
+                        name: `Resgate: ${challenge.title}`,
+                        amount: Number(challenge.totalTarget) || 0,
+                        expectedDate: today,
+                        expectedDay: Number(today.slice(8, 10)),
+                        category: 'Metas',
+                        recurrence: 'none',
+                        startMonth: today.slice(0, 7),
+                        accountId,
+                      });
+                      if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
+                      await toggleIncomeReceived(createdIncome.id);
+                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
+                    }}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
@@ -872,6 +891,25 @@ export default function App() {
                     onCreateChallenge={fiftyTwoChallenge.createChallenge}
                     onCompleteWeek={fiftyTwoChallenge.completeWeek}
                     onUndoWeek={fiftyTwoChallenge.undoWeek}
+                    accounts={accounts}
+                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
+                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
+                    onRedeemChallenge={async (challenge, accountId) => {
+                      const today = new Date().toISOString().slice(0, 10);
+                      const createdIncome = await addIncome({
+                        name: `Resgate: ${challenge.title}`,
+                        amount: Number(challenge.totalTarget) || 0,
+                        expectedDate: today,
+                        expectedDay: Number(today.slice(8, 10)),
+                        category: 'Metas',
+                        recurrence: 'none',
+                        startMonth: today.slice(0, 7),
+                        accountId,
+                      });
+                      if (!createdIncome?.id) throw new Error('Não foi possível registrar o ingresso do resgate.');
+                      await toggleIncomeReceived(createdIncome.id);
+                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, createdIncome.id, accountId);
+                    }}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
