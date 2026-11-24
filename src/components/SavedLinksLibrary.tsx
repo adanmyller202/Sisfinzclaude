@@ -429,6 +429,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
 export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language = 'pt' }) => {
   const isEs = language === 'es';
   const reduceMotion = Boolean(useReducedMotion());
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     links,
@@ -456,7 +457,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
   const [titleInput, setTitleInput] = useState('');
   const [notesInput, setNotesInput] = useState('');
   const [categoryInput, setCategoryInput] = useState('');
-  const [customCoverImage, setCustomCoverImage] = useState<string | null>(null);
+  const [customCoverDataUrl, setCustomCoverDataUrl] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<LinkPreviewResult | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -466,8 +467,6 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
   const [catNameInput, setCatNameInput] = useState('');
   const [catEmojiInput, setCatEmojiInput] = useState('✨');
   const [catColorInput, setCatColorInput] = useState<LinkCategoryColor>('emerald');
-
-  const coverFileInputRef = useRef<HTMLInputElement>(null);
 
   const categoryMap = useMemo(() => {
     const m: Record<string, SavedLinkCategory> = {};
@@ -543,7 +542,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     setUrlInput('');
     setTitleInput('');
     setNotesInput('');
-    setCustomCoverImage(null);
+    setCustomCoverDataUrl(null);
     const defaultCat =
       selectedCategoryId !== 'all' && selectedCategoryId !== 'favorites'
         ? selectedCategoryId
@@ -559,7 +558,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     setTitleInput(link.title);
     setNotesInput(link.notes);
     setCategoryInput(link.categoryId);
-    setCustomCoverImage(null);
+    setCustomCoverDataUrl(null);
     setPreviewData({
       url: link.url,
       normalizedUrl: link.url,
@@ -581,22 +580,19 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     try {
       const meta = await fetchLinkPreview(urlInput.trim());
       setPreviewData(meta);
+      setCustomCoverDataUrl(null);
       setTitleInput(meta.title);
     } finally {
       setIsLoadingPreview(false);
     }
   };
 
-  const handleSelectCustomCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePickCoverImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    try {
-      const dataUrl = await compressCoverFile(file);
-      setCustomCoverImage(dataUrl);
-    } catch {
-      // ignore
-    }
+    const dataUrl = await compressCoverFile(file);
+    setCustomCoverDataUrl(dataUrl);
   };
 
   const handleSaveLinkSubmit = async (e: React.FormEvent) => {
@@ -606,8 +602,8 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     try {
       const meta = previewData || (await fetchLinkPreview(urlInput.trim()));
       const finalTitle = titleInput.trim() || meta.title;
+      const finalImage = customCoverDataUrl || meta.image;
       const targetCatId = categoryInput || categories[0]?.id || 'cat_inspiracoes';
-      const finalImage = customCoverImage || meta.image;
 
       if (editingLink) {
         await updateLink(editingLink.id, {
@@ -690,16 +686,11 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     setIsCategoryModalOpen(false);
   };
 
-  const modalPreviewImg =
-    customCoverImage ||
-    (previewData?.image &&
-    !(previewData.isInstagram && isGenericInstagramPlaceholderUrl(previewData.image))
-      ? previewData.image
-      : null);
+  const activePreviewImage = customCoverDataUrl || previewData?.image || null;
 
   return (
     <div className="space-y-4 pb-24">
-      {/* Search + Layout Toggle + Add Link Row */}
+      {/* Search + Layout Toggle + Highlighted + Button */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -749,14 +740,16 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
           </button>
         </div>
 
-        <button
+        <motion.button
           type="button"
+          whileTap={{ scale: 0.94 }}
           onClick={openAddLinkModal}
-          className="inline-flex items-center gap-1 rounded-2xl bg-emerald-600 px-3.5 py-2.5 text-xs font-black text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 transition-colors cursor-pointer shrink-0"
+          className="inline-flex items-center gap-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 px-3.5 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-600/25 hover:opacity-95 transition-all cursor-pointer shrink-0"
+          aria-label={isEs ? 'Agregar enlace' : 'Adicionar link'}
         >
           <Plus className="h-4 w-4 stroke-[2.8]" />
-          <span>{isEs ? 'Nuevo' : 'Novo'}</span>
-        </button>
+          <span>{isEs ? 'Link' : 'Link'}</span>
+        </motion.button>
       </div>
 
       {/* Horizontal Category Filter Chips */}
@@ -835,9 +828,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                 type="button"
                 onClick={() => openEditCategory(cat)}
                 className={`pr-2.5 pl-0.5 py-1.5 cursor-pointer ${
-                  active
-                    ? 'text-emerald-100 hover:text-white'
-                    : 'text-slate-300 hover:text-emerald-600'
+                  active ? 'text-emerald-100 hover:text-white' : 'text-slate-300 hover:text-emerald-600'
                 }`}
                 title={isEs ? 'Editar categoría' : 'Editar categoria'}
               >
@@ -1068,8 +1059,8 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                 </div>
               </div>
 
-              {/* Live Preview Card + Optional Custom Cover Picker */}
-              {(isLoadingPreview || previewData || customCoverImage) && (
+              {/* Live Preview Card */}
+              {(isLoadingPreview || previewData) && (
                 <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-[#F8FBF9]">
                   {isLoadingPreview ? (
                     <div className="flex items-center gap-2.5 p-3.5 text-xs font-bold text-emerald-700">
@@ -1080,20 +1071,25 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                           : 'Buscando prévia pública do link...'}
                       </span>
                     </div>
-                  ) : (
+                  ) : previewData ? (
                     <div className="flex items-center gap-3 p-2.5">
-                      {modalPreviewImg ? (
+                      {activePreviewImage &&
+                      !(
+                        previewData.isInstagram &&
+                        !customCoverDataUrl &&
+                        isGenericInstagramPlaceholderUrl(activePreviewImage)
+                      ) ? (
                         <img
-                          src={modalPreviewImg}
-                          alt={previewData?.title || 'Capa'}
+                          src={activePreviewImage}
+                          alt={previewData.title}
                           referrerPolicy="no-referrer"
                           className="h-16 w-20 shrink-0 rounded-xl object-cover border border-white shadow-2xs"
                         />
                       ) : (
                         <div className="flex h-16 w-20 shrink-0 flex-col items-center justify-center rounded-xl bg-white border border-emerald-100">
-                          {previewData?.isInstagram ? (
+                          {previewData.isInstagram ? (
                             <Instagram className="h-5 w-5 text-rose-500" />
-                          ) : previewData?.favicon ? (
+                          ) : previewData.favicon ? (
                             <img
                               src={previewData.favicon}
                               alt=""
@@ -1105,47 +1101,38 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                           )}
                         </div>
                       )}
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="truncate text-[10px] font-bold text-emerald-700">
-                          {previewData?.siteName || previewData?.domain || 'Link'}
+                          {previewData.siteName || previewData.domain}
                         </div>
                         <div className="truncate text-xs font-black text-slate-900">
-                          {titleInput || previewData?.title || urlInput}
+                          {titleInput || previewData.title}
                         </div>
-                        {previewData?.description && (
-                          <div className="line-clamp-1 text-[10.5px] font-medium text-slate-500">
+                        {previewData.description && (
+                          <div className="line-clamp-2 text-[10.5px] font-medium text-slate-500">
                             {previewData.description}
                           </div>
                         )}
                         <button
                           type="button"
                           onClick={() => coverFileInputRef.current?.click()}
-                          className="mt-1 inline-flex items-center gap-1 rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-800 hover:bg-emerald-50 cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-700 hover:bg-emerald-50 cursor-pointer"
                         >
-                          <ImagePlus className="h-3 w-3 text-emerald-600" />
-                          <span>
-                            {modalPreviewImg
-                              ? isEs
-                                ? 'Cambiar portada'
-                                : 'Trocar capa'
-                              : isEs
-                              ? 'Elegir portada'
-                              : 'Escolher capa'}
-                          </span>
+                          <ImagePlus className="h-3 w-3" />
+                          <span>{isEs ? 'Elegir portada' : 'Escolher capa'}</span>
                         </button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
+                  <input
+                    ref={coverFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => void handlePickCoverImage(e)}
+                    className="hidden"
+                  />
                 </div>
               )}
-
-              <input
-                ref={coverFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleSelectCustomCover}
-                className="hidden"
-              />
 
               {/* Editable Title */}
               <div className="space-y-1">
