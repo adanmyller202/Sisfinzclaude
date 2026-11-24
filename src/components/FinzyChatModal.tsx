@@ -519,6 +519,14 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
     }
   };
 
+  useEffect(() => {
+    const handleFinzyLiveRequest = () => {
+      if (isOpen) void startLiveVoiceSession();
+    };
+    window.addEventListener('sisfinz:finzy-open-live', handleFinzyLiveRequest);
+    return () => window.removeEventListener('sisfinz:finzy-open-live', handleFinzyLiveRequest);
+  }, [isOpen]);
+
   const engineContext: MoneContext = {
     currentBalance,
     bills,
