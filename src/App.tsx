@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from './context/AuthContext';
 import { useMoneyChallenge } from './hooks/useMoneyChallenge';
@@ -11,21 +11,23 @@ import { AuthScreen } from './components/AuthScreen';
 import { EmailVerificationScreen } from './components/EmailVerificationScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
 import { DepositModal } from './components/DepositModal';
 import { GoalModal } from './components/GoalModal';
 import { EditGoalModal } from './components/EditGoalModal';
 import { AvulsoDepositModal } from './components/AvulsoDepositModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProfileModal } from './components/ProfileModal';
-import { MoneChatModal } from './components/MoneChatModal';
-import { MoneMascot } from './components/MoneMascot';
+import { FinzyChatModal } from './components/FinzyChatModal';
+import { FinzyMascot } from './components/FinzyMascot';
+import {
+  computeFinzyLivingContext,
+  getSavedFinzySkinId,
+  loadCachedLaborJobsForFinzy,
+} from './utils/finzyLiving';
 import { getMoneMood } from './utils/moneMood';
 import { CelebrationModal } from './components/CelebrationModal';
 import { AchievementToast } from './components/AchievementToast';
 import { FinanceDashboard } from './components/FinanceDashboard';
-import { AlertCenter } from './components/AlertCenter';
-import { ObjectivesView } from './components/ObjectivesView';
 import { NavigationDrawerModal } from './components/NavigationDrawerModal';
 import { SharedAccountsView } from './components/shared/SharedAccountsView';
 import { FiftyTwoWeekChallengeView } from './components/FiftyTwoWeekChallengeView';
@@ -50,14 +52,13 @@ import { useFinanceControl } from './hooks/useFinanceControl';
 import { useSharedAccounts } from './hooks/useSharedAccounts';
 import { useCategories } from './hooks/useCategories';
 import { useFiftyTwoWeekChallenge } from './hooks/useFiftyTwoWeekChallenge';
-import { Bot, Sparkles, Loader2, CheckCircle2, Undo2 } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, Undo2 } from 'lucide-react';
 import { getTranslations } from './utils/i18n';
 import { db } from './firebase/config';
 import { collection, doc, getDocs, getDoc, setDoc } from 'firebase/firestore';
 
 export default function App() {
   const { user, loading: authLoading, signOutUser } = useAuth();
-  const lang = 'pt';
 
   const {
     goals,
@@ -65,12 +66,7 @@ export default function App() {
     activeCurrency,
     activeGoalSquares,
     savedAmount,
-    targetAmount,
-    remainingAmount,
-    financialProgressPercent,
     completedSquaresCount,
-    totalSquaresCount,
-    squaresProgressPercent,
     loadingData,
     settings,
     unlockedAchievements,
@@ -88,20 +84,12 @@ export default function App() {
     updateSettings,
     resetActiveGoal,
     resetAllData,
-    exportData,
-    importData,
   } = useMoneyChallenge();
 
   const currentLang = settings.language || 'pt';
   const t = getTranslations(currentLang);
 
-  React.useEffect(() => {
-    const enableDarkMode = Boolean(settings.darkMode);
-    document.documentElement.classList.toggle('dark', enableDarkMode);
-    document.body.classList.toggle('dark', enableDarkMode);
-  }, [settings.darkMode]);
-
-  const { getCategoriesFor, addCategory, allDisplayCategories, updateCategory, deleteCategory, resetPredefinedCategories } = useCategories();
+  const { getCategoriesFor, addCategory } = useCategories();
   const sharedAccounts = useSharedAccounts();
   const fiftyTwoChallenge = useFiftyTwoWeekChallenge();
   const {
@@ -109,16 +97,9 @@ export default function App() {
     totalBalance: accountsTotalBalance,
     adjustAccountBalanceForFinancialItem,
     transferBetweenAccounts,
-    addAccount,
-    updateAccount,
-    deleteAccount,
-    toggleAccountActive,
   } = useAccounts();
 
-  // Hook into finance data for Mone assistant
   const {
-    selectedMonth,
-    setSelectedMonth,
     bills,
     monthBills,
     incomes,
@@ -134,7 +115,6 @@ export default function App() {
     deleteBillOccurrence,
     toggleBillPaid,
     addIncome,
-    addIncomeAsReceived,
     updateIncome,
     deleteIncome,
     toggleIncomeReceived,
@@ -145,9 +125,7 @@ export default function App() {
     resetAllFinanceData,
   } = useFinanceControl(
     sharedAccounts.sharedBills,
-    accounts.length > 0 ? accountsTotalBalance : undefined,
-    adjustAccountBalanceForFinancialItem,
-    accounts
+    accounts.length > 0 ? accountsTotalBalance : undefined
   );
 
   const overdueBillsCount = useMemo(() => {
@@ -156,7 +134,7 @@ export default function App() {
 
   const hasFinanceData = bills.length > 0 || expenses.length > 0 || incomes.length > 0;
 
-  const moneMoodObj = useMemo(() => {
+  const finzyMoodObj = useMemo(() => {
     return getMoneMood({
       forecastBalance,
       currentBalance,
@@ -165,14 +143,34 @@ export default function App() {
     });
   }, [forecastBalance, currentBalance, overdueBillsCount, hasFinanceData]);
 
-  const moneMoodLabel = (t[moneMoodObj.moodLabelKey] as string) || '';
+  const finzyMoodLabel = (t[finzyMoodObj.moodLabelKey] as string) || '';
+
+  const [skinId, setSkinId] = useState<string>(() => getSavedFinzySkinId());
+  const [jobsCache, setJobsCache] = useState(() => loadCachedLaborJobsForFinzy());
+
+  useEffect(() => {
+    const syncSkin = () => setSkinId(getSavedFinzySkinId());
+    const syncJobs = () => setJobsCache(loadCachedLaborJobsForFinzy());
+    window.addEventListener('sisfinz-finzy-skin-change', syncSkin);
+    window.addEventListener('storage', syncJobs);
+    const interval = window.setInterval(syncJobs, 2500);
+    return () => {
+      window.removeEventListener('sisfinz-finzy-skin-change', syncSkin);
+      window.removeEventListener('storage', syncJobs);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const finzyLiving = useMemo(
+    () => computeFinzyLivingContext(jobsCache, currentLang, new Date()),
+    [jobsCache, currentLang]
+  );
 
   const handleFactoryResetAll = useCallback(async () => {
     await resetAllFinanceData();
     await resetAllData();
   }, [resetAllFinanceData, resetAllData]);
 
-  // Complete Account Backup: exports bills, incomes, expenses, categories, statusRecords, balance, goals, settings
   const handleExportCompleteBackup = useCallback(async () => {
     if (!user) return;
     try {
@@ -183,7 +181,9 @@ export default function App() {
       try {
         const catSnap = await getDocs(collection(db, 'users', user.uid, 'categories'));
         catSnap.forEach((d) => customCategories.push(d.data()));
-        const overridesDoc = await getDoc(doc(db, 'users', user.uid, 'settings', 'category_overrides'));
+        const overridesDoc = await getDoc(
+          doc(db, 'users', user.uid, 'settings', 'category_overrides')
+        );
         if (overridesDoc.exists()) {
           categoryOverrides = overridesDoc.data();
         }
@@ -241,7 +241,6 @@ export default function App() {
     unlockedAchievements,
   ]);
 
-  // Complete Account Restore: restores bills, incomes, expenses, categories, statusRecords, balance, goals, settings
   const handleImportCompleteBackup = useCallback(
     async (jsonString: string): Promise<boolean> => {
       if (!user) return false;
@@ -253,7 +252,6 @@ export default function App() {
 
         const now = new Date().toISOString();
 
-        // 1. Restore Goals
         if (Array.isArray(parsed.goals) && parsed.goals.length > 0) {
           for (const g of parsed.goals) {
             if (!g.id) continue;
@@ -265,7 +263,6 @@ export default function App() {
           }
         }
 
-        // 2. Restore Bills
         if (Array.isArray(parsed.bills)) {
           for (const b of parsed.bills) {
             if (!b.id) continue;
@@ -277,7 +274,6 @@ export default function App() {
           }
         }
 
-        // 3. Restore Incomes
         if (Array.isArray(parsed.incomes)) {
           for (const inc of parsed.incomes) {
             if (!inc.id) continue;
@@ -289,7 +285,6 @@ export default function App() {
           }
         }
 
-        // 4. Restore Expenses
         if (Array.isArray(parsed.expenses)) {
           for (const exp of parsed.expenses) {
             if (!exp.id) continue;
@@ -301,7 +296,6 @@ export default function App() {
           }
         }
 
-        // 5. Restore Status Records (monthly payment/receipt states)
         if (Array.isArray(parsed.statusRecords)) {
           for (const s of parsed.statusRecords) {
             if (!s.id) continue;
@@ -313,7 +307,6 @@ export default function App() {
           }
         }
 
-        // 6. Restore Custom Categories
         if (Array.isArray(parsed.customCategories)) {
           for (const c of parsed.customCategories) {
             if (!c.id) continue;
@@ -325,7 +318,6 @@ export default function App() {
           }
         }
 
-        // 7. Restore Category Overrides
         if (parsed.categoryOverrides) {
           await setDoc(
             doc(db, 'users', user.uid, 'settings', 'category_overrides'),
@@ -333,9 +325,10 @@ export default function App() {
           );
         }
 
-        // 8. Restore Balance / Finance Settings
         if (parsed.currentBalance !== undefined || parsed.financeSettings) {
-          const bal = Number(parsed.currentBalance ?? parsed.financeSettings?.currentBalance ?? 0);
+          const bal = Number(
+            parsed.currentBalance ?? parsed.financeSettings?.currentBalance ?? 0
+          );
           await setDoc(doc(db, 'users', user.uid, 'finance_settings', 'main'), {
             userId: user.uid,
             currentBalance: bal,
@@ -344,12 +337,10 @@ export default function App() {
           });
         }
 
-        // 9. Restore App Settings (currency, language, theme, sound)
         if (parsed.settings && typeof parsed.settings === 'object') {
           await updateSettings(parsed.settings);
         }
 
-        // 10. Restore achievements
         if (Array.isArray(parsed.unlockedAchievements)) {
           await setDoc(doc(db, 'users', user.uid, 'achievements', 'unlocked'), {
             list: parsed.unlockedAchievements,
@@ -357,7 +348,6 @@ export default function App() {
           });
         }
 
-        // 11. Restore Savings Goals
         if (Array.isArray(parsed.savings)) {
           for (const s of parsed.savings) {
             if (!s.id) continue;
@@ -369,7 +359,6 @@ export default function App() {
           }
         }
 
-        // 12. Restore Savings Transactions
         if (Array.isArray(parsed.savingTransactions)) {
           for (const tx of parsed.savingTransactions) {
             if (!tx.id) continue;
@@ -389,31 +378,28 @@ export default function App() {
     [user, updateSettings]
   );
 
-  // Navigation View: Controle financeiro, Planejar, Metas, Percepções, Contas, Contas Compartilhadas, etc.
   const [currentView, setCurrentView] = useState<
-    'finance' | 'planejar' | 'goals' | 'savings' | 'categories' | 'report' | 'shared_accounts' | 'challenge_52' | 'full_report' | 'accounts' | 'financial_calendar' | 'freedom' | 'daily_pace'
+    | 'finance'
+    | 'planejar'
+    | 'goals'
+    | 'savings'
+    | 'categories'
+    | 'report'
+    | 'shared_accounts'
+    | 'challenge_52'
+    | 'full_report'
+    | 'accounts'
+    | 'financial_calendar'
+    | 'freedom'
+    | 'daily_pace'
   >('finance');
 
-  // Universal navigation reset: clear page/body/document scroll before and
-  // after animated route transitions (including iOS Safari scroll restoration).
-  const resetAppScroll = React.useCallback(() => {
-    const reset = () => {
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
-      document.querySelectorAll<HTMLElement>('[data-app-scroll]').forEach((el) => { el.scrollTop = 0; });
-    };
-    reset();
-    requestAnimationFrame(() => { reset(); requestAnimationFrame(reset); });
-  }, []);
-
-  React.useLayoutEffect(() => {
-    resetAppScroll();
-  }, [currentView, resetAppScroll]);
-
   const currentNavArea: MainNavArea = useMemo(() => {
-    if (currentView === 'planejar' || currentView === 'financial_calendar' || currentView === 'freedom') {
+    if (
+      currentView === 'planejar' ||
+      currentView === 'financial_calendar' ||
+      currentView === 'freedom'
+    ) {
       return 'planejar';
     }
     if (currentView === 'report' || currentView === 'full_report') {
@@ -429,18 +415,13 @@ export default function App() {
   }, [currentView]);
 
   const handleChangeNavArea = useCallback((area: MainNavArea) => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
     setCurrentView(area);
   }, []);
 
-  // Global FAB Transaction & Transfer Modals
   const [isGlobalTxModalOpen, setIsGlobalTxModalOpen] = useState(false);
   const [globalTxModalType, setGlobalTxModalType] = useState<TransactionType>('expense');
   const [isGlobalTransferModalOpen, setIsGlobalTransferModalOpen] = useState(false);
 
-  // Voice Launcher & Confirmation state
   const { userPreferences, saveCategoryPreference } = useVoicePreferences();
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isVoiceSheetOpen, setIsVoiceSheetOpen] = useState(false);
@@ -510,7 +491,8 @@ export default function App() {
             dueDay: parseInt((item.data || '').split('-')[2]) || 1,
             category: item.categoria || 'Outros',
             recurrence: item.recorrencia === 'monthly' ? 'monthly' : 'none',
-            recurrenceMonthsCount: item.parcelas && item.parcelas > 1 ? item.parcelas : undefined,
+            recurrenceMonthsCount:
+              item.parcelas && item.parcelas > 1 ? item.parcelas : undefined,
             startMonth: (item.data || '').substring(0, 7) || getCurrentMonthStr(),
             accountId: item.contaId || undefined,
           });
@@ -586,7 +568,6 @@ export default function App() {
     [user, availableCategoriesList, accounts, userPreferences]
   );
 
-  // Ensure every account always starts with the same clean, standard financial layout on sign-in
   React.useEffect(() => {
     setCurrentView('finance');
   }, [user?.uid]);
@@ -600,23 +581,40 @@ export default function App() {
     [createGoal]
   );
 
-  // Targeted navigation state when jumping into Finance views with specific filters / months
   const [financeNavParams, setFinanceNavParams] = useState<{
-    tab: 'timeline' | 'bills' | 'upcoming' | 'incomes' | 'expenses' | 'categories' | 'savings' | 'report' | 'calendar' | 'freedom';
+    tab:
+      | 'timeline'
+      | 'bills'
+      | 'upcoming'
+      | 'incomes'
+      | 'expenses'
+      | 'categories'
+      | 'savings'
+      | 'report'
+      | 'calendar'
+      | 'freedom';
     billFilter?: 'all' | 'pending' | 'paid' | 'overdue';
     incomeFilter?: 'all' | 'pending' | 'received';
     month?: string;
-    selectedTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
   } | null>(null);
 
   const handleNavigateToFinanceWithParams = useCallback(
     (
-      tab: 'timeline' | 'bills' | 'upcoming' | 'incomes' | 'expenses' | 'categories' | 'savings' | 'report' | 'calendar' | 'freedom',
+      tab:
+        | 'timeline'
+        | 'bills'
+        | 'upcoming'
+        | 'incomes'
+        | 'expenses'
+        | 'categories'
+        | 'savings'
+        | 'report'
+        | 'calendar'
+        | 'freedom',
       options?: {
         billFilter?: 'all' | 'pending' | 'paid' | 'overdue';
         incomeFilter?: 'all' | 'pending' | 'received';
         month?: string;
-        selectedTransaction?: { type: 'bill' | 'income' | 'expense'; id: string };
       }
     ) => {
       setFinanceNavParams({ tab, ...options });
@@ -625,17 +623,16 @@ export default function App() {
     []
   );
 
-  // Modals state
   const [activeSquareId, setActiveSquareId] = useState<number | null>(null);
   const [isNewGoalOpen, setIsNewGoalOpen] = useState(false);
   const [isEditGoalOpen, setIsEditGoalOpen] = useState(false);
   const [isAvulsoModalOpen, setIsAvulsoModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isMoneChatOpen, setIsMoneChatOpen] = useState(false);
+  const [isFinzyChatOpen, setIsFinzyChatOpen] = useState(false);
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false);
+  const [isDrawerChecklistOpen, setIsDrawerChecklistOpen] = useState(false);
 
-  // Close all open modals and clear active square whenever switching between views to prevent floating/orphan UI
   React.useEffect(() => {
     setActiveSquareId(null);
     setIsNewGoalOpen(false);
@@ -643,14 +640,13 @@ export default function App() {
     setIsAvulsoModalOpen(false);
     setIsSettingsOpen(false);
     setIsProfileOpen(false);
-    setIsMoneChatOpen(false);
+    setIsFinzyChatOpen(false);
     setIsNavDrawerOpen(false);
     setIsGlobalTxModalOpen(false);
     setIsGlobalTransferModalOpen(false);
     setIsVoiceSheetOpen(false);
   }, [currentView]);
 
-  // Selected square clicked in grid
   const handleSquareClick = (squareId: number) => {
     setActiveSquareId(squareId);
   };
@@ -700,7 +696,6 @@ export default function App() {
     );
   }
 
-  // 1. Initial auth loading
   if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F8F6] text-slate-800 mesh-gradient">
@@ -716,33 +711,17 @@ export default function App() {
     );
   }
 
-  // 2. Not authenticated -> Render Login / Signup
   if (!user) {
     return <AuthScreen language={currentLang} />;
   }
 
-  // 3. Authenticated but email NOT verified (Email/Password users only) -> Render Email Verification Screen
   const isGoogleUser = user.providerData.some((p) => p.providerId === 'google.com');
   if (!user.emailVerified && !isGoogleUser) {
     return <EmailVerificationScreen language={currentLang} />;
   }
 
-  // 4. Authenticated & verified user
   return (
-    <div className={`w-full min-w-0 max-w-full min-h-dvh flex flex-col overflow-x-clip bg-[#F4F8F6] dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient`}>
-      {/* Connected push-and-scale shell for the drawer transition. */}
-      <motion.div
-        className="w-full min-w-0 flex flex-col flex-1 origin-left"
-        animate={{
-          x: isNavDrawerOpen ? 46 : 0,
-          scale: isNavDrawerOpen ? 0.965 : 1,
-          borderRadius: isNavDrawerOpen ? 24 : 0,
-          boxShadow: isNavDrawerOpen ? '0 18px 50px rgba(6, 78, 59, 0.12)' : '0 0 0 rgba(6, 78, 59, 0)',
-        }}
-        transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.85 }}
-        style={{ transformOrigin: 'left center', willChange: 'transform, border-radius' }}
-      >
-      {/* Top Navbar */}
+    <div className="min-h-dvh flex flex-col bg-[#F4F8F6] text-slate-900 antialiased selection:bg-emerald-500/20 selection:text-emerald-700 relative mesh-gradient">
       <Navbar
         onOpenMenu={() => setIsNavDrawerOpen(true)}
         currentView={currentView}
@@ -751,13 +730,14 @@ export default function App() {
         language={currentLang}
         onOpenNewGoalModal={() => setIsNewGoalOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenCopilot={() => setIsMoneChatOpen(true)}
-        hasPendingNotifications={sharedAccounts.pendingReceivedInvitationsCount > 0 || sharedAccounts.unreadNotificationsCount > 0}
-        alertCenter={<AlertCenter bills={bills} monthBills={monthBills} incomes={incomes} expenses={expenses} statusRecords={statusRecords} currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance} forecastBalance={forecastBalance} safetyReserveAmount={financeSettings.ritmoDiarioConfig?.safetyReserveAmount || 0} currency={activeCurrency} onOpenBill={(id, month) => handleNavigateToFinanceWithParams('bills', { month, selectedTransaction: { type: 'bill', id } })} onOpenDailyPace={() => setCurrentView('daily_pace')} onOpenGoals={() => setCurrentView('goals')} />}
+        onOpenChecklist={() => setIsDrawerChecklistOpen(true)}
+        onOpenFinzyChat={() => setIsFinzyChatOpen(true)}
+        hasPendingNotifications={
+          sharedAccounts.pendingReceivedInvitationsCount > 0 ||
+          sharedAccounts.unreadNotificationsCount > 0
+        }
       />
 
-      {/* Main Content Area */}
       {loadingData ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-500 dark:text-slate-400">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mb-2" />
@@ -770,17 +750,16 @@ export default function App() {
           </p>
         </div>
       ) : (
-        <div className="w-full min-w-0 max-w-7xl mx-auto flex-none overflow-x-clip">
-          {/* Content Viewport: Clean, wide, space-saving layout */}
-          <main className="w-full min-w-0 flex-none p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-clip overflow-y-visible pb-28 relative">
-            <AnimatePresence mode="sync" initial={false}>
+        <div className="flex-1 flex max-w-7xl w-full mx-auto">
+          <main className="flex-1 min-w-0 p-2 sm:p-3.5 lg:p-5 space-y-3 max-w-full overflow-x-hidden pb-28 relative">
+            <AnimatePresence mode="wait">
               <motion.div
                 key={currentView}
-                initial={{ opacity: 0, x: 54, y: 12, scale: 0.975, filter: 'blur(5px)' }}
-                animate={{ opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, x: -28, y: -5, scale: 0.988, filter: 'blur(2px)' }}
-                transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full min-w-0 min-h-0"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full h-full"
               >
                 {currentView === 'planejar' ? (
                   <PlanningView
@@ -791,9 +770,7 @@ export default function App() {
                     expenses={expenses}
                     sharedBills={sharedAccounts.sharedBills}
                     statusRecords={statusRecords}
-                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
-                    forecastBalance={forecastBalance}
-                    onOpenMoneChat={() => setIsMoneChatOpen(true)}
+                    onOpenMoneChat={() => setIsFinzyChatOpen(true)}
                     onOpenNewTransaction={(type) => {
                       setGlobalTxModalType(type);
                       setIsGlobalTxModalOpen(true);
@@ -809,12 +786,12 @@ export default function App() {
                     currency={activeCurrency}
                     language={currentLang}
                     savedAmount={savedAmount}
-                    targetAmount={targetAmount}
-                    remainingAmount={remainingAmount}
-                    financialProgressPercent={financialProgressPercent}
+                    targetAmount={0}
+                    remainingAmount={0}
+                    financialProgressPercent={0}
                     completedSquaresCount={completedSquaresCount}
-                    totalSquaresCount={totalSquaresCount}
-                    squaresProgressPercent={squaresProgressPercent}
+                    totalSquaresCount={0}
+                    squaresProgressPercent={0}
                     onSwitchGoal={switchGoal}
                     onOpenNewGoalModal={() => setIsNewGoalOpen(true)}
                     onOpenEditGoalModal={() => setIsEditGoalOpen(true)}
@@ -823,36 +800,12 @@ export default function App() {
                     onSquareClick={handleSquareClick}
                     selectedSquareId={activeSquareId}
                     fiftyTwoChallenge={fiftyTwoChallenge}
-                    accounts={accounts}
-                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
-                    onUpdateStorageLocation={fiftyTwoChallenge.updateStorageLocation}
-                    onRedeemChallenge={async (challenge, accountId) => {
-                      if (challenge.redeemedAt || challenge.redemptionIncomeId) throw new Error('Esta meta já foi resgatada.');
-                      const account = accounts.find((item) => item.id === accountId && item.isActive !== false);
-                      if (!account) throw new Error('A conta selecionada não está mais disponível.');
-                      if ((account.currency || 'ARS') !== (challenge.currency || 'ARS')) throw new Error('A conta precisa estar na mesma moeda da meta.');
-                      const today = new Date().toISOString().slice(0, 10);
-                      const month = today.slice(0, 7);
-                      const income = await addIncomeAsReceived({
-                        name: `Plano Semanal – ${challenge.title}`,
-                        amount: Number(challenge.totalTarget) || 0,
-                        expectedDate: today,
-                        expectedDay: Number(today.slice(8, 10)),
-                        category: 'Metas',
-                        recurrence: 'none',
-                        startMonth: month,
-                        accountId,
-                      }, month);
-                      await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
-                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
-                    }}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
                   />
                 ) : currentView === 'report' ? (
                   <FullReportView
                     currency={activeCurrency}
-                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
@@ -878,35 +831,36 @@ export default function App() {
                       </p>
                     </div>
                   ) : (
-                      <SharedAccountsView
-                        currency={activeCurrency}
-                        language={currentLang}
-                        myUserId={user.uid}
-                        connections={sharedAccounts.connections}
-                        activePartners={sharedAccounts.activePartners}
-                        receivedInvitations={sharedAccounts.receivedInvitations}
-                        sentInvitations={sharedAccounts.sentInvitations}
-                        sharedBills={sharedAccounts.sharedBills}
-                        sharedNotifications={sharedAccounts.sharedNotifications}
-                        unreadNotificationsCount={sharedAccounts.unreadNotificationsCount}
-                        pendingReceivedInvitationsCount={sharedAccounts.pendingReceivedInvitationsCount}
-                        onSendInvitation={sharedAccounts.sendInvitation}
-                        onRespondInvitation={sharedAccounts.respondInvitation}
-                        onCreateSharedBill={sharedAccounts.createSharedBill}
-                        onUpdateSharedBill={sharedAccounts.updateSharedBill}
-                        onDeleteSharedBill={sharedAccounts.deleteSharedBill}
-                        onDeleteSharedBillOccurrence={sharedAccounts.deleteSharedBillOccurrence}
-                        onRespondShareBillRequest={sharedAccounts.respondShareBillRequest}
-                        onMarkNotificationRead={sharedAccounts.markNotificationRead}
-                        onMarkAllNotificationsRead={sharedAccounts.markAllNotificationsRead}
-                        onClearNotifications={sharedAccounts.clearNotifications}
-                        onStopSharingAndConvert={sharedAccounts.stopSharingAndConvert}
-                        onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
-                        onReturnToFinance={() => setCurrentView('finance')}
-                        getCategoriesFor={getCategoriesFor}
-                        onAddCategory={addCategory}
-                      />
-
+                    <SharedAccountsView
+                      currency={activeCurrency}
+                      language={currentLang}
+                      myUserId={user.uid}
+                      connections={sharedAccounts.connections}
+                      activePartners={sharedAccounts.activePartners}
+                      receivedInvitations={sharedAccounts.receivedInvitations}
+                      sentInvitations={sharedAccounts.sentInvitations}
+                      sharedBills={sharedAccounts.sharedBills}
+                      sharedNotifications={sharedAccounts.sharedNotifications}
+                      unreadNotificationsCount={sharedAccounts.unreadNotificationsCount}
+                      pendingReceivedInvitationsCount={
+                        sharedAccounts.pendingReceivedInvitationsCount
+                      }
+                      onSendInvitation={sharedAccounts.sendInvitation}
+                      onRespondInvitation={sharedAccounts.respondInvitation}
+                      onCreateSharedBill={sharedAccounts.createSharedBill}
+                      onUpdateSharedBill={sharedAccounts.updateSharedBill}
+                      onDeleteSharedBill={sharedAccounts.deleteSharedBill}
+                      onDeleteSharedBillOccurrence={sharedAccounts.deleteSharedBillOccurrence}
+                      onRespondShareBillRequest={sharedAccounts.respondShareBillRequest}
+                      onMarkNotificationRead={sharedAccounts.markNotificationRead}
+                      onMarkAllNotificationsRead={sharedAccounts.markAllNotificationsRead}
+                      onClearNotifications={sharedAccounts.clearNotifications}
+                      onStopSharingAndConvert={sharedAccounts.stopSharingAndConvert}
+                      onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
+                      onReturnToFinance={() => setCurrentView('finance')}
+                      getCategoriesFor={getCategoriesFor}
+                      onAddCategory={addCategory}
+                    />
                   )
                 ) : currentView === 'challenge_52' ? (
                   <FiftyTwoWeekChallengeView
@@ -918,18 +872,6 @@ export default function App() {
                     onCreateChallenge={fiftyTwoChallenge.createChallenge}
                     onCompleteWeek={fiftyTwoChallenge.completeWeek}
                     onUndoWeek={fiftyTwoChallenge.undoWeek}
-                    onUpdateStorageLocation={(challengeId, location) => fiftyTwoChallenge.updateStorageLocation(challengeId, location)}
-                    onRedeemChallenge={async (challenge, accountId) => {
-                      const account = accounts.find((item) => item.id === accountId && item.isActive !== false);
-                      if (!account) throw new Error('Conta indisponível.');
-                      const today = new Date().toISOString().slice(0, 10);
-                      const month = today.slice(0, 7);
-                      const income = await addIncomeAsReceived({ name: 'Plano Semanal - ' + challenge.title, amount: Number(challenge.totalTarget) || 0, expectedDate: today, expectedDay: Number(today.slice(8, 10)), category: 'Metas', recurrence: 'none', startMonth: month, accountId }, month);
-                      await adjustAccountBalanceForFinancialItem(accountId, Number(challenge.totalTarget) || 0);
-                      await fiftyTwoChallenge.markChallengeRedeemed(challenge.id, income.id, accountId);
-                    }}
-                    accounts={accounts}
-                    onAdjustAccountBalance={adjustAccountBalanceForFinancialItem}
                     onDeleteChallenge={fiftyTwoChallenge.deleteChallenge}
                     onAddExpense={addExpense}
                     onDeleteExpense={deleteExpense}
@@ -938,7 +880,6 @@ export default function App() {
                 ) : currentView === 'full_report' ? (
                   <FullReportView
                     currency={activeCurrency}
-                    currentAccountBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
                     language={currentLang}
                     bills={bills}
                     incomes={incomes}
@@ -955,15 +896,7 @@ export default function App() {
                     currency={activeCurrency}
                     language={currentLang}
                     onReturnToFinance={() => setCurrentView('finance')}
-                    onOpenMoneChat={() => setIsMoneChatOpen(true)}
-                    onOpenTransaction={(item, month) => {
-                      if (!item.originalId) return;
-                      const type = item.type;
-                      handleNavigateToFinanceWithParams(
-                        type === 'bill' ? 'bills' : type === 'income' ? 'incomes' : 'expenses',
-                        { month, selectedTransaction: { type, id: item.originalId } }
-                      );
-                    }}
+                    onOpenMoneChat={() => setIsFinzyChatOpen(true)}
                   />
                 ) : currentView === 'freedom' ? (
                   <MonthlyFreedomScale
@@ -976,8 +909,6 @@ export default function App() {
                     currency={activeCurrency}
                     language={currentLang}
                     startMonth={getCurrentMonthStr()}
-                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
-                    forecastBalance={forecastBalance}
                     onReturnToFinance={() => setCurrentView('finance')}
                   />
                 ) : (currentView as string) === 'daily_pace' ? (
@@ -986,7 +917,11 @@ export default function App() {
                     incomes={incomes}
                     expenses={expenses}
                     accounts={accounts}
-                    currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
+                    currentBalance={
+                      accounts.length > 0 && accountsTotalBalance !== 0
+                        ? accountsTotalBalance
+                        : currentBalance
+                    }
                     sharedBills={sharedAccounts.sharedBills}
                     statusRecords={statusRecords}
                     currency={activeCurrency}
@@ -997,17 +932,11 @@ export default function App() {
                     onUpdateConfig={updateRitmoDiarioConfig}
                     onReturnToFinance={() => setCurrentView('finance')}
                   />
-                ) : (currentView as string) === 'accounts' ? (
-                  <AccountsView
-                    currency={activeCurrency}
-                    language={currentLang}
-                    onReturnToFinance={() => setCurrentView('finance')}
-                  />
                 ) : (
                   <FinanceDashboard
                     currency={activeCurrency}
                     language={currentLang}
-                    onOpenMoneChat={() => setIsMoneChatOpen(true)}
+                    onOpenMoneChat={() => setIsFinzyChatOpen(true)}
                     goals={goals}
                     activeGoal={activeGoal}
                     onNavigateToGoals={() => setCurrentView('goals')}
@@ -1023,7 +952,6 @@ export default function App() {
                     initialBillFilter={financeNavParams?.billFilter}
                     initialIncomeFilter={financeNavParams?.incomeFilter}
                     initialMonth={financeNavParams?.month}
-                    initialTransaction={financeNavParams?.selectedTransaction}
                     onReturnToFinance={() => setCurrentView('finance')}
                     activePartners={sharedAccounts.activePartners}
                     onShareWithPartner={async (params) => {
@@ -1068,35 +996,32 @@ export default function App() {
           </main>
         </div>
       )}
-      </motion.div>
 
-      {/* Floating Mone Assistant Action Button */}
+      {/* Floating Finzy Assistant Action Button */}
       <button
         type="button"
-        onClick={() => setIsMoneChatOpen(true)}
-        className="fixed md:hidden bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer group print:hidden mb-[env(safe-area-inset-bottom,0px)]"
-        title={`${t.askMone} • ${moneMoodLabel}`}
+        onClick={() => setIsFinzyChatOpen(true)}
+        className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-xs sm:text-sm rounded-full shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer group print:hidden mb-[env(safe-area-inset-bottom,0px)]"
+        title={`Finzy • ${finzyMoodLabel}`}
       >
         <div className="relative shrink-0 flex items-center justify-center">
-          <MoneMascot mood={moneMoodObj.mood} size="sm" className="w-5.5 h-5.5" />
+          <FinzyMascot
+            mood={finzyMoodObj.mood}
+            routineState={finzyLiving.routineState}
+            skinId={skinId}
+            size="sm"
+            className="w-5.5 h-5.5"
+          />
           <Sparkles className="w-2.5 h-2.5 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
         </div>
-        <span className="tracking-wide">Mone</span>
+        <span className="tracking-wide">Finzy</span>
       </button>
 
-      {/* Mone Financial Assistant Chat Modal */}
-      <MoneChatModal
-        isOpen={isMoneChatOpen}
-        onClose={() => setIsMoneChatOpen(false)}
-        currentBalance={accounts.length > 0 ? accountsTotalBalance : currentBalance}
-        forecastBalance={forecastBalance}
-        accounts={accounts}
-        sharedBills={sharedAccounts.sharedBills}
-        sharedPartners={sharedAccounts.activePartners}
-        sharedInvitations={sharedAccounts.receivedInvitations}
-        weeklyChallenges={fiftyTwoChallenge.challenges}
-        categories={allDisplayCategories}
-        myUserId={user?.uid}
+      {/* Finzy Assistant Chat Modal */}
+      <FinzyChatModal
+        isOpen={isFinzyChatOpen}
+        onClose={() => setIsFinzyChatOpen(false)}
+        currentBalance={currentBalance}
         bills={bills}
         incomes={incomes}
         expenses={expenses}
@@ -1106,15 +1031,11 @@ export default function App() {
         language={currentLang}
         moneStyle={settings.moneStyle || 'direto'}
         onChangeMoneStyle={(style) => updateSettings({ moneStyle: style })}
-        mood={moneMoodObj.mood}
-        moodLabel={moneMoodLabel}
-        onAddExpense={async (expenseData: Parameters<typeof addExpense>[0]) => {
-          const created = await addExpense(expenseData);
-          if (expenseData.accountId) {
-            await adjustAccountBalanceForFinancialItem(expenseData.accountId, -expenseData.amount);
-          }
-          return created;
-        }}
+        mood={finzyMoodObj.mood}
+        moodLabel={finzyMoodLabel}
+        routineState={finzyLiving.routineState}
+        skinId={skinId}
+        onAddExpense={addExpense}
         onUpdateExpense={updateExpense}
         onDeleteExpense={deleteExpense}
         onAddBill={addBill}
@@ -1122,40 +1043,11 @@ export default function App() {
         onDeleteBill={deleteBill}
         onToggleBillPaid={toggleBillPaid}
         onAddIncome={addIncome}
-        onAddIncomeAsReceived={async (incomeData, receivedMonth) => {
-          const created = await addIncomeAsReceived(incomeData, receivedMonth);
-          if (incomeData.accountId) {
-            await adjustAccountBalanceForFinancialItem(incomeData.accountId, incomeData.amount);
-          }
-          return created;
-        }}
         onUpdateIncome={updateIncome}
         onDeleteIncome={deleteIncome}
         onToggleIncomeReceived={toggleIncomeReceived}
         onUpdateCurrentBalance={updateCurrentBalance}
         onCreateGoal={handleSaveNewGoal}
-        onUpdateGoal={updateGoal}
-        onDeleteGoal={deleteGoal}
-        onTransferBetweenAccounts={transferBetweenAccounts}
-        onToggleMySharePaid={sharedAccounts.toggleMySharePaid}
-        onCompleteChallengeWeek={(challengeId, weekNumber, accountId) =>
-          fiftyTwoChallenge.completeWeek(challengeId, weekNumber, accountId, adjustAccountBalanceForFinancialItem)
-        }
-        onUndoChallengeWeek={(challengeId, weekNumber, returnAccountId) =>
-          fiftyTwoChallenge.undoWeek(challengeId, weekNumber, returnAccountId, adjustAccountBalanceForFinancialItem, deleteExpense)
-        }
-        onAddCategory={(name, scope) => addCategory(name, scope)}
-        onUpdateCategory={(categoryId, updates) => updateCategory(categoryId, updates)}
-        onDeleteCategory={(categoryId) => deleteCategory(categoryId)}
-        onAddAccount={(params) => addAccount(params)}
-        onUpdateAccount={(accountId, params) => updateAccount(accountId, params)}
-        onDeleteAccount={(accountId) => deleteAccount(accountId)}
-        onToggleAccountActive={(accountId) => toggleAccountActive(accountId)}
-        onCreateSharedBill={(params) => sharedAccounts.createSharedBill(params)}
-        onUpdateSharedBill={(billId, updates) => sharedAccounts.updateSharedBill(billId, updates)}
-        onDeleteSharedBill={(billId) => sharedAccounts.deleteSharedBill(billId, true)}
-        onSendSharedInvitation={(email) => sharedAccounts.sendInvitation(email)}
-        onRespondSharedInvitation={(invitationId, accept) => sharedAccounts.respondInvitation(invitationId, accept)}
       />
 
       {/* Deposit Modal */}
@@ -1171,7 +1063,6 @@ export default function App() {
         onUndo={uncompleteSquare}
       />
 
-      {/* Avulso Deposit Modal */}
       {activeGoal && (
         <AvulsoDepositModal
           isOpen={isAvulsoModalOpen}
@@ -1183,7 +1074,6 @@ export default function App() {
         />
       )}
 
-      {/* Goal Modal (Add new goal with dynamic calculated squares) */}
       <GoalModal
         isOpen={isNewGoalOpen}
         onClose={() => setIsNewGoalOpen(false)}
@@ -1192,7 +1082,6 @@ export default function App() {
         onSave={handleSaveNewGoal}
       />
 
-      {/* Edit Goal Modal */}
       {activeGoal && (
         <EditGoalModal
           isOpen={isEditGoalOpen}
@@ -1203,7 +1092,6 @@ export default function App() {
         />
       )}
 
-      {/* Navigation Drawer Modal (3-Bars Top-Left Menu) */}
       <NavigationDrawerModal
         isOpen={isNavDrawerOpen}
         onClose={() => setIsNavDrawerOpen(false)}
@@ -1211,16 +1099,20 @@ export default function App() {
         onChangeView={setCurrentView}
         goalsCount={goals.length}
         savingsCount={0}
-        sharedPendingCount={sharedAccounts.pendingReceivedInvitationsCount + sharedAccounts.unreadNotificationsCount}
-        onOpenMoneChat={() => setIsMoneChatOpen(true)}
+        sharedPendingCount={
+          sharedAccounts.pendingReceivedInvitationsCount +
+          sharedAccounts.unreadNotificationsCount
+        }
+        onOpenMoneChat={() => setIsFinzyChatOpen(true)}
         onOpenSettingsModal={() => setIsSettingsOpen(true)}
         onOpenProfileModal={() => setIsProfileOpen(true)}
+        externalChecklistOpen={isDrawerChecklistOpen}
+        onExternalChecklistClose={() => setIsDrawerChecklistOpen(false)}
         language={currentLang}
         darkMode={settings.darkMode}
         onToggleDarkMode={() => updateSettings({ darkMode: !settings.darkMode })}
       />
 
-      {/* Settings Modal (Configurações) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -1234,14 +1126,8 @@ export default function App() {
         expenses={expenses}
         currency={activeCurrency}
         language={currentLang}
-        categories={allDisplayCategories}
-        onAddCategory={addCategory}
-        onUpdateCategory={updateCategory}
-        onDeleteCategory={deleteCategory}
-        onResetPredefinedCategories={resetPredefinedCategories}
       />
 
-      {/* Profile Modal (Perfil) */}
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
@@ -1251,7 +1137,6 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* 100% Completion Celebration Modal */}
       {activeGoal && (
         <CelebrationModal
           isOpen={justFinishedAll}
@@ -1263,7 +1148,6 @@ export default function App() {
         />
       )}
 
-      {/* Global Transaction Modal (for FAB action items) */}
       <TransactionModal
         isOpen={isGlobalTxModalOpen}
         onClose={() => setIsGlobalTxModalOpen(false)}
@@ -1292,7 +1176,6 @@ export default function App() {
         onDeleteExpense={deleteExpense}
       />
 
-      {/* Global Transfer Between Accounts Modal */}
       <TransferBetweenAccountsModal
         isOpen={isGlobalTransferModalOpen}
         onClose={() => setIsGlobalTransferModalOpen(false)}
@@ -1302,7 +1185,6 @@ export default function App() {
         onExecuteTransfer={transferBetweenAccounts}
       />
 
-      {/* Floating Action Button (FAB) for Voice Input */}
       <VoiceLauncherFAB
         isFabMenuOpen={isFabMenuOpen}
         categories={availableCategoriesList}
@@ -1314,7 +1196,6 @@ export default function App() {
         onTriggerComplete={() => setIsVoiceTriggered(false)}
       />
 
-      {/* Floating Action Button (FAB) for Quick Financial Actions */}
       <QuickActionFAB
         language={currentLang}
         onMenuToggle={(isOpen) => setIsFabMenuOpen(isOpen)}
@@ -1336,9 +1217,9 @@ export default function App() {
         onOpenSharedBill={() => {
           setCurrentView('shared_accounts');
         }}
+        onOpenVoice={() => setIsVoiceTriggered(true)}
       />
 
-      {/* Voice Confirmation Sheet */}
       <VoiceConfirmationSheet
         isOpen={isVoiceSheetOpen}
         onClose={() => setIsVoiceSheetOpen(false)}
@@ -1353,7 +1234,6 @@ export default function App() {
         onCategoryChangePreference={saveCategoryPreference}
       />
 
-      {/* 5-second Undo Toast Notification */}
       {voiceUndoToast && voiceUndoToast.show && (
         <div
           style={{
@@ -1379,7 +1259,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Fixed Bottom Navigation Bar */}
       <BottomNav
         currentArea={currentNavArea}
         onChangeArea={handleChangeNavArea}
@@ -1388,7 +1267,6 @@ export default function App() {
         goalsMilestoneCount={completedSquaresCount > 0 ? 1 : 0}
       />
 
-      {/* Achievement Unlocked Toast Notification */}
       <AchievementToast
         achievement={recentAchievement}
         language={currentLang}

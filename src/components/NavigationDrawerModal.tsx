@@ -24,9 +24,11 @@ import {
   SlidersHorizontal,
   Check,
   Briefcase,
+  CheckSquare,
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LaborAgendaView } from './labor/LaborAgendaView';
+import { SmartChecklistView } from './SmartChecklistView';
 
 type DrawerViewId =
   | 'finance'
@@ -42,12 +44,13 @@ type DrawerViewId =
   | 'financial_calendar'
   | 'freedom'
   | 'daily_pace'
-  | 'labor_agenda';
+  | 'labor_agenda'
+  | 'smart_checklists';
 
 interface NavigationDrawerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentView: Exclude<DrawerViewId, 'labor_agenda'>;
+  currentView: Exclude<DrawerViewId, 'labor_agenda' | 'smart_checklists'>;
   onChangeView: (view: any) => void;
   goalsCount: number;
   savingsCount: number;
@@ -55,6 +58,8 @@ interface NavigationDrawerModalProps {
   onOpenMoneChat: () => void;
   onOpenSettingsModal: () => void;
   onOpenProfileModal: () => void;
+  externalChecklistOpen?: boolean;
+  onExternalChecklistClose?: () => void;
   language?: LanguageCode;
   darkMode?: boolean;
   onToggleDarkMode?: () => void;
@@ -78,6 +83,8 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   savingsCount,
   sharedPendingCount = 0,
   onOpenProfileModal,
+  externalChecklistOpen = false,
+  onExternalChecklistClose,
   language = 'pt',
 }) => {
   const t = getTranslations(language);
@@ -89,7 +96,19 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   const [pendingView, setPendingView] = useState<string | null>(null);
   const [isManagingShortcuts, setIsManagingShortcuts] = useState(false);
   const [isLaborAgendaOpen, setIsLaborAgendaOpen] = useState(false);
+  const [isChecklistOpen, setIsChecklistOpen] = useState(false);
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (externalChecklistOpen) {
+      setIsChecklistOpen(true);
+    }
+  }, [externalChecklistOpen]);
+
+  const handleCloseChecklist = () => {
+    setIsChecklistOpen(false);
+    onExternalChecklistClose?.();
+  };
 
   const storageKey = `${STORAGE_KEY_PREFIX}${user?.uid || 'guest'}`;
 
@@ -106,7 +125,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     return [];
   });
 
-  // Sync shortcuts when user changes
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -123,7 +141,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     setEnabledShortcuts([]);
   }, [storageKey]);
 
-  // Allow desktop sidebar or other triggers to open Jornada Laboral cleanly
   useEffect(() => {
     const openHandler = () => setIsLaborAgendaOpen(true);
     window.addEventListener('sisfinz:open-labor-agenda', openHandler);
@@ -132,9 +149,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
 
   const toggleShortcut = (id: DrawerViewId) => {
     setEnabledShortcuts((prev) => {
-      const next = prev.includes(id)
-        ? prev.filter((item) => item !== id)
-        : [...prev, id];
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
       try {
         localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
@@ -144,7 +159,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     });
   };
 
-  // Lock the page behind the drawer on iOS/PWA as well as desktop.
   useEffect(() => {
     if (!isOpen) return;
     const body = document.body;
@@ -168,6 +182,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     body.style.overflow = 'hidden';
     html.style.overflow = 'hidden';
     html.style.overscrollBehavior = 'none';
+
     return () => {
       body.style.position = previous.bodyPosition;
       body.style.top = previous.bodyTop;
@@ -208,6 +223,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       if (view === 'labor_agenda') {
         onClose();
         setIsLaborAgendaOpen(true);
+      } else if (view === 'smart_checklists') {
+        onClose();
+        setIsChecklistOpen(true);
       } else {
         onChangeView(view);
         onClose();
@@ -216,7 +234,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     }, reduceMotion ? 0 : 280);
   };
 
-  // Fixed lateral items: tools NOT in the main bottom bar
   const coreItems: NavItemDef[] = useMemo(
     () => [
       {
@@ -227,6 +244,15 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             ? 'Turnos, fichaje, sueldo y propinas'
             : 'Turnos, ponto, salário e propinas',
         icon: Briefcase,
+      },
+      {
+        id: 'smart_checklists',
+        label: language === 'es' ? 'Checklists Reutilizables' : 'Checklists Reutilizáveis',
+        desc:
+          language === 'es'
+            ? 'Mochila, mercado, viaje y reset rápido'
+            : 'Mochila, mercado, viagem e reset rápido',
+        icon: CheckSquare,
       },
       {
         id: 'daily_pace',
@@ -245,9 +271,14 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     [language, sharedPendingCount]
   );
 
-  // Full catalog of screens the user can pin as quick shortcuts
   const shortcutCatalog: NavItemDef[] = useMemo(
     () => [
+      {
+        id: 'smart_checklists',
+        label: language === 'es' ? 'Checklists Reutilizables' : 'Checklists Reutilizáveis',
+        desc: language === 'es' ? 'Mochila, mercado y viaje' : 'Mochila, mercado e viagem',
+        icon: CheckSquare,
+      },
       {
         id: 'challenge_52',
         label: language === 'es' ? 'Mis Frascos' : 'Meus Frascos',
@@ -326,7 +357,12 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
     : user?.email?.charAt(0).toUpperCase() || 'U';
 
   const renderNavButton = (item: NavItemDef) => {
-    const isActive = item.id === 'labor_agenda' ? isLaborAgendaOpen : currentView === item.id;
+    const isActive =
+      item.id === 'labor_agenda'
+        ? isLaborAgendaOpen
+        : item.id === 'smart_checklists'
+        ? isChecklistOpen
+        : currentView === item.id;
     const isSelected = pendingView === item.id;
     const isHighlighted = pendingView ? isSelected : isActive;
     const Icon = item.icon;
@@ -356,22 +392,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
             }}
           />
         )}
-        {isSelected && (
-          <>
-            <motion.span
-              className="absolute inset-y-0 left-0 w-1/2 -z-0 pointer-events-none bg-gradient-to-r from-transparent via-white/25 to-transparent"
-              initial={{ x: '-130%' }}
-              animate={{ x: '260%' }}
-              transition={{ duration: reduceMotion ? 0.01 : 0.28, ease: [0.22, 1, 0.36, 1] }}
-            />
-            <motion.span
-              className="absolute -inset-2 -z-10 rounded-3xl border-2 border-emerald-300/80"
-              initial={{ opacity: 0, scale: 0.88 }}
-              animate={{ opacity: [0, 1, 0], scale: [0.88, 1.08, 1.2] }}
-              transition={{ duration: reduceMotion ? 0.01 : 0.3, ease: [0.16, 1, 0.3, 1] }}
-            />
-          </>
-        )}
 
         <div className="relative z-10 flex items-center gap-3.5 min-w-0">
           <motion.div
@@ -390,13 +410,19 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           </motion.div>
           <div className="text-left min-w-0">
             <motion.div
-              animate={{ x: isSelected ? 3 : 0, letterSpacing: isSelected ? '0.01em' : '0em' }}
+              animate={{ x: isSelected ? 3 : 0 }}
               transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
-              className={`text-sm font-black truncate ${isHighlighted ? 'text-white' : 'text-slate-900'}`}
+              className={`text-sm font-black truncate ${
+                isHighlighted ? 'text-white' : 'text-slate-900'
+              }`}
             >
               {item.label}
             </motion.div>
-            <div className={`text-[10px] font-medium truncate ${isHighlighted ? 'text-emerald-100' : 'text-slate-500'}`}>
+            <div
+              className={`text-[10px] font-medium truncate ${
+                isHighlighted ? 'text-emerald-100' : 'text-slate-500'
+              }`}
+            >
               {item.desc}
             </div>
           </div>
@@ -456,10 +482,16 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent pointer-events-none" />
                         <div className="flex items-center gap-3.5 relative z-10">
                           <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-md border border-white/90">
-                            <img src="/assets/aistudio/image_89b2520a.jpeg" alt="Logo" className="w-full h-full object-cover" />
+                            <img
+                              src="/assets/aistudio/image_89b2520a.jpeg"
+                              alt="Logo"
+                              className="w-full h-full object-cover"
+                            />
                           </div>
                           <div>
-                            <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">SisFinz</h2>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">
+                              SisFinz
+                            </h2>
                             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mt-1">
                               Gestão Financeira
                             </p>
@@ -487,14 +519,22 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         >
                           <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl font-black text-white shadow-md border border-white/50 overflow-hidden shrink-0">
                             {user?.photoURL ? (
-                              <img src={user.photoURL} alt="Foto" className="w-full h-full object-cover" />
+                              <img
+                                src={user.photoURL}
+                                alt="Foto"
+                                className="w-full h-full object-cover"
+                              />
                             ) : (
                               userInitial
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-black text-slate-900 truncate">{user?.displayName || 'Usuário'}</div>
-                            <div className="text-[10px] font-medium text-slate-500 truncate">{user?.email}</div>
+                            <div className="text-sm font-black text-slate-900 truncate">
+                              {user?.displayName || 'Usuário'}
+                            </div>
+                            <div className="text-[10px] font-medium text-slate-500 truncate">
+                              {user?.email}
+                            </div>
                           </div>
                           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-700 transition-colors" />
                         </button>
@@ -503,9 +543,12 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                       {/* Scrollable Menu Content */}
                       <div
                         className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-3 space-y-6"
-                        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehaviorY: 'contain' }}
+                        style={{
+                          WebkitOverflowScrolling: 'touch',
+                          touchAction: 'pan-y',
+                          overscrollBehaviorY: 'contain',
+                        }}
                       >
-                        {/* Core Tools (Not in main bottom bar) */}
                         <div className="space-y-2">
                           <div className="px-3 text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
@@ -516,7 +559,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                           </div>
                         </div>
 
-                        {/* User's Enabled Shortcuts */}
                         <AnimatePresence>
                           {activeShortcutItems.length > 0 && (
                             <motion.div
@@ -552,7 +594,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                           )}
                         </AnimatePresence>
 
-                        {/* Add Shortcut Button */}
                         <div className="px-1 pt-1">
                           <motion.button
                             type="button"
@@ -605,7 +646,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                       transition={{ duration: reduceMotion ? 0.01 : 0.22, ease: [0.22, 1, 0.36, 1] }}
                       className="flex flex-col h-full min-h-0"
                     >
-                      {/* Shortcut Manager Header */}
                       <div className="p-5 border-b border-emerald-100 bg-gradient-to-br from-emerald-600 via-emerald-600 to-teal-700 text-white shrink-0 relative overflow-hidden">
                         <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
                         <div className="relative z-10 flex items-center justify-between gap-2">
@@ -618,7 +658,8 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                             {language === 'es' ? 'Volver' : 'Voltar'}
                           </button>
                           <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-                            {activeShortcutItems.length} {activeShortcutItems.length === 1 ? 'ativo' : 'ativos'}
+                            {activeShortcutItems.length}{' '}
+                            {activeShortcutItems.length === 1 ? 'ativo' : 'ativos'}
                           </span>
                         </div>
                         <div className="relative z-10 mt-3.5">
@@ -633,10 +674,13 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Interactive Toggle List */}
                       <div
                         className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-3 py-3 space-y-2"
-                        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehaviorY: 'contain' }}
+                        style={{
+                          WebkitOverflowScrolling: 'touch',
+                          touchAction: 'pan-y',
+                          overscrollBehaviorY: 'contain',
+                        }}
                       >
                         {shortcutCatalog.map((item) => {
                           const isEnabled = enabledShortcuts.includes(item.id);
@@ -678,7 +722,11 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                   <Icon className="w-5 h-5" />
                                 </motion.div>
                                 <div className="min-w-0 text-left">
-                                  <div className={`text-sm font-black truncate ${isEnabled ? 'text-emerald-950' : 'text-slate-800'}`}>
+                                  <div
+                                    className={`text-sm font-black truncate ${
+                                      isEnabled ? 'text-emerald-950' : 'text-slate-800'
+                                    }`}
+                                  >
                                     {item.label}
                                   </div>
                                   <div className="text-[10px] font-medium text-slate-500 truncate">
@@ -687,10 +735,11 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                 </div>
                               </div>
 
-                              {/* Interactive Animated Toggle Switch (Emerald ON / Gray OFF) */}
                               <div
                                 className={`relative flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors duration-200 ${
-                                  isEnabled ? 'bg-emerald-500 shadow-inner shadow-emerald-700/20' : 'bg-slate-300/90'
+                                  isEnabled
+                                    ? 'bg-emerald-500 shadow-inner shadow-emerald-700/20'
+                                    : 'bg-slate-300/90'
                                 }`}
                               >
                                 <motion.span
@@ -700,7 +749,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                                     isEnabled ? 'ml-auto' : 'mr-auto'
                                   }`}
                                 >
-                                  {isEnabled && <Check className="h-3 w-3 text-emerald-600 stroke-[3]" />}
+                                  {isEnabled && (
+                                    <Check className="h-3 w-3 text-emerald-600 stroke-[3]" />
+                                  )}
                                 </motion.span>
                               </div>
                             </motion.div>
@@ -708,7 +759,6 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
                         })}
                       </div>
 
-                      {/* Done Button Footer */}
                       <div className="p-4 border-t border-slate-200 bg-white shrink-0">
                         <motion.button
                           type="button"
@@ -730,10 +780,15 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         document.body
       )}
 
-      {/* Full-Screen Interactive Jornada Laboral Experience */}
       <LaborAgendaView
         isOpen={isLaborAgendaOpen}
         onClose={() => setIsLaborAgendaOpen(false)}
+        language={language}
+      />
+
+      <SmartChecklistView
+        isOpen={isChecklistOpen}
+        onClose={handleCloseChecklist}
         language={language}
       />
     </>
