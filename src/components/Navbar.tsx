@@ -30,7 +30,7 @@ interface NavbarProps {
   activeGoal: ChallengeGoal | null;
   language?: LanguageCode;
   onOpenNewGoalModal: () => void;
-  onOpenProfile: () => void;
+  onOpenProfile?: () => void;
   onOpenChecklist?: () => void;
   onOpenReminders?: () => void;
   remindersBadgeCount?: number;
@@ -43,7 +43,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   activeGoal,
   language = 'pt',
-  onOpenProfile,
   onOpenChecklist,
   onOpenReminders,
   remindersBadgeCount = 0,
@@ -189,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Right: Compact Franco Pill + Reminders + Checklist + Finzy Vivo Mascot + Profile */}
+          {/* Right: Compact Franco Pill + Reminders + Checklist + Finzy Vivo Mascot */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {living.franco.hasJob && (
               <button
@@ -272,21 +271,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 skinId={skinId}
                 size={38}
               />
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              type="button"
-              onClick={onOpenProfile}
-              className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 shadow-2xs transition-all cursor-pointer"
-            >
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-xs shadow-2xs">
-                {t.profileInitial}
-              </div>
-              <span className="hidden md:inline text-xs font-semibold text-slate-700">
-                {t.profileLabel}
-              </span>
             </motion.button>
           </div>
         </div>

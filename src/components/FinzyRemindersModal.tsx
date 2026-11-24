@@ -11,15 +11,12 @@ import {
   Star,
   Trash2,
   X,
-  Volume2,
   Sparkles,
   Calendar,
   Briefcase,
   HeartPulse,
   UserCheck,
   AlarmClock,
-  Smartphone,
-  ShieldCheck,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
@@ -53,7 +50,7 @@ interface FinzyRemindersModalProps {
   onDismissAlert: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onRequestNotifPermission: () => Promise<NotificationPermission>;
-  onTestAlert: () => void;
+  onTestAlert?: () => void;
 }
 
 function getTodayStr(): string {
@@ -78,15 +75,12 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
   reminders,
   activeAlert,
   notifPermission,
-  pushSubscribed = false,
-  pushInfoMessage = null,
   onAddReminder,
   onToggleComplete,
   onSnooze,
   onDismissAlert,
   onDelete,
   onRequestNotifPermission,
-  onTestAlert,
 }) => {
   const reduceMotion = useReducedMotion();
   const isEs = language === 'es';
@@ -219,55 +213,28 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onTestAlert}
-                  className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[10.5px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
-                >
-                  <Volume2 className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>{isEs ? 'Probar' : 'Testar'}</span>
-                </button>
+                <div className="w-14 shrink-0" />
               </div>
 
               <div className="flex-1 overflow-y-auto px-3.5 py-3.5">
                 <div className="mx-auto max-w-xl space-y-3.5 pb-16">
-                  {/* System Notification & Web Push Status Banner */}
-                  <div className="flex items-center justify-between gap-2.5 rounded-2xl border border-emerald-200/80 bg-white px-3.5 py-2.5 shadow-2xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <FinzyMascot
-                        mood={notifPermission === 'granted' ? 'happy' : 'calm'}
-                        routineState="normal"
-                        skinId={skinId}
-                        size={38}
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-black text-slate-900 truncate">
-                            {notifPermission === 'granted'
-                              ? isEs
-                                ? 'Notificaciones del sistema activadas'
-                                : 'Notificações do sistema ativadas'
-                              : isEs
-                              ? 'Activa notificaciones para avisos del sistema'
-                              : 'Ative as notificações do sistema'}
-                          </span>
-                          {pushSubscribed && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.2 text-[9px] font-black text-emerald-800">
-                              <ShieldCheck className="h-2.5 w-2.5" />
-                              Push ativo
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] font-semibold text-slate-500 leading-snug">
-                          {pushInfoMessage ||
-                            (isEs
-                              ? 'Dispara en pantalla y en el sistema; si cierras la app por completo en móvil, requiere Web Push configurado en el servidor.'
-                              : 'Dispara na tela e no sistema; se fechar o app totalmente no celular, depende de Web Push configurado no servidor.')}
+                  {/* Permission Prompt Only When Not Yet Granted */}
+                  {notifPermission !== 'granted' && (
+                    <div className="flex items-center justify-between gap-2.5 rounded-2xl border border-emerald-200/80 bg-white px-3.5 py-2.5 shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FinzyMascot
+                          mood="calm"
+                          routineState="normal"
+                          skinId={skinId}
+                          size={36}
+                        />
+                        <div className="text-xs font-black text-slate-800 truncate">
+                          {isEs
+                            ? 'Permitir avisos en el dispositivo'
+                            : 'Permitir avisos no dispositivo'}
                         </div>
                       </div>
-                    </div>
 
-                    {notifPermission !== 'granted' && (
                       <button
                         type="button"
                         onClick={onRequestNotifPermission}
@@ -275,17 +242,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                       >
                         {isEs ? 'Activar' : 'Ativar'}
                       </button>
-                    )}
-                  </div>
-
-                  {!pushSubscribed && (
-                    <div className="flex items-start gap-2 rounded-2xl border border-amber-200/90 bg-amber-50/75 px-3.5 py-2.5 text-[10.5px] font-semibold text-amber-950">
-                      <Smartphone className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
-                      <span>
-                        {isEs
-                          ? 'Al cerrar por completo una PWA sin Web Push activo en servidor, el navegador suspende el reloj interno hasta que vuelves a abrirla.'
-                          : 'Ao fechar totalmente uma PWA sem Web Push configurado no servidor, o navegador pausa o relógio interno até você reabrir — por isso ele avisa na hora ao entrar.'}
-                      </span>
                     </div>
                   )}
 
