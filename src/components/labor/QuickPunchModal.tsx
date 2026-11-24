@@ -7,9 +7,10 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  Coffee,
 } from 'lucide-react';
 import { LanguageCode } from '../../types';
-import { LaborShiftEntry, ShiftPartKey } from '../../types/labor';
+import { LaborShiftEntry, ShiftPartKey, ShiftTag } from '../../types/labor';
 import { useLaborAgenda } from '../../hooks/useLaborAgenda';
 import {
   calculateDayScheduleMinutes,
@@ -70,6 +71,10 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
   const todaySchedule = useMemo(
     () => (selectedJob ? getScheduleForDate(selectedJob, todayStr) : null),
     [selectedJob, todayStr]
+  );
+
+  const isFrancoToday = Boolean(
+    todaySchedule && !todaySchedule.isUnset && todaySchedule.isOff
   );
 
   const todayShifts = useMemo(
@@ -164,6 +169,15 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
     );
 
     const part = selectedJob.activeShift.shiftPart;
+    const baseTags: ShiftTag[] = part === 2 ? ['split_shift'] : [];
+    if (
+      isFrancoToday ||
+      (selectedJob.activeShift.scheduledMinutes > 0 &&
+        durationMinutes - selectedJob.activeShift.scheduledMinutes >= 20)
+    ) {
+      baseTags.push('overtime');
+    }
+
     const newShift: LaborShiftEntry = {
       id: `shift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       date: selectedJob.activeShift.startDate,
@@ -172,8 +186,8 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
       durationMinutes,
       scheduledMinutes: selectedJob.activeShift.scheduledMinutes,
       shiftPart: part,
-      tags: part === 2 ? ['split_shift'] : [],
-      note: part ? `${part}º turno` : undefined,
+      tags: baseTags,
+      note: part ? `${part}º turno` : isFrancoToday ? 'Turno extra (Franco)' : undefined,
       createdAt: now.toISOString(),
     };
 
@@ -193,6 +207,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
     if (!selectedJob || !todaySchedule) return;
     const durationMinutes = calculateShiftMinutes(manualStart, manualEnd);
     const scheduledMinutes = calculateDayScheduleMinutes(todaySchedule);
+    const tags: ShiftTag[] = isFrancoToday ? ['overtime'] : [];
 
     const newShift: LaborShiftEntry = {
       id: `shift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -201,7 +216,8 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
       endTime: manualEnd,
       durationMinutes,
       scheduledMinutes,
-      tags: [],
+      tags,
+      note: isFrancoToday ? 'Turno extra (Franco)' : undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -241,19 +257,48 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-            className="relative z-10 flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] bg-white shadow-2xl border border-emerald-100"
+            className={`relative z-10 flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[2rem] sm:rounded-[2rem] bg-white shadow-2xl border ${
+              isFrancoToday && !selectedJob?.activeShift
+                ? 'border-purple-200'
+                : 'border-emerald-100'
+            }`}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-4 text-white">
+            <div
+              className={`flex items-center justify-between border-b border-slate-100 px-5 py-4 text-white transition-colors duration-300 ${
+                isFrancoToday && !selectedJob?.activeShift
+                  ? 'bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600'
+              }`}
+            >
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20">
-                  <Clock className="h-5 w-5" />
+                  {isFrancoToday && !selectedJob?.activeShift ? (
+                    <Coffee className="h-5 w-5" />
+                  ) : (
+                    <Clock className="h-5 w-5" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-black tracking-tight">
-                    {language === 'es' ? 'Marcar Punto' : 'Marcar Ponto'}
-                  </h3>
-                  <p className="text-[10px] font-medium text-emerald-100">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black tracking-tight">
+                      {isFrancoToday && !selectedJob?.activeShift
+                        ? language === 'es'
+                          ? 'Día de Franco'
+                          : language === 'en'
+                          ? 'Day Off'
+                          : 'Dia de Franco'
+                        : language === 'es'
+                        ? 'Marcar Punto'
+                        : 'Marcar Ponto'}
+                    </h3>
+                    {isFrancoToday && (
+                      <span className="rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
+                        Franco
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-medium text-white/85">
                     {language === 'es'
                       ? 'Acceso rápido • Jornada Laboral'
                       : 'Acesso rápido • Jornada Laboral'}
@@ -309,7 +354,9 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                             }}
                             className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition-all cursor-pointer ${
                               isSelected
-                                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
+                                ? isFrancoToday && !selectedJob?.activeShift
+                                  ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/25'
+                                  : 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
                                 : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300'
                             }`}
                           >
@@ -324,7 +371,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Same Interactive Punch Circle from Jornada Laboral */}
+                  {/* Interactive Punch / Franco Sanctuary */}
                   {selectedJob && todaySchedule && (
                     <>
                       {!showManualForm ? (
@@ -347,7 +394,9 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-slate-900">
-                              Lançar turno de hoje manualmente
+                              {isFrancoToday
+                                ? 'Lançar turno extra no franco'
+                                : 'Lançar turno de hoje manualmente'}
                             </span>
                             <button
                               type="button"
@@ -414,6 +463,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                           </div>
                           {todayAttendanceEntries.map((att) => {
                             const isIssue = att.hasIssue;
+                            const isExtra = att.status === 'extra_day';
                             const partLabel = att.shiftPart ? ` (${att.shiftPart}º turno)` : '';
                             return (
                               <div
@@ -421,6 +471,8 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                                 className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-[10.5px] font-black ${
                                   isIssue
                                     ? 'bg-rose-100/90 text-rose-900 border border-rose-200'
+                                    : isExtra
+                                    ? 'bg-purple-100/85 text-purple-900 border border-purple-200'
                                     : 'bg-emerald-100/85 text-emerald-950 border border-emerald-200'
                                 }`}
                               >
@@ -428,13 +480,21 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                                   {isIssue ? (
                                     <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
                                   ) : (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    <CheckCircle2
+                                      className={`h-3.5 w-3.5 ${
+                                        isExtra ? 'text-purple-600' : 'text-emerald-600'
+                                      }`}
+                                    />
                                   )}
                                   <span>
                                     {att.status === 'late'
                                       ? `Chegou atrasado (${formatDurationCompact(att.diffMinutes)})${partLabel}`
                                       : att.status === 'out_of_hours'
                                       ? `Entrada fora do horário${partLabel}`
+                                      : isExtra
+                                      ? language === 'es'
+                                        ? 'Turno extra en día de franco'
+                                        : 'Turno extra em dia de franco'
                                       : `Chegou no horário${partLabel}`}
                                     {att.exitStatus === 'on_time'
                                       ? ' • Saiu no horário'
