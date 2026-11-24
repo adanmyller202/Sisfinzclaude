@@ -72,6 +72,14 @@ function decodeHtmlEntities(input: string): string {
     .trim();
 }
 
+function unescapeJsonUrl(raw: string): string {
+  return raw
+    .replace(/\\u0026/gi, '&')
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/gi, '&')
+    .trim();
+}
+
 function extractMetaContent(html: string, keys: string[]): string {
   for (const key of keys) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -155,6 +163,19 @@ function extractInstagramUsername(parsed: URL): string | null {
   return segments[0].replace(/^@/, '');
 }
 
+function extractInstagramMediaInfo(parsed: URL): { kind: 'p' | 'reel'; code: string } | null {
+  const domain = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  if (domain !== 'instagram.com' && !domain.endsWith('.instagram.com')) return null;
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  if ((segments[0] === 'p' || segments[0] === 'reel' || segments[0] === 'reels') && segments[1]) {
+    return {
+      kind: segments[0] === 'p' ? 'p' : 'reel',
+      code: segments[1],
+    };
+  }
+  return null;
+}
+
 function isGenericInstagramImage(imageUrl: string | null): boolean {
   if (!imageUrl) return true;
   const lower = imageUrl.toLowerCase();
@@ -202,7 +223,8 @@ function needsImageProxy(imageUrl: string): boolean {
     return (
       host.includes('cdninstagram.com') ||
       host.includes('fbcdn.net') ||
-      host.includes('instagram.com')
+      host.includes('instagram.com') ||
+      host.includes('unavatar.io')
     );
   } catch {
     return false;
@@ -250,6 +272,117 @@ function buildFallbackMetadata(parsedUrl: URL): LinkPreviewMetadata {
     isProfile: Boolean(igUser),
     previewStatus: 'fallback',
   };
+}
+
+/**
+ * Layer 0 for Instagram: Official public /embed/ page (works far more reliably from cloud servers)
+ */
+async function tryInstagramEmbedEndpoint(
+  parsed: URL,
+  originalUrl: string,
+  normalizedUrl: string
+): Promise<LinkPreviewMetadata | null> {
+  const username = extractInstagramUsername(parsed);
+  const media = extractInstagramMediaInfo(parsed);
+  const embedUrl = username
+    ? `https://www.instagram.com/${encodeURIComponent(username)}/embed/`
+    : media
+    ? `https://www.instagram.com/${media.kind}/${encodeURIComponent(media.code)}/embed/captioned/`
+    : null;
+
+  if (!embedUrl) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const resp = await fetch(embedUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,es-AR;q=0.8,en;q=0.7',
+      },
+    });
+
+    if (!resp.ok) return null;
+    const html = (await resp.text()).slice(0, 450000);
+    if (!html || html.includes('accounts/login')) {
+      // Still check if embed HTML contains profile pic before giving up
+    }
+
+    // Extract profile pic or embedded media image from HTML or embedded JSON
+    const imageCandidates: string[] = [];
+
+    const jsonPicMatch = html.match(/"profile_pic_url(?:_hd)?"\s*:\s*"([^"]+)"/i);
+    if (jsonPicMatch?.[1]) imageCandidates.push(unescapeJsonUrl(jsonPicMatch[1]));
+
+    const mediaImgMatch = html.match(
+      /<img[^>]+class=["'][^"']*(?:EmbeddedMediaImage|Avatar|ProfilePic)[^"']*["'][^>]+src=["']([^"']+)["']/i
+    );
+    if (mediaImgMatch?.[1]) imageCandidates.push(decodeHtmlEntities(mediaImgMatch[1]));
+
+    const scontentImgMatch = html.match(
+      /https?:\/\/scontent[^"'\s\\<>]+(?:cdninstagram\.com|fbcdn\.net)[^"'\s\\<>]+/i
+    );
+    if (scontentImgMatch?.[0]) imageCandidates.push(unescapeJsonUrl(scontentImgMatch[0]));
+
+    let resolvedImage: string | null = null;
+    for (const cand of imageCandidates) {
+      const abs = resolveAbsoluteUrl(cand, embedUrl);
+      if (abs && !isGenericInstagramImage(abs)) {
+        resolvedImage = wrapImageUrl(abs, true);
+        if (resolvedImage) break;
+      }
+    }
+
+    // Extract full name / username / bio / caption
+    const fullNameMatch = html.match(/"full_name"\s*:\s*"([^"]+)"/i);
+    const bioMatch = html.match(/"biography"\s*:\s*"([^"]+)"/i);
+    const headerTitleMatch = html.match(/<div[^>]+class=["'][^"']*HeaderText[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+
+    const fullName = fullNameMatch?.[1]
+      ? decodeHtmlEntities(fullNameMatch[1].replace(/\\u([0-9a-f]{4})/gi, (_m, h) => String.fromCharCode(parseInt(h, 16))))
+      : '';
+    const bio = bioMatch?.[1]
+      ? decodeHtmlEntities(
+          bioMatch[1]
+            .replace(/\\n/g, ' ')
+            .replace(/\\u([0-9a-f]{4})/gi, (_m, h) => String.fromCharCode(parseInt(h, 16)))
+        )
+      : '';
+    const fallbackHeader = headerTitleMatch?.[1]
+      ? decodeHtmlEntities(headerTitleMatch[1].replace(/<[^>]+>/g, ' '))
+      : '';
+
+    const title = username
+      ? fullName
+        ? `${fullName} (@${username}) • Perfil de Instagram`
+        : `@${username} • Perfil de Instagram`
+      : fallbackHeader || 'Publicação no Instagram';
+
+    if (!resolvedImage && !fullName && !bio) return null;
+
+    return {
+      url: originalUrl,
+      normalizedUrl,
+      domain: 'instagram.com',
+      siteName: 'Instagram',
+      title: title.slice(0, 180),
+      description: bio.slice(0, 280),
+      image: resolvedImage,
+      favicon: 'https://www.google.com/s2/favicons?domain=instagram.com&sz=128',
+      isInstagram: true,
+      isProfile: Boolean(username),
+      previewStatus: resolvedImage ? 'ok' : 'partial',
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -314,6 +447,30 @@ async function tryInstagramWebProfileInfo(
   }
 }
 
+/**
+ * Layer 4 for Instagram Profiles: Verify if public avatar resolver has a real profile photo
+ */
+async function tryUnavatarInstagramImage(username: string): Promise<string | null> {
+  const url = `https://unavatar.io/instagram/${encodeURIComponent(username)}?fallback=false`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+  try {
+    const resp = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!resp.ok) return null;
+    const ct = String(resp.headers.get('content-type') || '').toLowerCase();
+    if (!ct.startsWith('image/')) return null;
+    return `/api/links/image?url=${encodeURIComponent(url)}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchHtmlHeadWithUserAgent(
   targetUrl: string,
   userAgent: string,
@@ -369,9 +526,6 @@ async function fetchHtmlHeadWithUserAgent(
   }
 }
 
-/**
- * Layer 3: Public Open Graph fallback via Microlink (bypasses datacenter IP login walls cleanly)
- */
 async function tryMicrolinkPreview(
   targetUrl: string,
   originalUrl: string,
@@ -452,6 +606,21 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
   const fallback = buildFallbackMetadata(cleanParsed);
   const igUsername = extractInstagramUsername(cleanParsed);
 
+  let bestResult: LinkPreviewMetadata = fallback;
+
+  // Layer 0: Official Instagram /embed/ endpoint (profiles & posts/reels)
+  if (fallback.isInstagram) {
+    const embedMeta = await tryInstagramEmbedEndpoint(
+      cleanParsed,
+      parsed.toString(),
+      cleanParsed.toString()
+    );
+    if (embedMeta) {
+      if (embedMeta.previewStatus === 'ok') return embedMeta;
+      bestResult = embedMeta;
+    }
+  }
+
   // Layer 1: Direct Instagram public profile metadata JSON
   if (igUsername) {
     const profileMeta = await tryInstagramWebProfileInfo(
@@ -459,12 +628,13 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
       parsed.toString(),
       cleanParsed.toString()
     );
-    if (profileMeta && profileMeta.previewStatus === 'ok') {
-      return profileMeta;
+    if (profileMeta) {
+      if (profileMeta.previewStatus === 'ok') return profileMeta;
+      if (bestResult.previewStatus === 'fallback') bestResult = profileMeta;
     }
   }
 
-  // Layer 2: Direct HTML Open Graph fetch (avoiding spoofed facebookexternalhit on Meta domains)
+  // Layer 2: Direct HTML Open Graph fetch
   const userAgents = fallback.isInstagram
     ? [
         'WhatsApp/2.24.16.76 A',
@@ -475,8 +645,6 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
         'Mozilla/5.0 (compatible; SisFinzLinkPreview/1.0; +https://sisfinz.app)',
         'WhatsApp/2.24.16.76 A',
       ];
-
-  let bestResult: LinkPreviewMetadata = fallback;
 
   for (const ua of userAgents) {
     const fetched = await fetchHtmlHeadWithUserAgent(cleanParsed.toString(), ua);
@@ -549,15 +717,30 @@ export async function fetchPublicLinkMetadata(rawUrl: string): Promise<LinkPrevi
     }
   }
 
-  // Layer 3: Public Microlink Open Graph fallback (handles sites that block GCP datacenter IPs)
+  // Layer 3: Public Microlink Open Graph fallback
   const microlinkResult = await tryMicrolinkPreview(
     cleanParsed.toString(),
     parsed.toString(),
     fallback
   );
   if (microlinkResult) {
-    if (microlinkResult.previewStatus === 'ok' || bestResult.previewStatus === 'fallback') {
+    if (microlinkResult.previewStatus === 'ok') {
       return microlinkResult;
+    }
+    if (bestResult.previewStatus === 'fallback') {
+      bestResult = microlinkResult;
+    }
+  }
+
+  // Layer 4: If it's an Instagram profile and we still don't have an image, try unavatar (fallback=false)
+  if (igUsername && !bestResult.image) {
+    const avatarUrl = await tryUnavatarInstagramImage(igUsername);
+    if (avatarUrl) {
+      bestResult = {
+        ...bestResult,
+        image: avatarUrl,
+        previewStatus: 'ok',
+      };
     }
   }
 
