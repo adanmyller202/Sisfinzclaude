@@ -174,6 +174,8 @@ export type PunctualityStatus =
 
 export type ExitPunctualityStatus = 'on_time' | 'early_exit' | 'none';
 
+export type CalendarDotColor = 'green' | 'orange' | 'red' | 'none';
+
 export interface DayAttendanceEntry {
   id: string;
   isActive: boolean;
@@ -190,6 +192,8 @@ export interface DayAttendanceEntry {
   exitDiffMinutes: number;
   /** True if entry is late/out_of_hours OR exit was early */
   hasIssue: boolean;
+  /** Visual calendar dot status: green = exact/early & on-time exit, orange = within 5m entry tolerance, red = >5m late or early exit */
+  dotColor: Exclude<CalendarDotColor, 'none'>;
 }
 
 function getCircularMinuteDiff(actualTime: string, scheduledTime: string): number {
@@ -218,6 +222,7 @@ export function evaluatePunchPunctuality(
   exitStatus: ExitPunctualityStatus;
   exitDiffMinutes: number;
   hasIssue: boolean;
+  dotColor: Exclude<CalendarDotColor, 'none'>;
 } {
   if (!schedule || schedule.isUnset) {
     return {
@@ -226,6 +231,7 @@ export function evaluatePunchPunctuality(
       exitStatus: 'none',
       exitDiffMinutes: 0,
       hasIssue: false,
+      dotColor: 'green',
     };
   }
   if (schedule.isOff) {
@@ -235,6 +241,7 @@ export function evaluatePunchPunctuality(
       exitStatus: 'none',
       exitDiffMinutes: 0,
       hasIssue: false,
+      dotColor: 'green',
     };
   }
 
@@ -300,6 +307,12 @@ export function evaluatePunchPunctuality(
   const hasIssue =
     status === 'late' || status === 'out_of_hours' || exitStatus === 'early_exit';
 
+  const dotColor: Exclude<CalendarDotColor, 'none'> = hasIssue
+    ? 'red'
+    : bestDiff > 0 && bestDiff <= LATE_TOLERANCE_MINUTES
+    ? 'orange'
+    : 'green';
+
   return {
     status,
     diffMinutes: bestDiff,
@@ -309,6 +322,7 @@ export function evaluatePunchPunctuality(
     exitStatus,
     exitDiffMinutes,
     hasIssue,
+    dotColor,
   };
 }
 
@@ -750,8 +764,24 @@ export function calculateWeeklyAudit(job: LaborJob, mondayDateStr: string) {
   };
 }
 
+export interface MonthlyCalendarDayAudit {
+  day: number;
+  dateStr: string;
+  dayKey: DayOfWeekKey;
+  schedule: DaySchedule;
+  hasSchedule: boolean;
+  isOff: boolean;
+  isUnset: boolean;
+  scheduledMinutes: number;
+  workedMinutes: number;
+  shifts: LaborJob['shifts'];
+  hasActiveShift: boolean;
+  dotColor: CalendarDotColor;
+  entries: DayAttendanceEntry[];
+}
+
 /**
- * Compute monthly HR audit totals for a calendar month (YYYY-MM).
+ * Compute monthly HR audit totals + per-day calendar dot statuses for a calendar month (YYYY-MM).
  */
 export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
   const [yStr, mStr] = targetMonth.split('-');
@@ -783,14 +813,19 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
     }
   >();
 
+  const daysBreakdown: MonthlyCalendarDayAudit[] = [];
+
   let scheduledMinutes = 0;
   let workedMinutes = 0;
   let onTimeCount = 0;
   let lateCount = 0;
+  let toleranceCount = 0;
+  let exactGreenCount = 0;
   let totalLateMinutes = 0;
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayKey = getDayOfWeekKey(dateStr);
     const monday = getWeekStartMonday(dateStr);
     const hasSched = hasScheduleForWeek(job, monday);
     const daySched = getScheduleForDate(job, dateStr);
@@ -798,6 +833,7 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
 
     const dayShifts = shiftsByDate.get(dateStr) || [];
     const dayWorkedMins = dayShifts.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
+    const entries = getDayAttendanceEntries(job, dateStr, daySched);
 
     for (const s of dayShifts) {
       const p = evaluatePunchPunctuality(s.startTime, daySched, s.endTime, s.shiftPart);
@@ -808,6 +844,35 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
         onTimeCount++;
       }
     }
+
+    let dotColor: CalendarDotColor = 'none';
+    if (entries.length > 0) {
+      if (entries.some((e) => e.dotColor === 'red')) {
+        dotColor = 'red';
+      } else if (entries.some((e) => e.dotColor === 'orange')) {
+        dotColor = 'orange';
+        toleranceCount++;
+      } else {
+        dotColor = 'green';
+        exactGreenCount++;
+      }
+    }
+
+    daysBreakdown.push({
+      day,
+      dateStr,
+      dayKey,
+      schedule: daySched,
+      hasSchedule: hasSched,
+      isOff: Boolean(hasSched && daySched.isOff && !daySched.isUnset),
+      isUnset: Boolean(!hasSched || daySched.isUnset),
+      scheduledMinutes: daySchedMins,
+      workedMinutes: dayWorkedMins,
+      shifts: dayShifts,
+      hasActiveShift: Boolean(job.activeShift && job.activeShift.startDate === dateStr),
+      dotColor,
+      entries,
+    });
 
     scheduledMinutes += daySchedMins;
     workedMinutes += dayWorkedMins;
@@ -836,6 +901,11 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
     deltaMinutes: w.workedMinutes - w.scheduledMinutes,
   }));
 
+  // Leading empty grid slots for Monday-first calendar alignment (Mon=0 .. Sun=6)
+  const firstDayDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const firstDayKey = getDayOfWeekKey(firstDayDateStr);
+  const leadingEmptyDays = Math.max(0, ORDERED_WEEKDAYS.indexOf(firstDayKey));
+
   return {
     month: targetMonth,
     scheduledMinutes,
@@ -844,9 +914,13 @@ export function calculateMonthlyAudit(job: LaborJob, targetMonth: string) {
     monthShifts,
     onTimeCount,
     lateCount,
+    toleranceCount,
+    exactGreenCount,
     totalLateMinutes,
     configuredWeeksCount: weeksBreakdown.filter((w) => w.hasSchedule).length,
     totalWeeksCount: weeksBreakdown.length,
     weeksBreakdown,
+    daysBreakdown,
+    leadingEmptyDays,
   };
 }

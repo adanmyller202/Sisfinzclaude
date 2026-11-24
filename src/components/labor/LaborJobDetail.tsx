@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -24,6 +24,7 @@ import {
   RotateCcw,
   Edit3,
   Zap,
+  Coffee,
 } from 'lucide-react';
 import { AccountItem, CurrencyCode, LanguageCode } from '../../types';
 import {
@@ -39,6 +40,7 @@ import {
   WeeklySchedule,
 } from '../../types/labor';
 import {
+  CalendarDotColor,
   LATE_TOLERANCE_MINUTES,
   ORDERED_WEEKDAYS,
   WEEKDAY_LABELS,
@@ -90,18 +92,12 @@ interface LaborJobDetailProps {
     amount: number;
     scope: 'single' | 'future';
   }) => Promise<boolean>;
-  onRegisterSalaryAdvanceIncome: (params: {
-    id: string;
-    job: LaborJob;
-    amount: number;
-    reason: string;
-    creditNow: boolean;
-    depositDate: string;
-    accountId?: string;
-  }) => Promise<boolean>;
 }
 
 type AccordionSection = 'schedule' | 'history' | 'salary' | 'tips' | 'settings' | null;
+type MonthlyAuditSubTab = 'weeks' | 'calendar' | 'list';
+
+const MONTHLY_AUDIT_TAB_ORDER: MonthlyAuditSubTab[] = ['weeks', 'calendar', 'list'];
 
 const SHIFT_TAGS: { id: ShiftTag; labelPt: string; labelEs: string }[] = [
   { id: 'overtime', labelPt: 'Hora Extra', labelEs: 'Hora Extra' },
@@ -139,7 +135,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   onDeleteJob,
   onRecordTipToSisFinz,
   onSyncSalaryToSisFinz,
-  onRegisterSalaryAdvanceIncome,
 }) => {
   const locale = getLocaleForLanguage(language);
   const todayStr = formatLocalDateYYYYMMDD(new Date());
@@ -151,6 +146,11 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [selectedMonday, setSelectedMonday] = useState<string>(() => getWeekStartMonday(todayStr));
   const [historyMode, setHistoryMode] = useState<'weekly' | 'monthly'>('monthly');
   const [selectedAuditMonth, setSelectedAuditMonth] = useState<string>(currentMonth);
+  const [monthlySubTab, setMonthlySubTab] = useState<MonthlyAuditSubTab>('calendar');
+  const [subTabSlideDir, setSubTabSlideDir] = useState<1 | -1>(1);
+  const [calendarColorFilter, setCalendarColorFilter] = useState<'all' | Exclude<CalendarDotColor, 'none'>>('all');
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>(todayStr);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [selectedSalaryMonth, setSelectedSalaryMonth] = useState<string>(currentMonth);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
@@ -203,15 +203,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   const [newBenefitIsDeduction, setNewBenefitIsDeduction] = useState(false);
   const [syncSalaryWithFinance, setSyncSalaryWithFinance] = useState(true);
   const [scopeConfirmOpen, setScopeConfirmOpen] = useState(false);
-  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
-  const [advanceReason, setAdvanceReason] = useState('');
-  const [advanceCreateIncome, setAdvanceCreateIncome] = useState(true);
-  const [advanceWhen, setAdvanceWhen] = useState<'today' | 'scheduled'>('today');
-  const [advanceDate, setAdvanceDate] = useState(todayStr);
-  const [advanceAccountId, setAdvanceAccountId] = useState(
-    job.defaultAccountId || accounts[0]?.id || ''
-  );
-  const [advanceIncomeId, setAdvanceIncomeId] = useState('');
   const [salarySavedToast, setSalarySavedToast] = useState<string | null>(null);
 
   // Tip registration state
@@ -270,6 +261,66 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     () => calculateMonthlyAudit(job, selectedAuditMonth),
     [job, selectedAuditMonth]
   );
+
+  // Keep selectedCalendarDate in sync when user changes selectedAuditMonth
+  useEffect(() => {
+    if (selectedCalendarDate.startsWith(selectedAuditMonth)) return;
+    if (todayStr.startsWith(selectedAuditMonth)) {
+      setSelectedCalendarDate(todayStr);
+      return;
+    }
+    const lastPunchedDay = [...monthlyAudit.daysBreakdown]
+      .reverse()
+      .find((d) => d.entries.length > 0);
+    setSelectedCalendarDate(
+      lastPunchedDay ? lastPunchedDay.dateStr : `${selectedAuditMonth}-01`
+    );
+  }, [selectedAuditMonth, selectedCalendarDate, todayStr, monthlyAudit.daysBreakdown]);
+
+  const selectedCalendarDayAudit = useMemo(
+    () =>
+      monthlyAudit.daysBreakdown.find((d) => d.dateStr === selectedCalendarDate) ||
+      monthlyAudit.daysBreakdown[0] ||
+      null,
+    [monthlyAudit.daysBreakdown, selectedCalendarDate]
+  );
+
+  const switchMonthlySubTab = (nextTab: MonthlyAuditSubTab) => {
+    const prevIdx = MONTHLY_AUDIT_TAB_ORDER.indexOf(monthlySubTab);
+    const nextIdx = MONTHLY_AUDIT_TAB_ORDER.indexOf(nextTab);
+    if (nextIdx !== prevIdx) {
+      setSubTabSlideDir(nextIdx > prevIdx ? 1 : -1);
+      setMonthlySubTab(nextTab);
+    }
+  };
+
+  const handleSubTabTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t) return;
+    swipeStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleSubTabTouchEnd = (e: React.TouchEvent) => {
+    if (!swipeStartRef.current) return;
+    const t = e.changedTouches[0];
+    if (!t) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const dx = t.clientX - swipeStartRef.current.x;
+    const dy = t.clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+
+    // Require clear horizontal swipe (> 44px and dominant over vertical scroll)
+    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.35) {
+      const curIdx = MONTHLY_AUDIT_TAB_ORDER.indexOf(monthlySubTab);
+      if (dx < 0 && curIdx < MONTHLY_AUDIT_TAB_ORDER.length - 1) {
+        switchMonthlySubTab(MONTHLY_AUDIT_TAB_ORDER[curIdx + 1]);
+      } else if (dx > 0 && curIdx > 0) {
+        switchMonthlySubTab(MONTHLY_AUDIT_TAB_ORDER[curIdx - 1]);
+      }
+    }
+  };
   const currentMonthAudit = useMemo(
     () => calculateMonthlyAudit(job, currentMonth),
     [job, currentMonth]
@@ -901,45 +952,17 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   };
 
   const handleQuickAddAdelanto = () => {
-    const newId = `ded_adelanto_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`;
     setDraftBenefits((prev) => [
       ...prev,
       {
-        id: newId,
-        name: 'Antecipação de salário',
+        id: `ded_adelanto_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+        name: 'Adelanto',
         type: 'fixed',
         value: 0,
         enabled: true,
         isDeduction: true,
       },
     ]);
-    window.setTimeout(() => {
-      const cardEl = document.querySelector(`[data-draft-benefit-id="${newId}"]`) as HTMLElement | null;
-      if (cardEl) {
-        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const inputEl = cardEl.querySelector('input[type="number"], input[inputmode="decimal"]') as HTMLInputElement | null;
-        if (inputEl) {
-          inputEl.focus();
-          inputEl.select();
-        }
-      }
-    }, 80);
-  };
-
-  const handleFirstSaveClick = () => {
-    if (totalDraftDeductionAmount > 0) {
-      setAdvanceReason('');
-      setAdvanceCreateIncome(true);
-      setAdvanceWhen('today');
-      setAdvanceDate(todayStr);
-      setAdvanceAccountId(job.defaultAccountId || accounts[0]?.id || '');
-      setAdvanceIncomeId(
-        `inc_advance_${job.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      );
-      setAdvanceModalOpen(true);
-      return;
-    }
-    setScopeConfirmOpen(true);
   };
 
   const handleAddBenefitToDraft = () => {
@@ -1070,31 +1093,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       };
     }
 
-    if (totalDraftDeductionAmount > 0) {
-      const advanceRecord = {
-        id: advanceIncomeId,
-        month: selectedSalaryMonth,
-        amount: totalDraftDeductionAmount,
-        reason: advanceReason.trim(),
-        createIncome: advanceCreateIncome,
-        creditNow: advanceCreateIncome && advanceWhen === 'today',
-        depositDate: advanceCreateIncome
-          ? advanceWhen === 'today' ? todayStr : advanceDate
-          : undefined,
-        accountId: advanceCreateIncome ? advanceAccountId || undefined : undefined,
-        createdAt: new Date().toISOString(),
-      };
-      updatedJob = {
-        ...updatedJob,
-        salaryAdvanceHistory: [
-          ...((job as any).salaryAdvanceHistory || []).filter(
-            (entry: any) => entry.id !== advanceIncomeId
-          ),
-          advanceRecord,
-        ],
-      };
-    }
-
     await onSaveJob(updatedJob);
 
     const nextCalc = calculateMonthSalary(updatedJob, selectedSalaryMonth);
@@ -1105,25 +1103,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
         amount: nextCalc.netTotal,
         scope,
       });
-    }
-
-    if (totalDraftDeductionAmount > 0 && advanceCreateIncome) {
-      const registered = await onRegisterSalaryAdvanceIncome({
-        id: advanceIncomeId,
-        job,
-        amount: totalDraftDeductionAmount,
-        reason: advanceReason.trim(),
-        creditNow: advanceWhen === 'today',
-        depositDate: advanceWhen === 'today' ? todayStr : advanceDate,
-        accountId: advanceAccountId || job.defaultAccountId,
-      });
-      if (!registered) {
-        setSalarySavedToast(
-          'Salário salvo, mas não foi possível criar a receita da antecipação. Confira a conexão e tente novamente.'
-        );
-        window.setTimeout(() => setSalarySavedToast(null), 5000);
-        return;
-      }
     }
 
     setScopeConfirmOpen(false);
@@ -1195,6 +1174,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
     const daySched = getScheduleForDate(job, s.date);
     const punctuality = evaluatePunchPunctuality(s.startTime, daySched, s.endTime, s.shiftPart);
     const hasIssue = punctuality.hasIssue;
+    const isTolerance = punctuality.dotColor === 'orange';
     const isEntryBad = punctuality.status === 'late' || punctuality.status === 'out_of_hours';
     const isExitBad = punctuality.exitStatus === 'early_exit';
 
@@ -1202,11 +1182,24 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
       <div
         key={s.id}
         className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${
-          hasIssue ? 'border-rose-200 bg-rose-50/35' : 'border-slate-200/80 bg-white'
+          hasIssue
+            ? 'border-rose-200 bg-rose-50/35'
+            : isTolerance
+            ? 'border-amber-200 bg-amber-50/35'
+            : 'border-slate-200/80 bg-white'
         }`}
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={`h-2 w-2 rounded-full shrink-0 ${
+                punctuality.dotColor === 'red'
+                  ? 'bg-rose-500'
+                  : punctuality.dotColor === 'orange'
+                  ? 'bg-amber-500'
+                  : 'bg-emerald-500'
+              }`}
+            />
             <span className="text-xs font-black text-slate-900">{formatShortDate(s.date)}</span>
             {s.shiftPart && (
               <span className="rounded-md bg-indigo-100 px-1.5 py-0.5 text-[9px] font-black text-indigo-800">
@@ -1223,13 +1216,19 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
               <>
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9.5px] font-black ${
-                    isEntryBad ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
+                    isEntryBad
+                      ? 'bg-rose-100 text-rose-700'
+                      : isTolerance
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800'
                   }`}
                 >
                   {punctuality.status === 'late'
                     ? `Chegou atrasado (${formatDurationCompact(punctuality.diffMinutes)})`
                     : punctuality.status === 'out_of_hours'
                     ? 'Entrada fora do horário'
+                    : isTolerance
+                    ? `Tolerância (+${punctuality.diffMinutes}m)`
                     : 'Chegou no horário'}
                 </span>
                 {punctuality.exitStatus !== 'none' && (
@@ -1398,16 +1397,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
   ];
 
   const draftBaseNum = Math.max(0, Number(draftBaseSalary.replace(',', '.')) || 0);
-  const activeDraftDeductions = draftBenefits.filter(
-    (benefit) => benefit.enabled && benefit.isDeduction && Number(benefit.value) > 0
-  );
-  const totalDraftDeductionAmount = activeDraftDeductions.reduce((sum, benefit) => {
-    const amount =
-      benefit.type === 'percent'
-        ? Math.round((draftBaseNum * (Number(benefit.value) || 0)) / 100)
-        : Number(benefit.value) || 0;
-    return sum + amount;
-  }, 0);
   const enabledAdditions = currentMonthSalary.benefits.filter((b) => b.enabled && !b.isDeduction);
   const enabledDeductions = currentMonthSalary.benefits.filter((b) => b.enabled && b.isDeduction);
 
@@ -2380,18 +2369,30 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 text-[11px]">
                                 <div className="flex items-center gap-3">
-                                  <span className="inline-flex items-center gap-1 font-black text-emerald-700">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCalendarColorFilter('all');
+                                      switchMonthlySubTab('calendar');
+                                    }}
+                                    className="inline-flex items-center gap-1 font-black text-emerald-700 hover:underline cursor-pointer"
+                                  >
                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                     {monthlyAudit.onTimeCount} no horário
-                                  </span>
-                                  <span
-                                    className={`inline-flex items-center gap-1 font-black ${
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCalendarColorFilter('red');
+                                      switchMonthlySubTab('calendar');
+                                    }}
+                                    className={`inline-flex items-center gap-1 font-black hover:underline cursor-pointer ${
                                       monthlyAudit.lateCount > 0 ? 'text-rose-600' : 'text-slate-400'
                                     }`}
                                   >
                                     <AlertTriangle className="h-3.5 w-3.5" />
                                     {monthlyAudit.lateCount} atraso{monthlyAudit.lateCount === 1 ? '' : 's'} (&gt;5m)
-                                  </span>
+                                  </button>
                                 </div>
                                 <span
                                   className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
@@ -2406,64 +2407,536 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                                 </span>
                               </div>
 
+                              {/* Horizontal Swipeable 3-Tab Switcher: [ Semanas | Calendário 🟢🟠🔴 | Registros ] */}
                               <div className="space-y-1.5">
-                                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                  Semanas do mês (toque para editar na escala)
-                                </div>
-                                {monthlyAudit.weeksBreakdown.map((w) => (
+                                <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/90 p-1 border border-slate-200/70">
                                   <button
-                                    key={w.mondayDateStr}
                                     type="button"
-                                    onClick={() => {
-                                      setSelectedMonday(w.mondayDateStr);
-                                      setOpenSection('schedule');
-                                    }}
-                                    className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
-                                      w.hasSchedule
-                                        ? 'border-emerald-200/80 bg-white hover:border-emerald-400'
-                                        : 'border-dashed border-slate-200 bg-slate-50/70 hover:border-slate-300'
+                                    onClick={() => switchMonthlySubTab('weeks')}
+                                    className={`relative flex items-center justify-center gap-1 rounded-xl py-2 px-1.5 text-[10.5px] font-black transition-colors cursor-pointer z-10 ${
+                                      monthlySubTab === 'weeks'
+                                        ? 'text-indigo-950'
+                                        : 'text-slate-500 hover:text-slate-800'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="text-xs font-black text-slate-800">
-                                        {formatShortDate(w.firstDayInMonth)} – {formatShortDate(w.lastDayInMonth)}
-                                      </span>
-                                      {!w.hasSchedule && (
-                                        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">
-                                          Zerada (0h)
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
-                                      <span className="font-bold text-slate-500">
-                                        {formatMinutesAsHours(w.workedMinutes)} / {formatMinutesAsHours(w.scheduledMinutes)}
-                                      </span>
-                                      {w.hasSchedule && (
-                                        <span
-                                          className={`font-black ${
-                                            w.deltaMinutes >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                                          }`}
-                                        >
-                                          {formatMinutesAsHours(w.deltaMinutes, true)}
-                                        </span>
-                                      )}
-                                    </div>
+                                    {monthlySubTab === 'weeks' && (
+                                      <motion.span
+                                        layoutId="rhMonthlySubTabPill"
+                                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                                        className="absolute inset-0 rounded-xl bg-white shadow-xs border border-slate-200/60 -z-10"
+                                      />
+                                    )}
+                                    <span className="truncate">Semanas</span>
+                                    <span className="rounded-full bg-slate-200/80 px-1.5 py-0.2 font-mono text-[9px] text-slate-700">
+                                      {monthlyAudit.weeksBreakdown.length}
+                                    </span>
                                   </button>
-                                ))}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => switchMonthlySubTab('calendar')}
+                                    className={`relative flex items-center justify-center gap-1 rounded-xl py-2 px-1.5 text-[10.5px] font-black transition-colors cursor-pointer z-10 ${
+                                      monthlySubTab === 'calendar'
+                                        ? 'text-slate-900'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    {monthlySubTab === 'calendar' && (
+                                      <motion.span
+                                        layoutId="rhMonthlySubTabPill"
+                                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                                        className="absolute inset-0 rounded-xl bg-white shadow-xs border border-slate-200/60 -z-10"
+                                      />
+                                    )}
+                                    <span className="truncate">Pontos</span>
+                                    <span className="inline-flex items-center gap-0.5 shrink-0">
+                                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => switchMonthlySubTab('list')}
+                                    className={`relative flex items-center justify-center gap-1 rounded-xl py-2 px-1.5 text-[10.5px] font-black transition-colors cursor-pointer z-10 ${
+                                      monthlySubTab === 'list'
+                                        ? 'text-indigo-950'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                    }`}
+                                  >
+                                    {monthlySubTab === 'list' && (
+                                      <motion.span
+                                        layoutId="rhMonthlySubTabPill"
+                                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                                        className="absolute inset-0 rounded-xl bg-white shadow-xs border border-slate-200/60 -z-10"
+                                      />
+                                    )}
+                                    <span className="truncate">Registros</span>
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] text-emerald-800">
+                                      {monthlyAudit.monthShifts.length}
+                                    </span>
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-1.5 text-[9.5px] font-bold text-slate-400">
+                                  <span>Deslize para o lado ou toque para alternar abas ⇄</span>
+                                </div>
                               </div>
 
-                              {monthlyAudit.monthShifts.length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
-                                  Nenhum ponto registrado neste mês ainda.
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                    Pontos registrados no mês ({monthlyAudit.monthShifts.length})
-                                  </div>
-                                  {monthlyAudit.monthShifts.map((s) => renderShiftListItem(s))}
-                                </div>
-                              )}
+                              {/* Swipeable Tab Content Container */}
+                              <div
+                                onTouchStart={handleSubTabTouchStart}
+                                onTouchEnd={handleSubTabTouchEnd}
+                                className="overflow-hidden"
+                              >
+                                <AnimatePresence mode="wait" initial={false}>
+                                  {monthlySubTab === 'weeks' && (
+                                    <motion.div
+                                      key="tab-weeks"
+                                      initial={{ opacity: 0, x: subTabSlideDir * 24 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      exit={{ opacity: 0, x: subTabSlideDir * -24 }}
+                                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                      className="space-y-1.5"
+                                    >
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                        Semanas do mês (toque para editar na escala)
+                                      </div>
+                                      {monthlyAudit.weeksBreakdown.map((w) => (
+                                        <button
+                                          key={w.mondayDateStr}
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedMonday(w.mondayDateStr);
+                                            setOpenSection('schedule');
+                                          }}
+                                          className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                                            w.hasSchedule
+                                              ? 'border-emerald-200/80 bg-white hover:border-emerald-400'
+                                              : 'border-dashed border-slate-200 bg-slate-50/70 hover:border-slate-300'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-xs font-black text-slate-800">
+                                              {formatShortDate(w.firstDayInMonth)} – {formatShortDate(w.lastDayInMonth)}
+                                            </span>
+                                            {!w.hasSchedule && (
+                                              <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500">
+                                                Zerada (0h)
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
+                                            <span className="font-bold text-slate-500">
+                                              {formatMinutesAsHours(w.workedMinutes)} / {formatMinutesAsHours(w.scheduledMinutes)}
+                                            </span>
+                                            {w.hasSchedule && (
+                                              <span
+                                                className={`font-black ${
+                                                  w.deltaMinutes >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                                }`}
+                                              >
+                                                {formatMinutesAsHours(w.deltaMinutes, true)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </motion.div>
+                                  )}
+
+                                  {monthlySubTab === 'calendar' && (
+                                    <motion.div
+                                      key="tab-calendar"
+                                      initial={{ opacity: 0, x: subTabSlideDir * 24 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      exit={{ opacity: 0, x: subTabSlideDir * -24 }}
+                                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                      className="space-y-3"
+                                    >
+                                      {/* Interactive Legend & Filter Chips */}
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setCalendarColorFilter('all')}
+                                          className={`rounded-full px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                            calendarColorFilter === 'all'
+                                              ? 'bg-slate-800 text-white shadow-2xs'
+                                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                          }`}
+                                        >
+                                          Todos ({monthlyAudit.daysBreakdown.filter((d) => d.dotColor !== 'none').length})
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setCalendarColorFilter((prev) =>
+                                              prev === 'green' ? 'all' : 'green'
+                                            )
+                                          }
+                                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                            calendarColorFilter === 'green'
+                                              ? 'bg-emerald-600 text-white shadow-2xs'
+                                              : 'border border-emerald-200 bg-emerald-50/80 text-emerald-900 hover:bg-emerald-100'
+                                          }`}
+                                        >
+                                          <span
+                                            className={`h-2 w-2 rounded-full ${
+                                              calendarColorFilter === 'green'
+                                                ? 'bg-white'
+                                                : 'bg-emerald-500'
+                                            }`}
+                                          />
+                                          Na hora ({monthlyAudit.exactGreenCount})
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setCalendarColorFilter((prev) =>
+                                              prev === 'orange' ? 'all' : 'orange'
+                                            )
+                                          }
+                                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                            calendarColorFilter === 'orange'
+                                              ? 'bg-amber-500 text-white shadow-2xs'
+                                              : 'border border-amber-200 bg-amber-50/80 text-amber-900 hover:bg-amber-100'
+                                          }`}
+                                        >
+                                          <span
+                                            className={`h-2 w-2 rounded-full ${
+                                              calendarColorFilter === 'orange'
+                                                ? 'bg-white'
+                                                : 'bg-amber-500'
+                                            }`}
+                                          />
+                                          ≤5m ({monthlyAudit.toleranceCount})
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setCalendarColorFilter((prev) =>
+                                              prev === 'red' ? 'all' : 'red'
+                                            )
+                                          }
+                                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black transition-all cursor-pointer ${
+                                            calendarColorFilter === 'red'
+                                              ? 'bg-rose-600 text-white shadow-2xs'
+                                              : 'border border-rose-200 bg-rose-50/80 text-rose-900 hover:bg-rose-100'
+                                          }`}
+                                        >
+                                          <span
+                                            className={`h-2 w-2 rounded-full ${
+                                              calendarColorFilter === 'red'
+                                                ? 'bg-white'
+                                                : 'bg-rose-500'
+                                            }`}
+                                          />
+                                          Atraso ({monthlyAudit.lateCount})
+                                        </button>
+                                      </div>
+
+                                      {/* 7-Column Calendar Grid (Day 1 to Last Day of Month) */}
+                                      <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50/70 to-white p-2.5 shadow-2xs">
+                                        <div className="grid grid-cols-7 gap-1 mb-1.5">
+                                          {ORDERED_WEEKDAYS.map((wk) => (
+                                            <div
+                                              key={wk}
+                                              className="text-center text-[9.5px] font-black uppercase tracking-wider text-slate-400"
+                                            >
+                                              {WEEKDAY_LABELS[wk].shortPt}
+                                            </div>
+                                          ))}
+                                        </div>
+
+                                        <div className="grid grid-cols-7 gap-1.5">
+                                          {Array.from({ length: monthlyAudit.leadingEmptyDays }).map(
+                                            (_, padIdx) => (
+                                              <div
+                                                key={`cal-pad-${padIdx}`}
+                                                className="aspect-square rounded-xl bg-slate-100/40"
+                                              />
+                                            )
+                                          )}
+
+                                          {monthlyAudit.daysBreakdown.map((d, dIdx) => {
+                                            const isSelected = selectedCalendarDate === d.dateStr;
+                                            const isToday = d.dateStr === todayStr;
+                                            const matchesFilter =
+                                              calendarColorFilter === 'all' ||
+                                              d.dotColor === calendarColorFilter;
+
+                                            const cellBg =
+                                              d.dotColor === 'green'
+                                                ? 'border-emerald-300/90 bg-emerald-50/85'
+                                                : d.dotColor === 'orange'
+                                                ? 'border-amber-300/90 bg-amber-50/90'
+                                                : d.dotColor === 'red'
+                                                ? 'border-rose-300/90 bg-rose-50/90'
+                                                : d.isOff
+                                                ? 'border-purple-200/80 bg-purple-50/55'
+                                                : 'border-slate-200/75 bg-white';
+
+                                            return (
+                                              <motion.button
+                                                key={d.dateStr}
+                                                type="button"
+                                                initial={{ opacity: 0, scale: 0.82 }}
+                                                animate={{
+                                                  opacity: matchesFilter ? 1 : 0.28,
+                                                  scale: isSelected ? 1.05 : 1,
+                                                }}
+                                                transition={{
+                                                  delay: Math.min(dIdx * 0.01, 0.25),
+                                                  type: 'spring',
+                                                  stiffness: 420,
+                                                  damping: 26,
+                                                }}
+                                                whileTap={{ scale: 0.92 }}
+                                                onClick={() => setSelectedCalendarDate(d.dateStr)}
+                                                className={`relative aspect-square rounded-xl border flex flex-col items-center justify-between p-1 transition-shadow cursor-pointer ${cellBg} ${
+                                                  isSelected
+                                                    ? 'ring-2 ring-indigo-600 shadow-sm z-10'
+                                                    : isToday
+                                                    ? 'ring-1 ring-slate-800'
+                                                    : 'hover:border-indigo-300'
+                                                }`}
+                                              >
+                                                <span
+                                                  className={`text-[10px] font-black leading-none ${
+                                                    isToday
+                                                      ? 'rounded-full bg-slate-900 px-1 py-0.2 text-white'
+                                                      : d.dotColor === 'red'
+                                                      ? 'text-rose-900'
+                                                      : d.dotColor === 'orange'
+                                                      ? 'text-amber-900'
+                                                      : d.dotColor === 'green'
+                                                      ? 'text-emerald-900'
+                                                      : d.isOff
+                                                      ? 'text-purple-700'
+                                                      : 'text-slate-600'
+                                                  }`}
+                                                >
+                                                  {d.day}
+                                                </span>
+
+                                                {/* Center Status Ball */}
+                                                <div className="flex flex-1 items-center justify-center">
+                                                  {d.dotColor === 'green' ? (
+                                                    <motion.span
+                                                      initial={{ scale: 0 }}
+                                                      animate={{ scale: 1 }}
+                                                      transition={{
+                                                        type: 'spring',
+                                                        stiffness: 500,
+                                                        damping: 22,
+                                                      }}
+                                                      className="h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.55)] ring-2 ring-white"
+                                                    />
+                                                  ) : d.dotColor === 'orange' ? (
+                                                    <motion.span
+                                                      initial={{ scale: 0 }}
+                                                      animate={{ scale: 1 }}
+                                                      transition={{
+                                                        type: 'spring',
+                                                        stiffness: 500,
+                                                        damping: 22,
+                                                      }}
+                                                      className="h-3 w-3 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.55)] ring-2 ring-white"
+                                                    />
+                                                  ) : d.dotColor === 'red' ? (
+                                                    <motion.span
+                                                      initial={{ scale: 0 }}
+                                                      animate={{ scale: 1 }}
+                                                      transition={{
+                                                        type: 'spring',
+                                                        stiffness: 500,
+                                                        damping: 22,
+                                                      }}
+                                                      className="h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] ring-2 ring-white"
+                                                    />
+                                                  ) : d.isOff ? (
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-purple-400/80" />
+                                                  ) : (
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-slate-200" />
+                                                  )}
+                                                </div>
+
+                                                {d.entries.length > 1 && (
+                                                  <span className="text-[7.5px] font-black leading-none text-indigo-700">
+                                                    {d.entries.length}x
+                                                  </span>
+                                                )}
+                                              </motion.button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+
+                                      {/* Interactive Selected Day Inspection Card */}
+                                      {selectedCalendarDayAudit && (
+                                        <motion.div
+                                          key={selectedCalendarDayAudit.dateStr}
+                                          initial={{ opacity: 0, y: 6 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2.5"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <span
+                                                className={`h-3 w-3 rounded-full shrink-0 ${
+                                                  selectedCalendarDayAudit.dotColor === 'green'
+                                                    ? 'bg-emerald-500'
+                                                    : selectedCalendarDayAudit.dotColor === 'orange'
+                                                    ? 'bg-amber-500'
+                                                    : selectedCalendarDayAudit.dotColor === 'red'
+                                                    ? 'bg-rose-500'
+                                                    : selectedCalendarDayAudit.isOff
+                                                    ? 'bg-purple-500'
+                                                    : 'bg-slate-300'
+                                                }`}
+                                              />
+                                              <div className="min-w-0">
+                                                <div className="text-xs font-black text-slate-900">
+                                                  {WEEKDAY_LABELS[selectedCalendarDayAudit.dayKey].pt} •{' '}
+                                                  {formatShortDate(selectedCalendarDayAudit.dateStr)}
+                                                </div>
+                                                <div className="text-[10px] font-semibold text-slate-500">
+                                                  {selectedCalendarDayAudit.isOff
+                                                    ? 'Dia de Franco (Descanso)'
+                                                    : selectedCalendarDayAudit.isUnset
+                                                    ? 'Sem cronograma configurado'
+                                                    : selectedCalendarDayAudit.schedule.isSplitShift
+                                                    ? `Escala: ${selectedCalendarDayAudit.schedule.startTime}–${selectedCalendarDayAudit.schedule.endTime} • ${selectedCalendarDayAudit.schedule.splitStartTime}–${selectedCalendarDayAudit.schedule.splitEndTime}`
+                                                    : `Escala: ${selectedCalendarDayAudit.schedule.startTime} → ${selectedCalendarDayAudit.schedule.endTime}`}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {!selectedCalendarDayAudit.isOff &&
+                                              !selectedCalendarDayAudit.isUnset && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    openQuickPunchForDay(
+                                                      selectedCalendarDayAudit.dateStr,
+                                                      WEEKDAY_LABELS[selectedCalendarDayAudit.dayKey].pt,
+                                                      selectedCalendarDayAudit.schedule
+                                                    )
+                                                  }
+                                                  className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-black text-emerald-800 hover:bg-emerald-100 cursor-pointer shrink-0"
+                                                >
+                                                  <Zap className="h-3 w-3 text-emerald-600" />
+                                                  Ponto rápido
+                                                </button>
+                                              )}
+                                          </div>
+
+                                          {selectedCalendarDayAudit.entries.length === 0 ? (
+                                            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-[11px] font-semibold text-slate-500">
+                                              <span className="inline-flex items-center gap-1.5">
+                                                {selectedCalendarDayAudit.isOff ? (
+                                                  <>
+                                                    <Coffee className="h-3.5 w-3.5 text-purple-600" />
+                                                    Descanso programado — nenhum turno extra.
+                                                  </>
+                                                ) : (
+                                                  'Nenhum ponto registrado neste dia.'
+                                                )}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              {selectedCalendarDayAudit.entries.map((att) => {
+                                                const partLabel = att.shiftPart
+                                                  ? ` (${att.shiftPart}º turno)`
+                                                  : '';
+                                                const statusLabel =
+                                                  att.dotColor === 'red'
+                                                    ? att.status === 'late'
+                                                      ? `Atraso de ${formatDurationCompact(att.diffMinutes)}${partLabel}`
+                                                      : att.exitStatus === 'early_exit'
+                                                      ? `Saiu ${formatDurationCompact(att.exitDiffMinutes)} antes${partLabel}`
+                                                      : `Fora do horário${partLabel}`
+                                                    : att.dotColor === 'orange'
+                                                    ? `Dentro da tolerância (+${att.diffMinutes} min)${partLabel}`
+                                                    : att.status === 'extra_day'
+                                                    ? 'Turno extra no franco'
+                                                    : `Na hora exata & saída correta${partLabel}`;
+
+                                                return (
+                                                  <div
+                                                    key={att.id}
+                                                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] font-black ${
+                                                      att.dotColor === 'red'
+                                                        ? 'border-rose-200 bg-rose-50 text-rose-900'
+                                                        : att.dotColor === 'orange'
+                                                        ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                        : 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                                    }`}
+                                                  >
+                                                    <div className="min-w-0">
+                                                      <div>{statusLabel}</div>
+                                                      <div className="font-mono text-[10px] opacity-80">
+                                                        {att.endTime
+                                                          ? `${att.startTime} → ${att.endTime}`
+                                                          : `Entrada ${att.startTime}`}
+                                                      </div>
+                                                    </div>
+
+                                                    {!att.isActive && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const found = (job.shifts || []).find(
+                                                            (s) => s.id === att.id
+                                                          );
+                                                          if (found) openEditShiftModal(found);
+                                                        }}
+                                                        className="rounded-lg bg-white/80 p-1.5 text-slate-600 hover:text-slate-900 cursor-pointer shrink-0"
+                                                        title="Editar ponto"
+                                                      >
+                                                        <Edit3 className="h-3.5 w-3.5" />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                      )}
+                                    </motion.div>
+                                  )}
+
+                                  {monthlySubTab === 'list' && (
+                                    <motion.div
+                                      key="tab-list"
+                                      initial={{ opacity: 0, x: subTabSlideDir * 24 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      exit={{ opacity: 0, x: subTabSlideDir * -24 }}
+                                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                      className="space-y-2"
+                                    >
+                                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                        Pontos registrados no mês ({monthlyAudit.monthShifts.length})
+                                      </div>
+                                      {monthlyAudit.monthShifts.length === 0 ? (
+                                        <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400">
+                                          Nenhum ponto registrado neste mês ainda.
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {monthlyAudit.monthShifts.map((s) => renderShiftListItem(s))}
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
                             </>
                           ) : (
                             <>
@@ -3606,7 +4079,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          Benefícios (+) &amp; Antecipações / Descontos (-)
+                          Benefícios (+) & Adelantos / Descontos (-)
                         </span>
                         <div className="flex items-center gap-1.5">
                           <button
@@ -3615,7 +4088,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black text-rose-700 hover:bg-rose-200 cursor-pointer"
                           >
                             <Minus className="h-3 w-3" />
-                            Registrar antecipação de salário
+                            Adelanto
                           </button>
                           {!hasAntiguidadeInDraft && (
                             <button
@@ -3642,7 +4115,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                         return (
                           <div
                             key={b.id}
-                            data-draft-benefit-id={b.id}
                             className={`rounded-2xl border p-2.5 space-y-2 transition-colors ${
                               isDed
                                 ? 'border-rose-200 bg-rose-50/45'
@@ -3849,7 +4321,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             }`}
                           >
                             {newBenefitIsDeduction
-                              ? '- Adicionar Antecipação / Desconto'
+                              ? '- Adicionar Adelanto / Desconto'
                               : '+ Adicionar Benefício / Adicional'}
                           </span>
                           <div className="inline-flex rounded-xl bg-white p-0.5 border border-slate-200">
@@ -3889,7 +4361,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                             onChange={(e) => setNewBenefitName(e.target.value)}
                             placeholder={
                               newBenefitIsDeduction
-                                ? 'Ex: Antecipação / Vale'
+                                ? 'Ex: Adelanto / Vale'
                                 : 'Ex: Aguinaldo / Antiguidade'
                             }
                             className="col-span-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold"
@@ -3949,7 +4421,7 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
 
                     <button
                       type="button"
-                      onClick={handleFirstSaveClick}
+                      onClick={() => setScopeConfirmOpen(true)}
                       className="w-full rounded-2xl bg-emerald-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 cursor-pointer"
                     >
                       Continuar para salvar
@@ -4017,179 +4489,6 @@ export const LaborJobDetail: React.FC<LaborJobDetailProps> = ({
                     </button>
                   </div>
                 )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {advanceModalOpen && (
-          <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">
-            <div
-              onClick={() => setAdvanceModalOpen(false)}
-              className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-              className="relative z-10 w-full max-w-md space-y-4 rounded-t-3xl border border-rose-100 bg-white p-5 shadow-2xl sm:rounded-3xl"
-            >
-              <div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-rose-700">
-                  Antecipação de Salário
-                </span>
-                <h4 className="mt-1.5 text-base font-black text-slate-900">
-                  Detalhes da antecipação ({formatCurrency(totalDraftDeductionAmount, job.currency)})
-                </h4>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">
-                  Informe o motivo obrigatório e escolha como deseja registrar esse valor no SisFinz.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[10.5px] font-black uppercase tracking-wider text-slate-600">
-                  Motivo da antecipação <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={advanceReason}
-                  onChange={(e) => setAdvanceReason(e.target.value)}
-                  placeholder="Ex: Emergência médica, aluguel, gastos extras..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-900 outline-none focus:border-rose-500 focus:bg-white"
-                  autoFocus
-                />
-                {!advanceReason.trim() && (
-                  <p className="text-[10px] font-bold text-rose-600">
-                    O motivo é obrigatório para continuar.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <span className="block text-[10.5px] font-black uppercase tracking-wider text-slate-600">
-                  Lançar valor como entrada na sua conta do SisFinz?
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAdvanceCreateIncome(true)}
-                    className={`rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
-                      advanceCreateIncome
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-                        : 'border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    <div className="text-xs font-black">Sim, lançar entrada</div>
-                    <div className="text-[10px] font-medium opacity-80">Registrar como receita</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdvanceCreateIncome(false)}
-                    className={`rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
-                      !advanceCreateIncome
-                        ? 'border-slate-800 bg-slate-100 text-slate-900'
-                        : 'border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    <div className="text-xs font-black">Não, só descontar</div>
-                    <div className="text-[10px] font-medium opacity-80">Apenas no salário</div>
-                  </button>
-                </div>
-              </div>
-
-              {advanceCreateIncome && (
-                <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
-                  <div className="space-y-1.5">
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-emerald-900">
-                      Quando o dinheiro vai cair / caiu na conta?
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAdvanceWhen('today')}
-                        className={`rounded-xl border px-2.5 py-2 text-left text-xs font-black cursor-pointer ${
-                          advanceWhen === 'today'
-                            ? 'border-emerald-600 bg-emerald-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        Hoje (já recebido)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAdvanceWhen('scheduled')}
-                        className={`rounded-xl border px-2.5 py-2 text-left text-xs font-black cursor-pointer ${
-                          advanceWhen === 'scheduled'
-                            ? 'border-emerald-600 bg-emerald-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        Agendar outra data
-                      </button>
-                    </div>
-                  </div>
-
-                  {advanceWhen === 'scheduled' && (
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-black uppercase text-slate-600">
-                        Data prevista do depósito
-                      </label>
-                      <input
-                        type="date"
-                        value={advanceDate}
-                        min={todayStr}
-                        onChange={(e) => setAdvanceDate(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900"
-                      />
-                    </div>
-                  )}
-
-                  {accounts.length > 0 && (
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-black uppercase text-slate-600">
-                        Conta de destino
-                      </label>
-                      <select
-                        value={advanceAccountId}
-                        onChange={(e) => setAdvanceAccountId(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900"
-                      >
-                        {accounts.map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name} ({acc.currency})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setAdvanceModalOpen(false)}
-                  className="rounded-xl px-3.5 py-2 text-xs font-black text-slate-500 hover:bg-slate-100 cursor-pointer"
-                >
-                  Voltar e editar
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    !advanceReason.trim() ||
-                    (advanceCreateIncome && advanceWhen === 'scheduled' && !advanceDate)
-                  }
-                  onClick={() => {
-                    setAdvanceModalOpen(false);
-                    setScopeConfirmOpen(true);
-                  }}
-                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                >
-                  Continuar e escolher meses
-                </button>
               </div>
             </motion.div>
           </div>
