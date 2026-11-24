@@ -109,6 +109,7 @@ export function useAccounts() {
 
   // 1. Realtime listener for user's accounts
   useEffect(() => {
+    setAccountAdjustments([]);
     if (!user) {
       try {
         const cached =
@@ -130,6 +131,8 @@ export function useAccounts() {
 
     // Try reading user specific cache or last cached accounts
     try {
+      const cachedAdjustments = localStorage.getItem(`mc_acc_${user.uid}_adjustments`);
+      if (cachedAdjustments) setAccountAdjustments(JSON.parse(cachedAdjustments));
       const cached =
         localStorage.getItem(getLocalKey('accounts')) ||
         localStorage.getItem('mc_acc_last_accounts');
