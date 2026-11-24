@@ -26,11 +26,11 @@ export interface NoteFolder {
 
 export type NoteBlockType =
   | 'paragraph'
-  | 'h1'
-  | 'h2'
+  | 'heading'
+  | 'subheading'
+  | 'checklist'
   | 'bullet'
-  | 'numbered'
-  | 'checklist';
+  | 'numbered';
 
 export interface NoteBlock {
   id: string;
@@ -91,7 +91,7 @@ const NOTES_STORAGE_PREFIX = 'sisfinz_notes_v1_';
 const FOLDERS_STORAGE_PREFIX = 'sisfinz_note_folders_v1_';
 const PIN_STORAGE_PREFIX = 'sisfinz_notes_pin_hash_v1_';
 
-export function makeBlockId(): string {
+export function createBlockId(): string {
   return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
@@ -116,45 +116,45 @@ export function blocksToPlainText(blocks: NoteBlock[]): string {
 export function blocksToHtml(blocks: NoteBlock[]): string {
   return blocks
     .map((b) => {
-      if (b.type === 'h1') return `<h2>${b.html}</h2>`;
-      if (b.type === 'h2') return `<h3>${b.html}</h3>`;
+      if (b.type === 'heading') return `<h2>${b.html}</h2>`;
+      if (b.type === 'subheading') return `<h3>${b.html}</h3>`;
+      if (b.type === 'checklist') return `<p>${b.checked ? '[x]' : '[ ]'} ${b.html}</p>`;
       if (b.type === 'bullet') return `<p>• ${b.html}</p>`;
       if (b.type === 'numbered') return `<p>- ${b.html}</p>`;
-      if (b.type === 'checklist') return `<p>${b.checked ? '[x]' : '[ ]'} ${b.html}</p>`;
       return `<p>${b.html}</p>`;
     })
     .join('');
 }
 
-export function hydrateBlocksFromLegacy(
-  bodyHtml?: string,
-  legacyChecklist?: NoteChecklistItem[]
+export function deriveBlocksFromLegacyNote(
+  bodyHtml: string,
+  legacyChecklist: NoteChecklistItem[] = []
 ): NoteBlock[] {
-  const result: NoteBlock[] = [];
-  if (bodyHtml && bodyHtml.trim()) {
-    const cleanText = htmlToPlainText(bodyHtml);
-    if (cleanText) {
-      result.push({
-        id: makeBlockId(),
-        type: 'paragraph',
-        html: bodyHtml,
-      });
-    }
-  }
-  if (Array.isArray(legacyChecklist) && legacyChecklist.length > 0) {
-    legacyChecklist.forEach((c) => {
-      result.push({
-        id: c.id || makeBlockId(),
-        type: 'checklist',
-        html: c.text || '',
-        checked: Boolean(c.checked),
-      });
+  const blocks: NoteBlock[] = [];
+  const plain = htmlToPlainText(bodyHtml);
+  if (bodyHtml && plain) {
+    blocks.push({
+      id: createBlockId(),
+      type: 'paragraph',
+      html: bodyHtml,
     });
   }
-  if (result.length === 0) {
-    result.push({ id: makeBlockId(), type: 'paragraph', html: '' });
+  for (const item of legacyChecklist) {
+    blocks.push({
+      id: item.id || createBlockId(),
+      type: 'checklist',
+      html: item.text,
+      checked: Boolean(item.checked),
+    });
   }
-  return result;
+  if (blocks.length === 0) {
+    blocks.push({
+      id: createBlockId(),
+      type: 'paragraph',
+      html: '',
+    });
+  }
+  return blocks;
 }
 
 export function countWords(text: string): number {
@@ -232,23 +232,25 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
-  const blocks =
+  const legacyChecklist = Array.isArray(data.checklist) ? data.checklist : [];
+  const rawBlocks =
     Array.isArray(data.blocks) && data.blocks.length > 0
       ? data.blocks
-      : hydrateBlocksFromLegacy(data.bodyHtml, data.checklist);
-  const plainText = data.plainText || blocksToPlainText(blocks);
-  const bodyHtml = data.bodyHtml || blocksToHtml(blocks);
+      : deriveBlocksFromLegacyNote(data.bodyHtml || '', legacyChecklist);
+
+  const plainText = data.plainText || blocksToPlainText(rawBlocks) || htmlToPlainText(data.bodyHtml || '');
+  const bodyHtml = data.bodyHtml || blocksToHtml(rawBlocks);
 
   return {
     id,
     title: data.title || '',
     bodyHtml,
     plainText,
-    blocks,
+    blocks: rawBlocks,
     folderId: data.folderId ?? null,
     pinned: Boolean(data.pinned),
     locked: Boolean(data.locked),
-    checklist: Array.isArray(data.checklist) ? data.checklist : [],
+    checklist: legacyChecklist,
     images: Array.isArray(data.images) ? data.images : [],
     tables: Array.isArray(data.tables) ? data.tables : [],
     versions: Array.isArray(data.versions) ? data.versions : [],
@@ -272,9 +274,7 @@ export function useNotes() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed.map((n: Partial<NoteItem>) =>
-            normalizeNoteRecord(n.id || makeBlockId(), n)
-          );
+          return parsed.map((n: any) => normalizeNoteRecord(n.id || createBlockId(), n));
         }
       }
     } catch {
@@ -429,12 +429,7 @@ export function useNotes() {
   }, [persistNoteRemote]);
 
   useEffect(() => {
-    const onBeforeUnload = () => {
-      void flushPendingSaves();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
       void flushPendingSaves();
     };
   }, [flushPendingSaves]);
@@ -469,12 +464,17 @@ export function useNotes() {
   const createNote = useCallback(
     async (folderId: string | null = null): Promise<NoteItem> => {
       const nowIso = new Date().toISOString();
+      const initialBlock: NoteBlock = {
+        id: createBlockId(),
+        type: 'paragraph',
+        html: '',
+      };
       const item: NoteItem = {
         id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: '',
         bodyHtml: '',
         plainText: '',
-        blocks: [{ id: makeBlockId(), type: 'paragraph', html: '' }],
+        blocks: [initialBlock],
         folderId,
         pinned: false,
         locked: false,
@@ -501,26 +501,36 @@ export function useNotes() {
       const current = notesRef.current.find((n) => n.id === noteId);
       if (!current) return;
       const nowIso = new Date().toISOString();
-      const blocks = patch.blocks !== undefined ? patch.blocks : current.blocks;
+
+      const nextBlocks = patch.blocks !== undefined ? patch.blocks : current.blocks;
       const bodyHtml =
         patch.bodyHtml !== undefined
           ? patch.bodyHtml
           : patch.blocks !== undefined
-          ? blocksToHtml(blocks)
+          ? blocksToHtml(nextBlocks)
           : current.bodyHtml;
       const plainText =
         patch.plainText !== undefined
           ? patch.plainText
           : patch.blocks !== undefined
-          ? blocksToPlainText(blocks)
+          ? blocksToPlainText(nextBlocks)
           : patch.bodyHtml !== undefined
           ? htmlToPlainText(bodyHtml)
           : current.plainText;
 
+      const checklistSummary: NoteChecklistItem[] = nextBlocks
+        .filter((b) => b.type === 'checklist')
+        .map((b) => ({
+          id: b.id,
+          text: htmlToPlainText(b.html),
+          checked: Boolean(b.checked),
+        }));
+
       const updated: NoteItem = {
         ...current,
         ...patch,
-        blocks,
+        blocks: nextBlocks,
+        checklist: patch.blocks !== undefined ? checklistSummary : patch.checklist ?? current.checklist,
         bodyHtml,
         plainText,
         updatedAt: nowIso,
@@ -572,7 +582,6 @@ export function useNotes() {
       if (
         latest &&
         latest.title === current.title &&
-        latest.plainText === current.plainText &&
         latest.bodyHtml === current.bodyHtml
       ) {
         return;
@@ -600,14 +609,14 @@ export function useNotes() {
       const restoredBlocks =
         Array.isArray(version.blocks) && version.blocks.length > 0
           ? version.blocks
-          : hydrateBlocksFromLegacy(version.bodyHtml);
+          : deriveBlocksFromLegacyNote(version.bodyHtml || '', []);
       updateNote(
         noteId,
         {
           title: version.title,
+          blocks: restoredBlocks,
           bodyHtml: version.bodyHtml,
           plainText: version.plainText,
-          blocks: restoredBlocks,
         },
         true
       );
@@ -691,34 +700,6 @@ export function useNotes() {
         ).catch(() => {});
       }
       return folder;
-    },
-    [uid, saveFoldersLocal]
-  );
-
-  const updateFolder = useCallback(
-    async (
-      folderId: string,
-      patch: Partial<Pick<NoteFolder, 'name' | 'icon' | 'color'>>
-    ) => {
-      const current = foldersRef.current.find((f) => f.id === folderId);
-      if (!current) return;
-      const updated: NoteFolder = {
-        ...current,
-        ...patch,
-        name: (patch.name ?? current.name).trim(),
-        updatedAt: new Date().toISOString(),
-      };
-      const next = foldersRef.current
-        .map((f) => (f.id === folderId ? updated : f))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      saveFoldersLocal(next);
-      if (uid) {
-        await setDoc(
-          doc(db, 'users', uid, 'note_folders', folderId),
-          JSON.parse(JSON.stringify(updated)),
-          { merge: true }
-        ).catch(() => {});
-      }
     },
     [uid, saveFoldersLocal]
   );
@@ -829,7 +810,6 @@ export function useNotes() {
     permanentlyDeleteNote,
     emptyTrash,
     createFolder,
-    updateFolder,
     deleteFolder,
     uploadNoteImage,
     uploadDrawingDataUrl,
