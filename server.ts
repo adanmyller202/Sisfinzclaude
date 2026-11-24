@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import fs from 'fs';
+import { mountLinkPreviewRoutes } from './server/linkPreviewRoutes';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -33,6 +34,9 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.use(express.json({ limit: '15mb' }));
+
+// Public link metadata previews for the SisFinz Notes library
+mountLinkPreviewRoutes(app);
 
 // Rate limiting in-memory store for exact user lookup (sliding window)
 // Max 15 searches per IP per 60 seconds to prevent enumeration/scraping attacks
