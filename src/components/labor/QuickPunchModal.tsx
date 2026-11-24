@@ -13,6 +13,7 @@ import { LanguageCode } from '../../types';
 import { LaborShiftEntry, ShiftPartKey, ShiftTag } from '../../types/labor';
 import { useLaborAgenda } from '../../hooks/useLaborAgenda';
 import {
+  WEEKDAY_LABELS,
   calculateDayScheduleMinutes,
   calculateShiftMinutes,
   calculateShiftPartMinutes,
@@ -21,7 +22,9 @@ import {
   formatLocalTimeHHMM,
   formatMinutesAsHours,
   getDayAttendanceEntries,
+  getDayOfWeekKey,
   getScheduleForDate,
+  shiftDateByDays,
 } from '../../utils/laborCalculations';
 import { HoldToPunchButton, ShiftCompletedBanner } from './HoldToPunchButton';
 
@@ -46,12 +49,10 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
   } | null>(null);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
 
-  // Inline manual shift entry toggle
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualStart, setManualStart] = useState('18:00');
   const [manualEnd, setManualEnd] = useState('02:00');
 
-  // Auto-select job with active shift, or first available job
   useEffect(() => {
     if (!isOpen || jobs.length === 0) return;
     setJustFinishedBanner(null);
@@ -76,6 +77,31 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
   const isFrancoToday = Boolean(
     todaySchedule && !todaySchedule.isUnset && todaySchedule.isOff
   );
+
+  const nextShiftLabel = useMemo(() => {
+    if (!selectedJob) return null;
+    for (let offset = 1; offset <= 7; offset++) {
+      const futureDate = shiftDateByDays(todayStr, offset);
+      const sched = getScheduleForDate(selectedJob, futureDate);
+      if (!sched.isUnset && !sched.isOff) {
+        const dayKey = getDayOfWeekKey(futureDate);
+        const dayName =
+          language === 'es'
+            ? WEEKDAY_LABELS[dayKey].es
+            : language === 'en'
+            ? WEEKDAY_LABELS[dayKey].en
+            : WEEKDAY_LABELS[dayKey].pt;
+        const prefix =
+          language === 'es'
+            ? 'Próximo turno'
+            : language === 'en'
+            ? 'Next shift'
+            : 'Próximo turno';
+        return `${prefix}: ${dayName} • ${sched.startTime} → ${sched.endTime}`;
+      }
+    }
+    return null;
+  }, [selectedJob, todayStr, language]);
 
   const todayShifts = useMemo(
     () => (selectedJob ? (selectedJob.shifts || []).filter((s) => s.date === todayStr) : []),
@@ -381,6 +407,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                           todayShiftsCount={todayShifts.length}
                           hasPart1Shift={hasPart1Shift}
                           hasPart2Shift={hasPart2Shift}
+                          nextShiftLabel={nextShiftLabel}
                           language={language}
                           onStartShift={handleStartShift}
                           onEndShift={handleEndShift}
@@ -395,7 +422,11 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-slate-900">
                               {isFrancoToday
-                                ? 'Lançar turno extra no franco'
+                                ? language === 'es'
+                                  ? 'Cargar turno extra en franco'
+                                  : 'Lançar turno extra no franco'
+                                : language === 'es'
+                                ? 'Cargar turno de hoy manualmente'
                                 : 'Lançar turno de hoje manualmente'}
                             </span>
                             <button
@@ -403,7 +434,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                               onClick={() => setShowManualForm(false)}
                               className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
                             >
-                              Voltar
+                              {language === 'es' ? 'Volver' : 'Voltar'}
                             </button>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
@@ -420,7 +451,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                             </div>
                             <div>
                               <label className="mb-1 block text-[10px] font-black uppercase text-slate-500">
-                                Saída
+                                {language === 'es' ? 'Salida' : 'Saída'}
                               </label>
                               <input
                                 type="time"
@@ -435,7 +466,8 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                             onClick={handleSaveManualToday}
                             className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 cursor-pointer"
                           >
-                            Salvar ({formatMinutesAsHours(calculateShiftMinutes(manualStart, manualEnd))})
+                            {language === 'es' ? 'Guardar' : 'Salvar'} (
+                            {formatMinutesAsHours(calculateShiftMinutes(manualStart, manualEnd))})
                           </button>
                         </div>
                       )}
@@ -459,7 +491,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                       {todayAttendanceEntries.length > 0 && (
                         <div className="space-y-1.5">
                           <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                            Registros de hoje
+                            {language === 'es' ? 'Registros de hoy' : 'Registros de hoje'}
                           </div>
                           {todayAttendanceEntries.map((att) => {
                             const isIssue = att.hasIssue;

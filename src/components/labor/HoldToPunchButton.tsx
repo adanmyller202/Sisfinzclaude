@@ -9,6 +9,7 @@ import {
   Clock,
   Coffee,
   Plus,
+  Calendar,
 } from 'lucide-react';
 import { LanguageCode } from '../../types';
 import { ActiveShiftState, DaySchedule, ShiftPartKey } from '../../types/labor';
@@ -24,9 +25,10 @@ interface HoldToPunchButtonProps {
   todayShiftsCount?: number;
   hasPart1Shift?: boolean;
   hasPart2Shift?: boolean;
+  nextShiftLabel?: string | null;
   language: LanguageCode;
-  onStartShift: (part?: ShiftPartKey) => void;
-  onEndShift: () => void;
+  onStartShift: (part?: ShiftPartKey) => Promise<void>;
+  onEndShift: () => Promise<void>;
   onOpenManualEntry: () => void;
 }
 
@@ -57,9 +59,8 @@ function playPunchTone(type: 'start' | 'end' | 'franco') {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.26);
-    window.setTimeout(() => ctx.close().catch(() => {}), 350);
   } catch {
-    // ignore audio errors
+    // ignore audio block
   }
 }
 
@@ -69,6 +70,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   todayShiftsCount = 0,
   hasPart1Shift = false,
   hasPart2Shift = false,
+  nextShiftLabel = null,
   language,
   onStartShift,
   onEndShift,
@@ -109,7 +111,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
     });
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     if (!confirmPrompt) return;
     const { action, part } = confirmPrompt;
     setConfirmPrompt(null);
@@ -117,9 +119,9 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
     setRippleKey((k) => k + 1);
     playPunchTone(action);
     if (action === 'start') {
-      onStartShift(part);
+      await onStartShift(part);
     } else {
-      onEndShift();
+      await onEndShift();
     }
   };
 
@@ -209,11 +211,11 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             {rippleKey > 0 && !reduceMotion && (
               <motion.span
                 key={rippleKey}
-                initial={{ scale: 0.78, opacity: 0.7 }}
+                initial={{ scale: 0.78, opacity: 0.65 }}
                 animate={{ scale: 1.45, opacity: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.65, ease: 'easeOut' }}
-                className="pointer-events-none absolute inset-2 rounded-full border-4 border-emerald-400"
+                className="pointer-events-none absolute inset-2 rounded-full border-4 border-rose-500"
               />
             )}
           </AnimatePresence>
@@ -239,8 +241,8 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                 ? 'Marcar Salida'
                 : 'Marcar Saída'}
             </span>
-            <span className="mt-1 text-[9.5px] font-bold text-rose-100">
-              {language === 'es' ? 'Toque para finalizar' : 'Toque para encerrar'}
+            <span className="mt-0.5 text-[9.5px] font-bold opacity-85">
+              {language === 'es' ? 'Toca para salir' : 'Toque para sair'}
             </span>
           </motion.button>
         </div>
@@ -324,8 +326,15 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             </motion.button>
           </div>
 
+          {nextShiftLabel && (
+            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-purple-200/80 bg-white/90 px-3 py-1 text-[10px] font-bold text-purple-900 shadow-2xs">
+              <Calendar className="h-3 w-3 text-purple-600 shrink-0" />
+              <span>{nextShiftLabel}</span>
+            </div>
+          )}
+
           {todayShiftsCount > 0 && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-[10px] font-black text-purple-900 border border-purple-200">
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-[10px] font-black text-purple-900 border border-purple-200">
               <CheckCircle2 className="h-3 w-3 text-purple-600" />
               {language === 'es'
                 ? 'Turno extra registrado hoy'
@@ -373,56 +382,54 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
       ) : isSplitToday ? (
         <div className="relative z-10 flex flex-wrap items-center justify-center gap-4">
           {/* Button 1: Marcar Entrada 1º Turno */}
-          <div className="flex flex-col items-center gap-1.5">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.94 }}
-              onClick={() => openConfirmFor('start', 1)}
-              className={`flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 px-2 text-center ${
-                hasPart1Shift
-                  ? 'bg-gradient-to-br from-teal-600 to-emerald-700 shadow-emerald-700/25 ring-2 ring-emerald-300'
-                  : 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-600/30'
-              }`}
-            >
-              <LogIn className="mb-1 h-6 w-6" />
-              <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
-                Marcar Entrada 1º Turno
-              </span>
-              <span className="mt-1 font-mono text-[9.5px] font-bold text-emerald-100">
-                {todaySchedule.startTime}–{todaySchedule.endTime}
-              </span>
-            </motion.button>
-            <span className="text-[9.5px] font-black text-emerald-800">
-              {hasPart1Shift ? '✓ 1º turno batido' : `${formatMinutesAsHours(part1Mins)} • 1º turno`}
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={() => openConfirmFor('start', 1)}
+            className={`relative flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-lg cursor-pointer outline-none px-2 text-center ${
+              hasPart1Shift
+                ? 'bg-gradient-to-br from-emerald-700 to-teal-700 opacity-85'
+                : 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-600/30'
+            }`}
+          >
+            {hasPart1Shift ? (
+              <CheckCircle2 className="mb-1 h-5 w-5 text-emerald-200" />
+            ) : (
+              <LogIn className="mb-1 h-5 w-5" />
+            )}
+            <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
+              Marcar Entrada 1º Turno
             </span>
-          </div>
+            <span className="mt-0.5 font-mono text-[9.5px] font-bold opacity-90">
+              {todaySchedule.startTime} ({formatMinutesAsHours(part1Mins)})
+            </span>
+          </motion.button>
 
           {/* Button 2: Marcar Entrada 2º Turno */}
-          <div className="flex flex-col items-center gap-1.5">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.94 }}
-              onClick={() => openConfirmFor('start', 2)}
-              className={`flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-xl cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 px-2 text-center ${
-                hasPart2Shift
-                  ? 'bg-gradient-to-br from-teal-600 to-emerald-700 shadow-emerald-700/25 ring-2 ring-emerald-300'
-                  : 'bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 shadow-teal-600/30'
-              }`}
-            >
-              <LogIn className="mb-1 h-6 w-6" />
-              <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
-                Marcar Entrada 2º Turno
-              </span>
-              <span className="mt-1 font-mono text-[9.5px] font-bold text-emerald-100">
-                {todaySchedule.splitStartTime}–{todaySchedule.splitEndTime}
-              </span>
-            </motion.button>
-            <span className="text-[9.5px] font-black text-teal-800">
-              {hasPart2Shift ? '✓ 2º turno batido' : `${formatMinutesAsHours(part2Mins)} • 2º turno`}
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={() => openConfirmFor('start', 2)}
+            className={`relative flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-lg cursor-pointer outline-none px-2 text-center ${
+              hasPart2Shift
+                ? 'bg-gradient-to-br from-indigo-700 to-blue-800 opacity-85'
+                : 'bg-gradient-to-br from-indigo-500 via-indigo-600 to-blue-600 shadow-indigo-600/30'
+            }`}
+          >
+            {hasPart2Shift ? (
+              <CheckCircle2 className="mb-1 h-5 w-5 text-indigo-200" />
+            ) : (
+              <LogIn className="mb-1 h-5 w-5" />
+            )}
+            <span className="text-[10.5px] font-black uppercase tracking-wider leading-tight">
+              Marcar Entrada 2º Turno
             </span>
-          </div>
+            <span className="mt-0.5 font-mono text-[9.5px] font-bold opacity-90">
+              {todaySchedule.splitStartTime} ({formatMinutesAsHours(part2Mins)})
+            </span>
+          </motion.button>
         </div>
       ) : (
         <div className="relative flex h-[164px] w-[164px] items-center justify-center">
@@ -430,36 +437,28 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             {rippleKey > 0 && !reduceMotion && (
               <motion.span
                 key={rippleKey}
-                initial={{ scale: 0.78, opacity: 0.7 }}
+                initial={{ scale: 0.78, opacity: 0.65 }}
                 animate={{ scale: 1.45, opacity: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.65, ease: 'easeOut' }}
-                className="pointer-events-none absolute inset-2 rounded-full border-4 border-rose-400"
+                className="pointer-events-none absolute inset-2 rounded-full border-4 border-emerald-500"
               />
             )}
           </AnimatePresence>
-
-          {!reduceMotion && (
-            <motion.span
-              animate={{ scale: [1, 1.06, 1], opacity: [0.25, 0.45, 0.25] }}
-              transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut' }}
-              className="pointer-events-none absolute inset-1 rounded-full bg-emerald-500/15"
-            />
-          )}
 
           <motion.button
             type="button"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.94 }}
             onClick={() => openConfirmFor('start')}
-            className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-xl shadow-emerald-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-400"
+            className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-xl shadow-emerald-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-300"
           >
-            <LogIn className="mb-1.5 h-7 w-7" />
-            <span className="text-xs font-black uppercase tracking-widest leading-none">
+            <LogIn className="mb-1 h-6 w-6" />
+            <span className="text-xs font-black uppercase tracking-wider">
               {language === 'es' ? 'Marcar Entrada' : 'Marcar Entrada'}
             </span>
-            <span className="mt-1.5 text-[10px] font-bold text-emerald-100">
-              {language === 'es' ? 'Toque para ingresar' : 'Toque para ingressar'}
+            <span className="mt-0.5 text-[10px] font-bold opacity-85">
+              {language === 'es' ? 'Toca para ingresar' : 'Toque para ingressar'}
             </span>
           </motion.button>
         </div>
@@ -492,7 +491,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         </button>
       </div>
 
-      {/* Confirmation Popup */}
+      {/* Confirmation Modal */}
       <AnimatePresence>
         {confirmPrompt && (
           <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
@@ -504,11 +503,11 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               className="absolute inset-0 bg-slate-900/55 backdrop-blur-xs"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              initial={{ opacity: 0, scale: 0.92, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              exit={{ opacity: 0, scale: 0.92, y: 12 }}
               transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-              className="relative z-10 w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl space-y-4 text-center"
+              className="relative z-10 w-full max-w-xs rounded-[2rem] border border-slate-200 bg-white p-5 text-center shadow-2xl space-y-4"
             >
               <div
                 className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md ${
@@ -538,13 +537,9 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                       : language === 'es'
                       ? `¿Seguro que quieres ingresar ahora (${confirmPrompt.timeLabel})?`
                       : `Certeza que quer ingressar agora (${confirmPrompt.timeLabel})?`
-                    : confirmPrompt.part === 1
-                    ? `Certeza que quer marcar a saída do 1º turno agora (${confirmPrompt.timeLabel})?`
-                    : confirmPrompt.part === 2
-                    ? `Certeza que quer marcar a saída do 2º turno agora (${confirmPrompt.timeLabel})?`
                     : language === 'es'
-                    ? `¿Seguro que quieres marcar la salida ahora (${confirmPrompt.timeLabel})?`
-                    : `Certeza que quer marcar a saída agora (${confirmPrompt.timeLabel})?`}
+                    ? `¿Seguro que quieres salir ahora (${confirmPrompt.timeLabel})?`
+                    : `Certeza que quer sair agora (${confirmPrompt.timeLabel})?`}
                 </h3>
                 <p className="mt-1 text-xs font-medium text-slate-500">
                   {confirmPrompt.action === 'start'
@@ -558,10 +553,12 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                       ? 'Registra somente a entrada do 1º turno.'
                       : confirmPrompt.part === 2
                       ? 'Registra somente a entrada do 2º turno.'
-                      : 'Será registrado somente o horário de entrada do seu turno.'
-                    : `Finaliza o turno iniciado às ${activeShift?.startTime}${
-                        confirmPrompt.part ? ` (${confirmPrompt.part}º turno)` : ''
-                      }.`}
+                      : language === 'es'
+                      ? 'Se registrará tu hora de entrada al trabajo.'
+                      : 'Será registrado o horário de entrada no trabalho.'
+                    : language === 'es'
+                    ? 'Se cerrará el turno activo y se guardará en tu historial.'
+                    : 'O turno ativo será encerrado e salvo no histórico.'}
                 </p>
               </div>
 
@@ -569,9 +566,9 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                 <button
                   type="button"
                   onClick={() => setConfirmPrompt(null)}
-                  className="rounded-2xl border border-slate-200 bg-white py-3 text-xs font-black text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 py-3 text-xs font-black text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
-                  Cancelar
+                  {language === 'es' ? 'Cancelar' : 'Cancelar'}
                 </button>
                 <button
                   type="button"
@@ -589,7 +586,11 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                       ? language === 'es'
                         ? 'Sí, turno extra'
                         : 'Sim, turno extra'
+                      : language === 'es'
+                      ? 'Sí, ingresar'
                       : 'Sim, ingressar'
+                    : language === 'es'
+                    ? 'Sí, salir'
                     : 'Sim, sair'}
                 </button>
               </div>
