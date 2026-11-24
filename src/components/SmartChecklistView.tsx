@@ -14,7 +14,6 @@ import {
   Home,
   Plane,
   X,
-  Flame,
   ListChecks,
   CircleDashed,
   CheckCircle2,
@@ -472,7 +471,6 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
     };
   };
 
-  // Circular radial ring metrics for Finzy's HUD
   const ringR = 25;
   const ringCirc = 2 * Math.PI * ringR;
   const ringDashOffset = ringCirc * (1 - progressPct / 100);
@@ -513,7 +511,7 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                   {isEs ? 'Checklists Reutilizables' : 'Checklists Reutilizáveis'}
                 </h1>
                 <p className="truncate text-[9.5px] font-bold uppercase tracking-wider text-emerald-700">
-                  {isEs ? 'Estación Interactiva • Reset 1 Toque' : 'Estação Interativa • Reset 1 Toque'}
+                  {isEs ? 'Todas las listas visibles • Reset 1 toque' : 'Todas as listas visíveis • Reset 1 toque'}
                 </p>
               </div>
             </div>
@@ -532,60 +530,76 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
           {/* Scrollable Body */}
           <div className="flex-1 overflow-y-auto px-3.5 py-3.5">
             <div className="mx-auto max-w-xl space-y-3.5 pb-16">
-              {/* Interactive Horizontal List Dock */}
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+              {/* All Lists Exposed in a Responsive 2-Column Grid (Zero Hidden Horizontal Scroll!) */}
+              <div className="grid grid-cols-2 gap-2">
                 {lists.map((lst) => {
                   const isSel = activeList?.id === lst.id;
                   const done = lst.items.filter((x) => x.checked).length;
                   const total = lst.items.length;
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                   const allDone = total > 0 && done === total;
 
                   return (
                     <motion.button
                       key={lst.id}
                       type="button"
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={!reduceMotion ? { y: -1.5 } : undefined}
+                      whileTap={{ scale: 0.97 }}
                       onClick={() => {
                         setSelectedListId(lst.id);
                         setStatusFilter('all');
                         setLastBackupBeforeReset(null);
+                        playTaskTick(true);
                       }}
-                      className={`relative isolate inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                      className={`relative isolate flex flex-col justify-between gap-2 rounded-2xl border p-3 text-left transition-all cursor-pointer overflow-hidden ${
                         isSel
-                          ? 'text-emerald-950 shadow-sm'
-                          : 'border border-slate-200/85 bg-white text-slate-700 hover:border-emerald-300'
+                          ? 'border-emerald-400 bg-gradient-to-br from-emerald-100/90 via-[#E3F9EE] to-teal-100/80 shadow-md shadow-emerald-600/12 ring-2 ring-emerald-400/40'
+                          : 'border-slate-200/85 bg-white hover:border-emerald-300 shadow-2xs'
                       }`}
                     >
-                      {isSel && (
-                        <motion.span
-                          layoutId="checklist-active-pill"
-                          transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                          className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-200/95 via-[#B9F2D5] to-teal-200/90 border border-emerald-400/80 shadow-[0_6px_18px_rgba(5,150,105,0.18)]"
-                        />
-                      )}
-                      <span
-                        className={`flex h-6 w-6 items-center justify-center rounded-xl ${
-                          isSel
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-emerald-50 text-emerald-700'
-                        }`}
-                      >
-                        {renderListIcon(lst.icon, 'h-3.5 w-3.5')}
-                      </span>
-                      <span>{lst.title}</span>
-                      {total > 0 && (
+                      <div className="flex items-center justify-between gap-2 w-full">
                         <span
-                          className={`rounded-full px-1.5 py-0.5 font-mono text-[9.5px] font-black ${
-                            allDone
-                              ? 'bg-emerald-600 text-white'
-                              : isSel
-                              ? 'bg-white/80 text-emerald-900'
-                              : 'bg-slate-100 text-slate-600'
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-transform ${
+                            isSel
+                              ? 'bg-emerald-600 text-white shadow-xs scale-105'
+                              : 'bg-emerald-50 text-emerald-700'
                           }`}
                         >
-                          {done}/{total}
+                          {renderListIcon(lst.icon, 'h-3.5 w-3.5')}
                         </span>
-                      )}
+
+                        {total > 0 && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 font-mono text-[9.5px] font-black shrink-0 ${
+                              allDone
+                                ? 'bg-emerald-600 text-white'
+                                : isSel
+                                ? 'bg-emerald-700 text-white'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {done}/{total}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="w-full min-w-0">
+                        <div
+                          className={`truncate text-xs font-black ${
+                            isSel ? 'text-emerald-950' : 'text-slate-800'
+                          }`}
+                        >
+                          {lst.title}
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/80 border border-slate-200/50">
+                          <motion.div
+                            initial={false}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+                            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
+                          />
+                        </div>
+                      </div>
                     </motion.button>
                   );
                 })}
@@ -602,7 +616,6 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      {/* Finzy Mascot + Title */}
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white border border-emerald-100 shadow-xs">
                           <FinzyMascot
@@ -640,7 +653,6 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Radial Progress Ring + Reset Button */}
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="relative flex h-14 w-14 items-center justify-center">
                           <svg className="h-full w-full -rotate-90" viewBox="0 0 64 64">
@@ -690,7 +702,6 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Smooth Gradient Bar with Elegant Light Sheen at 100% */}
                     <div className="relative mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200/75 p-0.5">
                       <motion.div
                         initial={false}
@@ -885,7 +896,6 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                                   : 'border-slate-200/85 bg-white hover:border-emerald-300 shadow-2xs'
                               }`}
                             >
-                              {/* Left Accent Strip */}
                               <span
                                 className={`absolute left-0 top-2.5 bottom-2.5 w-1 rounded-r-full transition-all ${
                                   item.checked
@@ -933,9 +943,7 @@ export const SmartChecklistView: React.FC<SmartChecklistViewProps> = ({
                                         handleCycleItemTag(item.id);
                                       }}
                                       title={
-                                        isEs
-                                          ? 'Cambiar etiqueta'
-                                          : 'Trocar tipo do item'
+                                        isEs ? 'Cambiar etiqueta' : 'Trocar tipo do item'
                                       }
                                       className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide transition-transform active:scale-95 cursor-pointer ${tMeta.cls}`}
                                     >
