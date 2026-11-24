@@ -97,17 +97,38 @@ function playReminderChime(isImportant: boolean) {
   }
 }
 
-function triggerSystemNotification(item: ReminderItem, language: LanguageCode) {
+export async function dispatchSystemNotification(item: ReminderItem, language: LanguageCode) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
+
+  const title = `Finzy • ${item.title}`;
+  const body =
+    item.notes ||
+    (language === 'es'
+      ? `Recordatorio programado para ${item.dueDate}${item.dueTime ? ` a las ${item.dueTime}` : ''}`
+      : `Lembrete marcado para ${item.dueDate}${item.dueTime ? ` às ${item.dueTime}` : ''}`);
+
   try {
-    const bodyText =
-      item.notes ||
-      (language === 'es'
-        ? `Recordatorio programado para ${item.dueDate}${item.dueTime ? ` a las ${item.dueTime}` : ''}`
-        : `Lembrete marcado para ${item.dueDate}${item.dueTime ? ` às ${item.dueTime}` : ''}`);
-    new Notification(`Finzy • ${item.title}`, {
-      body: bodyText,
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration().catch(() => undefined);
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(title, {
+          body,
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-192x192.png',
+          tag: `sisfinz_rem_${item.id}`,
+          data: { reminderId: item.id, url: '/' },
+        } as NotificationOptions);
+        return;
+      }
+    }
+  } catch {
+    // fallback below
+  }
+
+  try {
+    new Notification(title, {
+      body,
       icon: '/pwa-192x192.png',
       tag: `sisfinz_rem_${item.id}`,
     });
@@ -201,17 +222,26 @@ export function useReminders(language: LanguageCode = 'pt') {
       repeat?: ReminderRepeat;
       important?: boolean;
     }): Promise<ReminderItem> => {
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const todayStr = getTodayYYYYMMDD(now);
+      const curTime = getCurrentHHMM(now);
+      const targetDate = params.dueDate || todayStr;
+      const targetTime = params.dueTime || '09:00';
+      const isAlreadyDueNow =
+        targetDate < todayStr || (targetDate === todayStr && targetTime <= curTime);
+
       const item: ReminderItem = {
         id: `rem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: params.title.trim(),
         notes: params.notes?.trim() || undefined,
-        dueDate: params.dueDate || getTodayYYYYMMDD(),
+        dueDate: targetDate,
         dueTime: params.dueTime || undefined,
         category: params.category || 'routine',
         repeat: params.repeat || 'none',
         important: Boolean(params.important),
         status: 'pending',
+        lastNotifiedKey: isAlreadyDueNow ? `${targetDate}_${targetTime}` : undefined,
         createdAt: nowIso,
         updatedAt: nowIso,
       };
@@ -237,7 +267,6 @@ export function useReminders(language: LanguageCode = 'pt') {
 
       let updatedItem: ReminderItem;
       if (current.status === 'pending' && current.repeat !== 'none') {
-        // Advance recurring reminder to next occurrence cleanly
         const nextDueDate = advanceDateByRepeat(current.dueDate, current.repeat);
         updatedItem = {
           ...current,
@@ -295,7 +324,7 @@ export function useReminders(language: LanguageCode = 'pt') {
           ...current,
           status: 'pending',
           snoozedUntilIso: snoozeUntil.toISOString(),
-          lastNotifiedKey: `snooze_${snoozeUntil.toISOString()}`,
+          lastNotifiedKey: `snoozed_${snoozeUntil.toISOString()}`,
           updatedAt: nowIso,
         };
       }
@@ -317,26 +346,30 @@ export function useReminders(language: LanguageCode = 'pt') {
     setAlertQueue((q) => q.filter((item) => item.id !== id));
   }, []);
 
-  const triggerTestFinzyAlert = useCallback((sampleTitle?: string) => {
-    const now = new Date();
-    const demo: ReminderItem = {
-      id: `demo_${Date.now()}`,
-      title: sampleTitle || 'Conferir mochila e carregador antes do turno',
-      notes: 'Aviso interativo do Finzy — teste de som, pulso e soneca rápida',
-      dueDate: getTodayYYYYMMDD(now),
-      dueTime: getCurrentHHMM(now),
-      category: 'work',
-      repeat: 'none',
-      important: true,
-      status: 'pending',
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-    playReminderChime(true);
-    setAlertQueue((prev) =>
-      prev.some((x) => x.title === demo.title) ? prev : [...prev, demo]
-    );
-  }, []);
+  const triggerTestFinzyAlert = useCallback(
+    (sampleTitle?: string) => {
+      const now = new Date();
+      const demo: ReminderItem = {
+        id: `demo_${Date.now()}`,
+        title: sampleTitle || 'Conferir mochila e carregador antes do turno',
+        notes: 'Aviso interativo do Finzy — teste de som, pulso e soneca rápida',
+        dueDate: getTodayYYYYMMDD(now),
+        dueTime: getCurrentHHMM(now),
+        category: 'work',
+        repeat: 'none',
+        important: true,
+        status: 'pending',
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      playReminderChime(true);
+      dispatchSystemNotification(demo, language);
+      setAlertQueue((prev) =>
+        prev.some((x) => x.title === demo.title) ? prev : [...prev, demo]
+      );
+    },
+    [language]
+  );
 
   const deleteReminder = useCallback(
     async (id: string) => {
@@ -364,7 +397,6 @@ export function useReminders(language: LanguageCode = 'pt') {
       const updatedList = remindersRef.current.map((item) => {
         if (item.status !== 'pending') return item;
 
-        // If snoozed until a specific future timestamp
         if (item.snoozedUntilIso) {
           const snoozeMs = new Date(item.snoozedUntilIso).getTime();
           if (!Number.isNaN(snoozeMs) && nowMs >= snoozeMs) {
@@ -384,7 +416,6 @@ export function useReminders(language: LanguageCode = 'pt') {
           return item;
         }
 
-        // Scheduled for today or overdue
         const isTodayOrPast = item.dueDate <= todayStr;
         if (!isTodayOrPast) return item;
 
@@ -421,7 +452,7 @@ export function useReminders(language: LanguageCode = 'pt') {
       if (newlyDue.length > 0) {
         playReminderChime(newlyDue.some((x) => x.important));
         for (const d of newlyDue) {
-          triggerSystemNotification(d, language);
+          dispatchSystemNotification(d, language);
         }
         setAlertQueue((prev) => {
           const existingIds = new Set(prev.map((x) => x.id));

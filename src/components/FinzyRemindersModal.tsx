@@ -18,6 +18,7 @@ import {
   HeartPulse,
   UserCheck,
   AlarmClock,
+  Smartphone,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
@@ -238,16 +239,16 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                         <div className="text-xs font-black text-slate-900 truncate">
                           {notifPermission === 'granted'
                             ? isEs
-                              ? 'Avisos en pantalla + sistema activos'
-                              : 'Avisos na tela + sistema ativos'
+                              ? 'Notificaciones del sistema activadas'
+                              : 'Notificações do sistema ativadas'
                             : isEs
-                            ? 'Avisos na tela ativos • Activa push del sistema'
-                            : 'Avisos na tela ativos • Ative o push do sistema'}
+                            ? 'Activa notificaciones para cuando cierres la app'
+                            : 'Ative as notificações para avisos com o app fechado'}
                         </div>
-                        <div className="text-[10px] font-semibold text-slate-500 truncate">
+                        <div className="text-[10px] font-semibold text-slate-500 leading-snug">
                           {isEs
-                            ? 'Incluye recordatorios recurrentes diarios, semanales y mensuales'
-                            : 'Inclui lembretes recorrentes diários, semanais e mensais'}
+                            ? 'En web/PWA, el navegador suspende scripts al cerrar la app; activa el aviso del sistema y mantén la PWA instalada.'
+                            : 'Na web/PWA, o navegador pausa o app ao fechar; ative o aviso do sistema e mantenha a PWA instalada para alertas na barra.'}
                         </div>
                       </div>
                     </div>
@@ -261,6 +262,16 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                         {isEs ? 'Activar' : 'Ativar'}
                       </button>
                     )}
+                  </div>
+
+                  {/* Honest Background Limitation Note for Web/PWA */}
+                  <div className="flex items-start gap-2 rounded-2xl border border-amber-200/90 bg-amber-50/75 px-3.5 py-2.5 text-[10.5px] font-semibold text-amber-950">
+                    <Smartphone className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
+                    <span>
+                      {isEs
+                        ? 'Aviso importante: al cerrar por completo una app web/PWA (especialmente en iPhone/Android), el sistema suspende el reloj interno hasta reabrirla. Al abrirla, Finzy dispara el aviso al instante; para que llegue con la app cerrada sin depender de abrirla, hace falta un servidor push (Web Push / FCM).'
+                        : 'Como funciona ao fechar o app: quando você fecha completamente um app web/PWA (principalmente no iPhone/Android), o sistema suspende o relógio interno até reabrir — por isso ele avisa na hora ao entrar. Para avisar sozinho mesmo com o app 100% fechado, é preciso conectar envio remoto por Web Push / FCM no servidor.'}
+                    </span>
                   </div>
 
                   {/* Create Reminder Form */}
@@ -329,7 +340,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Recurrence Selector Pills */}
                     <div className="space-y-1.5">
                       <span className="inline-flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wider text-slate-400">
                         <Repeat className="h-3 w-3 text-emerald-600" />
@@ -405,7 +415,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                     </motion.button>
                   </form>
 
-                  {/* Filter Switcher (including Recorrentes) */}
                   <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-white/85 p-1 border border-slate-200/70 w-fit">
                     {(
                       [
@@ -442,7 +451,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                     ))}
                   </div>
 
-                  {/* Reminders List */}
                   <div className="space-y-2">
                     <AnimatePresence initial={false} mode="popLayout">
                       {filteredReminders.length === 0 ? (
@@ -560,7 +568,6 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
         document.body
       )}
 
-      {/* Animated Finzy Pop-Up Alert when a Reminder Triggers */}
       {createPortal(
         <AnimatePresence>
           {activeAlert && (
