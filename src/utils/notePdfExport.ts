@@ -7,11 +7,11 @@ import { NoteItem, htmlToPlainText } from '../hooks/useNotes';
  */
 
 const WIN_ANSI_EXTRAS: Record<number, number> = {
-  0x20ac: 0x80, // €
+  0x20ac: 0x80,
   0x201a: 0x82,
   0x0192: 0x83,
   0x201e: 0x84,
-  0x2026: 0x85, // …
+  0x2026: 0x85,
   0x2020: 0x86,
   0x2021: 0x87,
   0x02c6: 0x88,
@@ -20,13 +20,13 @@ const WIN_ANSI_EXTRAS: Record<number, number> = {
   0x2039: 0x8b,
   0x0152: 0x8c,
   0x017d: 0x8e,
-  0x2018: 0x91, // ‘
-  0x2019: 0x92, // ’
-  0x201c: 0x93, // “
-  0x201d: 0x94, // ”
-  0x2022: 0x95, // •
-  0x2013: 0x96, // –
-  0x2014: 0x97, // —
+  0x2018: 0x91,
+  0x2019: 0x92,
+  0x201c: 0x93,
+  0x201d: 0x94,
+  0x2022: 0x95,
+  0x2013: 0x96,
+  0x2014: 0x97,
   0x02dc: 0x98,
   0x2122: 0x99,
   0x0161: 0x9a,
@@ -48,15 +48,12 @@ function encodePdfLiteralWinAnsi(text: string): string {
     } else if (WIN_ANSI_EXTRAS[code] !== undefined) {
       byte = WIN_ANSI_EXTRAS[code];
     } else if (code === 0x2610) {
-      // ☐ -> [ ]
       out += '[ ]';
       continue;
     } else if (code === 0x2611 || code === 0x2713) {
-      // ☑ / ✓ -> [x]
       out += '[x]';
       continue;
     } else {
-      // Fallback for emojis/unsupported glyphs
       continue;
     }
 
@@ -113,7 +110,7 @@ function wrapTextLines(text: string, maxChars: number): string[] {
 
 interface PdfLineOp {
   text: string;
-  font: 'F1' | 'F2' | 'F3'; // F1=Regular, F2=Bold, F3=Italic
+  font: 'F1' | 'F2' | 'F3';
   size: number;
   leading: number;
   indent: number;
@@ -124,7 +121,7 @@ interface PdfLineOp {
 }
 
 export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
-  const PAGE_W = 595.28; // A4 pt
+  const PAGE_W = 595.28;
   const PAGE_H = 841.89;
   const MARGIN_X = 48;
   const MARGIN_TOP = 54;
@@ -133,7 +130,6 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
 
   const ops: PdfLineOp[] = [];
 
-  // Title
   const titleText = (note.title || 'Nota sem título').trim();
   const titleLines = wrapTextLines(titleText, 38);
   titleLines.forEach((line, idx) => {
@@ -143,12 +139,11 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
       size: 20,
       leading: 25,
       indent: 0,
-      colorRgb: [0.024, 0.373, 0.275], // Emerald 800
+      colorRgb: [0.024, 0.373, 0.275],
       spaceAfter: idx === titleLines.length - 1 ? 4 : 0,
     });
   });
 
-  // Subtitle / Meta
   ops.push({
     text: `SisFinz Notas  •  ${formattedDate}`,
     font: 'F1',
@@ -159,7 +154,6 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
     spaceAfter: 14,
   });
 
-  // Blocks
   let numCounter = 0;
   for (const blk of note.blocks || []) {
     const plain = htmlToPlainText(blk.html);
@@ -296,7 +290,6 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
     }
   }
 
-  // Tables
   for (const tbl of note.tables || []) {
     const headerRow = tbl.headers.join('  |  ');
     ops.push({
@@ -325,13 +318,11 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
     }
   }
 
-  // Paginate ops into PDF page streams
   const pageStreams: string[] = [];
   let currentCmds: string[] = [];
   let cursorY = PAGE_H - MARGIN_TOP;
 
   const flushPage = () => {
-    // Draw subtle emerald top bar on page 1
     if (pageStreams.length === 0) {
       currentCmds.unshift(
         `0.02 0.59 0.41 rg ${MARGIN_X} ${PAGE_H - 34} ${CONTENT_W} 2.5 re f`
@@ -371,14 +362,12 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
     flushPage();
   }
 
-  // Assemble PDF 1.4 binary structure
   const objects: string[] = [];
   const addObj = (body: string): number => {
     objects.push(body);
     return objects.length;
   };
 
-  // 1: Catalog (placeholder), 2: Pages (placeholder), 3/4/5: Fonts
   const catalogId = addObj('');
   const pagesId = addObj('');
   const fontRegularId = addObj(
@@ -432,7 +421,6 @@ export function buildNotePdfBlob(note: NoteItem, formattedDate: string): Blob {
     `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
   );
 
-  // Write raw Latin-1 bytes so WinAnsi octal escapes & headers stay exact
   const fullStr = chunks.join('');
   const bytes = new Uint8Array(fullStr.length);
   for (let i = 0; i < fullStr.length; i++) {
@@ -455,7 +443,6 @@ export async function shareOrDownloadNotePdf(
     .slice(0, 40);
   const fileName = `${safeBase || 'nota-sisfinz'}.pdf`;
 
-  // Prefer native Share Sheet with PDF file on iPhone / iOS PWA (lets user Save to Files, WhatsApp, AirDrop, Print)
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     try {
       const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
@@ -474,7 +461,6 @@ export async function shareOrDownloadNotePdf(
       if (err?.name === 'AbortError') {
         return 'shared';
       }
-      // Fall through to download
     }
   }
 
@@ -488,4 +474,184 @@ export async function shareOrDownloadNotePdf(
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 4000);
   return 'downloaded';
+}
+
+function buildPrintableHtmlDocument(note: NoteItem, formattedDate: string): string {
+  let num = 0;
+  const blocksHtml = (note.blocks || [])
+    .map((b) => {
+      if (b.type === 'numbered') {
+        num += 1;
+      } else {
+        num = 0;
+      }
+      const align = b.align ? ` style="text-align:${b.align}"` : '';
+      if (b.type === 'heading') return `<h1${align}>${b.html || '&nbsp;'}</h1>`;
+      if (b.type === 'subheading') return `<h2${align}>${b.html || '&nbsp;'}</h2>`;
+      if (b.type === 'heading3') return `<h3${align}>${b.html || '&nbsp;'}</h3>`;
+      if (b.type === 'quote') return `<blockquote${align}>${b.html || '&nbsp;'}</blockquote>`;
+      if (b.type === 'checklist') {
+        return `<p${align} class="${b.checked ? 'checked' : ''}">${b.checked ? '☑' : '☐'} ${
+          b.html || '&nbsp;'
+        }</p>`;
+      }
+      if (b.type === 'bullet') return `<p${align}>• ${b.html || '&nbsp;'}</p>`;
+      if (b.type === 'numbered') return `<p${align}><strong>${num}.</strong> ${b.html || '&nbsp;'}</p>`;
+      return `<p${align}>${b.html || '&nbsp;'}</p>`;
+    })
+    .join('');
+
+  const tablesHtml = (note.tables || [])
+    .map(
+      (tbl) =>
+        `<table><thead><tr>${tbl.headers
+          .map((h) => `<th>${h}</th>`)
+          .join('')}</tr></thead><tbody>${tbl.rows
+          .map((r) => `<tr>${r.map((c) => `<td>${c || '—'}</td>`).join('')}</tr>`)
+          .join('')}</tbody></table>`
+    )
+    .join('');
+
+  const imagesHtml =
+    (note.images || []).length > 0
+      ? `<div class="images">${note.images
+          .map((img) => `<img src="${img.url}" alt="" />`)
+          .join('')}</div>`
+      : '';
+
+  const safeTitle = (note.title || 'Nota sem título')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <style>
+      @page { margin: 18mm; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        line-height: 1.6;
+        margin: 0;
+        padding: 12px;
+      }
+      .top-bar { height: 4px; background: #059669; border-radius: 4px; margin-bottom: 16px; }
+      h1.doc-title { color: #064e3b; font-size: 24px; margin: 0 0 4px 0; }
+      .meta { color: #64748b; font-size: 12px; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+      h1 { font-size: 20px; margin: 14px 0 6px; }
+      h2 { font-size: 16px; color: #065f46; margin: 12px 0 4px; }
+      h3 { font-size: 14px; margin: 10px 0 4px; }
+      p { margin: 4px 0; font-size: 13.5px; }
+      p.checked { color: #94a3b8; text-decoration: line-through; }
+      blockquote { border-left: 3px solid #10b981; padding-left: 12px; color: #475569; font-style: italic; margin: 10px 0; }
+      table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12.5px; }
+      th, td { border: 1px solid #cbd5e1; padding: 7px 9px; text-align: left; }
+      th { background: #ecfdf5; color: #064e3b; font-weight: 700; }
+      .images { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+      .images img { max-width: 48%; max-height: 240px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; }
+    </style>
+  </head>
+  <body>
+    <div class="top-bar"></div>
+    <h1 class="doc-title">${safeTitle}</h1>
+    <div class="meta">SisFinz Notas • ${formattedDate}</div>
+    ${blocksHtml}
+    ${tablesHtml}
+    ${imagesHtml}
+  </body>
+</html>`;
+}
+
+/**
+ * Reliable cross-platform printing:
+ * - On iOS standalone PWA (where Apple WebKit silently ignores window.print()),
+ *   generates a real .pdf and opens the native iOS Share Sheet (which includes AirPrint / "Imprimir").
+ * - On Desktop & standard mobile browsers, prints via an isolated hidden <iframe>
+ *   so fixed overlays and overflow-hidden body styles never break or clip the printout.
+ */
+export async function printNoteDocument(
+  note: NoteItem,
+  formattedDate: string
+): Promise<'printed' | 'ios_share_sheet' | 'downloaded'> {
+  const isIOS =
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  const isStandalone =
+    typeof window !== 'undefined' &&
+    ((window.navigator as any).standalone === true ||
+      window.matchMedia?.('(display-mode: standalone)')?.matches === true);
+
+  // iOS Home Screen PWA silently ignores window.print() — route to native Share Sheet (AirPrint)
+  if (isIOS && isStandalone) {
+    const res = await shareOrDownloadNotePdf(note, formattedDate);
+    return res === 'shared' ? 'ios_share_sheet' : 'downloaded';
+  }
+
+  if (typeof document !== 'undefined') {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      const win = iframe.contentWindow;
+      if (doc && win && typeof win.print === 'function') {
+        doc.open();
+        doc.write(buildPrintableHtmlDocument(note, formattedDate));
+        doc.close();
+
+        await new Promise<void>((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+          const imgs = Array.from(doc.images || []);
+          if (imgs.length === 0) {
+            window.setTimeout(finish, 80);
+            return;
+          }
+          let pending = imgs.length;
+          const onOne = () => {
+            pending -= 1;
+            if (pending <= 0) finish();
+          };
+          imgs.forEach((img) => {
+            if (img.complete) onOne();
+            else {
+              img.onload = onOne;
+              img.onerror = onOne;
+            }
+          });
+          window.setTimeout(finish, 1200);
+        });
+
+        win.focus();
+        win.print();
+
+        const cleanup = () => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        };
+        win.addEventListener?.('afterprint', cleanup, { once: true });
+        window.setTimeout(cleanup, 60000);
+        return 'printed';
+      }
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    } catch {
+      // Fall back to PDF share/download
+    }
+  }
+
+  const res = await shareOrDownloadNotePdf(note, formattedDate);
+  return res === 'shared' ? 'ios_share_sheet' : 'downloaded';
 }

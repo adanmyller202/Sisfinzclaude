@@ -63,7 +63,7 @@ import {
   NoteTemplateId,
   buildNoteFromTemplate,
 } from '../utils/noteTemplates';
-import { shareOrDownloadNotePdf } from '../utils/notePdfExport';
+import { printNoteDocument, shareOrDownloadNotePdf } from '../utils/notePdfExport';
 import { NoteDrawingModal } from './NoteDrawingModal';
 import { NotePinModal } from './NotePinModal';
 import { SmartNoteEditor } from './SmartNoteEditor';
@@ -276,7 +276,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [newFolderIcon, setNewFolderIcon] = useState<NoteFolderIcon>('lightbulb');
   const [newFolderColor, setNewFolderColor] = useState<NoteFolderColor>('emerald');
 
-  // Move Note to Folder modal state
   const [moveModalNoteId, setMoveModalNoteId] = useState<string | null>(null);
   const [moveTargetFolderId, setMoveTargetFolderId] = useState<string | null>(null);
   const [isCreatingInMoveModal, setIsCreatingInMoveModal] = useState(false);
@@ -284,9 +283,9 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [moveNewFolderIcon, setMoveNewFolderIcon] = useState<NoteFolderIcon>('folder');
   const [moveNewFolderColor, setMoveNewFolderColor] = useState<NoteFolderColor>('emerald');
 
-  // In-app PDF Preview & Export modal (never uses window.open so iOS PWA never gets trapped)
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
 
   const [isEditorMenuOpen, setIsEditorMenuOpen] = useState(false);
   const [isTagsPopoverOpen, setIsTagsPopoverOpen] = useState(false);
@@ -328,7 +327,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setToastMessage(msg);
     window.setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
-    }, 2200);
+    }, 2600);
   };
 
   const stopDictation = () => {
@@ -929,9 +928,27 @@ export const NotesView: React.FC<NotesViewProps> = ({
     }
   };
 
-  const handleNativePrintFromPreview = () => {
-    if (typeof window !== 'undefined' && typeof window.print === 'function') {
-      window.print();
+  const handleNativePrintFromPreview = async () => {
+    if (!activeNote || isPrintingPdf) return;
+    setIsPrintingPdf(true);
+    try {
+      const outcome = await printNoteDocument(
+        activeNote,
+        formatNoteDate(activeNote.updatedAt, isEs)
+      );
+      if (outcome === 'ios_share_sheet') {
+        showToast(
+          isEs
+            ? 'Toca en "Imprimir" en el menú del iPhone'
+            : 'Toque em "Imprimir" no menu do iPhone'
+        );
+      } else if (outcome === 'downloaded') {
+        showToast(isEs ? 'PDF listo para imprimir' : 'PDF pronto para imprimir');
+      }
+    } catch {
+      showToast(isEs ? 'Error al imprimir' : 'Erro ao imprimir');
+    } finally {
+      setIsPrintingPdf(false);
     }
   };
 
@@ -984,7 +1001,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 transition={{ duration: 0.2 }}
                 className="flex h-full w-full max-w-full flex-col overflow-hidden"
               >
-                {/* Emerald Editorial Hero Header */}
                 <div
                   className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 pb-4 pt-3 shrink-0 shadow-[0_10px_30px_rgba(6,78,59,0.16)]"
                   style={{ paddingTop: 'max(0.85rem, env(safe-area-inset-top, 0px))' }}
@@ -1061,7 +1077,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       )}
                     </div>
 
-                    {/* 3-Area Floating Capsule Navigation */}
                     <div className="grid grid-cols-3 gap-1 rounded-2xl bg-emerald-950/20 border border-white/15 p-1 backdrop-blur-sm">
                       {(
                         [
@@ -1104,7 +1119,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Scrollable Body */}
                 <div className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 py-4">
                   <div className="mx-auto max-w-2xl w-full min-w-0">
                     <AnimatePresence mode="wait" initial={false}>
@@ -1127,7 +1141,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           transition={{ duration: 0.2 }}
                           className="space-y-5 pb-24"
                         >
-                          {/* Smart Collections */}
                           <div className="space-y-2.5">
                             <span className="px-1 text-[10px] font-black uppercase tracking-widest text-emerald-900/60">
                               {isEs ? 'Colecciones inteligentes' : 'Coleções inteligentes'}
@@ -1202,7 +1215,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             </div>
                           </div>
 
-                          {/* Custom Folders */}
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between px-1">
                               <span className="text-[10px] font-black uppercase tracking-widest text-emerald-900/60">
@@ -1287,7 +1299,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           </div>
                         </motion.div>
                       ) : (
-                        /* AREA 1: CREATIVE NOTES STUDIO */
                         <motion.div
                           key="area-all-notes"
                           initial={reduceMotion ? false : { opacity: 0, y: 10 }}
@@ -1296,7 +1307,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                           transition={{ duration: 0.2 }}
                           className="space-y-4 pb-28"
                         >
-                          {/* Search Bar */}
                           <div className="relative">
                             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/70" />
                             <input
@@ -1321,7 +1331,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             )}
                           </div>
 
-                          {/* Quick Start Templates Carousel */}
                           {quickFilter !== 'trash' && !searchQuery.trim() && (
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between px-1">
@@ -1349,7 +1358,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             </div>
                           )}
 
-                          {/* Active Folder Banner or Filter Pills */}
                           {selectedFolderId ? (
                             <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5">
                               <div className="flex items-center gap-2 text-xs font-black text-emerald-900">
@@ -1420,7 +1428,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             </div>
                           )}
 
-                          {/* Creative Notebook Cards Grid / List */}
                           {filteredNotes.length === 0 ? (
                             <motion.div
                               initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
@@ -1583,7 +1590,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                                                         className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 cursor-pointer"
                                                       >
                                                         <FolderInput className="h-3.5 w-3.5 text-emerald-600" />
-                                                        {isEs ? 'Mover' : 'Mover'}
+                                                        Mover
                                                       </button>
                                                       <button
                                                         type="button"
@@ -1721,7 +1728,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                             </div>
                           )}
 
-                          {/* Floating Studio + New Note Button */}
                           {quickFilter !== 'trash' && (
                             <motion.button
                               type="button"
@@ -1755,7 +1761,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   <div className={`h-[3.5px] w-full shrink-0 ${activeAccentStyle.accentBar}`} />
                 )}
 
-                {/* Safe-Area Protected Compact Studio Header */}
                 <div
                   className="flex items-center justify-between gap-1.5 border-b border-emerald-200/70 bg-white px-3 py-2.5 shrink-0 shadow-[0_2px_12px_rgba(6,78,59,0.04)] z-30"
                   style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
@@ -1796,7 +1801,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-slate-100/90 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
                           }`}
-                          title={isEs ? 'Estilo de papel' : 'Estilo de papel'}
+                          title="Estilo de papel"
                         >
                           <Grid2x2 className="h-4 w-4" />
                         </button>
@@ -1874,7 +1879,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </button>
                     )}
 
-                    {/* Editor Options Dropdown */}
                     <AnimatePresence>
                       {isEditorMenuOpen && (
                         <motion.div
@@ -2048,7 +2052,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
 
-                {/* In-Note Search Bar */}
                 <AnimatePresence>
                   {isInNoteSearchOpen && (
                     <motion.div
@@ -2103,7 +2106,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   className="hidden"
                 />
 
-                {/* Paper Desk Scrollable Surface */}
                 <div
                   className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2.5 sm:px-5 py-3 sm:py-5"
                   style={{
@@ -2114,7 +2116,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     style={getPaperBackgroundStyle(activeNote.paperStyle || 'plain')}
                     className="mx-auto w-full max-w-2xl min-h-[calc(100dvh-140px)] rounded-[1.75rem] border border-emerald-200/70 bg-white px-4 sm:px-7 py-5 sm:py-7 shadow-[0_12px_36px_rgba(6,78,59,0.06)] space-y-3.5 min-w-0"
                   >
-                    {/* Metadata & Interactive Folder Pill */}
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-400">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span>{formatNoteDate(activeNote.updatedAt, isEs)}</span>
@@ -2138,7 +2139,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Tags */}
                     {((activeNote.tags || []).length > 0 || isTagsPopoverOpen) && (
                       <div className="flex flex-wrap items-center gap-1.5">
                         {(activeNote.tags || []).map((tg) => (
@@ -2179,7 +2179,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </div>
                     )}
 
-                    {/* Title */}
                     {isReadingMode ? (
                       <h1 className="text-[26px] font-black tracking-tight text-slate-900 leading-tight break-words">
                         {activeNote.title || (isEs ? 'Nota sin título' : 'Nota sem título')}
@@ -2195,7 +2194,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       />
                     )}
 
-                    {/* Smart Editor */}
                     <SmartNoteEditor
                       noteId={activeNote.id}
                       blocks={activeNote.blocks}
@@ -2215,7 +2213,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       onToggleDictation={handleToggleDictation}
                     />
 
-                    {/* Tables */}
                     {(activeNote.tables || []).length > 0 && (
                       <div className="space-y-3 pt-3 w-full max-w-full min-w-0">
                         {(activeNote.tables || []).map((tbl) => (
@@ -2319,7 +2316,6 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       </div>
                     )}
 
-                    {/* Attached Images, Drawings & Scans */}
                     {(activeNote.images || []).length > 0 && (
                       <div className="space-y-2 pt-3">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
@@ -2370,7 +2366,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
             )}
           </AnimatePresence>
 
-          {/* IN-APP PDF PREVIEW & EXPORT MODAL (Works reliably on iPhone PWA — never traps user) */}
+          {/* IN-APP PDF PREVIEW & EXPORT MODAL */}
           <AnimatePresence>
             {isPdfPreviewOpen && activeNote && (
               <motion.div
@@ -2379,11 +2375,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 18 }}
                 transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[94] flex flex-col bg-[#EFF6F3] text-slate-900 overflow-hidden print:static print:h-auto print:bg-white print:overflow-visible"
+                className="fixed inset-0 z-[94] flex flex-col bg-[#EFF6F3] text-slate-900 overflow-hidden"
               >
-                {/* Sticky Top Bar (Hidden when actually printing) */}
                 <div
-                  className="flex items-center justify-between gap-2 border-b border-emerald-200/80 bg-white px-3.5 py-3 shrink-0 shadow-xs print:hidden"
+                  className="flex items-center justify-between gap-2 border-b border-emerald-200/80 bg-white px-3.5 py-3 shrink-0 shadow-xs"
                   style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
                 >
                   <button
@@ -2398,11 +2393,16 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={handleNativePrintFromPreview}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100 cursor-pointer touch-manipulation"
+                      disabled={isPrintingPdf}
+                      onClick={() => void handleNativePrintFromPreview()}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer touch-manipulation"
                     >
-                      <Printer className="h-3.5 w-3.5" />
-                      <span>{isEs ? 'Imprimir' : 'Imprimir'}</span>
+                      {isPrintingPdf ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Printer className="h-3.5 w-3.5" />
+                      )}
+                      <span>Imprimir</span>
                     </button>
 
                     <button
@@ -2421,9 +2421,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Printable A4 Sheet Preview */}
-                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-5 print:p-0 print:overflow-visible">
-                  <div className="mx-auto w-full max-w-2xl rounded-2xl border border-emerald-100 bg-white p-6 sm:p-10 shadow-md space-y-4 print:shadow-none print:border-none print:rounded-none print:p-4">
+                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-5">
+                  <div className="mx-auto w-full max-w-2xl rounded-2xl border border-emerald-100 bg-white p-6 sm:p-10 shadow-md space-y-4">
                     <div className="h-1 w-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-500" />
                     <div className="space-y-1 border-b border-slate-100 pb-3">
                       <h1 className="text-2xl font-black text-emerald-900 tracking-tight break-words">
