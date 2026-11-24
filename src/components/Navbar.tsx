@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenFinzyChat,
   hasPendingNotifications = false,
 }) => {
-  const t = getTranslations(language) as Record<string, string>;
+  const t = getTranslations(language) as unknown as Record<string, string>;
   const currentMonthStr = getCurrentMonthStr();
   const [skinId, setSkinId] = useState<string>(() => getSavedFinzySkinId());
   const [isLivingModalOpen, setIsLivingModalOpen] = useState(false);
