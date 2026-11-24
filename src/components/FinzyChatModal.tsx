@@ -14,6 +14,8 @@ import { FinzyMascot, FinzyRoutineState } from './FinzyMascot';
 import { askMone, MoneContext, MoneResponse, MoneActionItem } from '../utils/moneEngine';
 import { getTranslations } from '../utils/i18n';
 import { useSyncStatus } from '../hooks/useSyncStatus';
+import { auth } from '../firebase/config';
+import { GoogleGenAI } from '@google/genai';
 import {
   Send,
   X,
@@ -24,6 +26,10 @@ import {
   ChevronDown,
   Check,
   Sparkles,
+  Mic,
+  MicOff,
+  Volume2,
+  PhoneOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -142,6 +148,25 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
 
   const [isStyleMenuOpen, setIsStyleMenuOpen] = useState(false);
 
+  // Live Voice Mode State
+  const [isVoiceLiveOpen, setIsVoiceLiveOpen] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<
+    'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+  >('idle');
+  const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+
+  const isMicMutedRef = useRef(false);
+  isMicMutedRef.current = isMicMuted;
+
+  const liveSessionRef = useRef<any>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micContextRef = useRef<AudioContext | null>(null);
+  const micProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const playContextRef = useRef<AudioContext | null>(null);
+  const nextPlayTimeRef = useRef<number>(0);
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+
   const STYLE_OPTIONS = React.useMemo(
     () => [
       {
@@ -208,6 +233,288 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen, messages]);
+
+  const stopPlaybackQueue = React.useCallback(() => {
+    activeSourcesRef.current.forEach((src) => {
+      try {
+        src.stop();
+      } catch {
+        // ignore already stopped source
+      }
+    });
+    activeSourcesRef.current.clear();
+    nextPlayTimeRef.current = 0;
+  }, []);
+
+  const stopLiveVoiceSession = React.useCallback(() => {
+    stopPlaybackQueue();
+
+    if (micProcessorRef.current) {
+      try {
+        micProcessorRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+      micProcessorRef.current = null;
+    }
+
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((tr) => tr.stop());
+      micStreamRef.current = null;
+    }
+
+    if (micContextRef.current) {
+      micContextRef.current.close().catch(() => {});
+      micContextRef.current = null;
+    }
+
+    if (playContextRef.current) {
+      playContextRef.current.close().catch(() => {});
+      playContextRef.current = null;
+    }
+
+    if (liveSessionRef.current) {
+      try {
+        if (typeof liveSessionRef.current.close === 'function') {
+          liveSessionRef.current.close();
+        }
+      } catch {
+        // ignore
+      }
+      liveSessionRef.current = null;
+    }
+
+    setVoiceStatus('idle');
+    setIsMicMuted(false);
+    setIsVoiceLiveOpen(false);
+  }, [stopPlaybackQueue]);
+
+  useEffect(() => {
+    if (!isOpen && isVoiceLiveOpen) {
+      stopLiveVoiceSession();
+    }
+  }, [isOpen, isVoiceLiveOpen, stopLiveVoiceSession]);
+
+  useEffect(() => {
+    return () => {
+      stopLiveVoiceSession();
+    };
+  }, [stopLiveVoiceSession]);
+
+  const playPcm16Chunk = React.useCallback((base64Data: string) => {
+    if (!base64Data) return;
+    try {
+      if (!playContextRef.current) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        playContextRef.current = new AudioCtx({ sampleRate: 24000 });
+        nextPlayTimeRef.current = playContextRef.current.currentTime;
+      }
+      const ctx = playContextRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const binaryStr = atob(base64Data);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      const sampleCount = Math.floor(bytes.length / 2);
+      const float32 = new Float32Array(sampleCount);
+      const view = new DataView(bytes.buffer);
+      for (let i = 0; i < sampleCount; i++) {
+        const int16 = view.getInt16(i * 2, true);
+        float32[i] = int16 / 32768;
+      }
+
+      const audioBuffer = ctx.createBuffer(1, sampleCount, 24000);
+      audioBuffer.copyToChannel(float32, 0);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+
+      const startAt = Math.max(ctx.currentTime + 0.02, nextPlayTimeRef.current);
+      source.start(startAt);
+      nextPlayTimeRef.current = startAt + audioBuffer.duration;
+      activeSourcesRef.current.add(source);
+      setVoiceStatus('speaking');
+
+      source.onended = () => {
+        activeSourcesRef.current.delete(source);
+        if (activeSourcesRef.current.size === 0) {
+          setVoiceStatus((prev) => (prev === 'speaking' ? 'listening' : prev));
+        }
+      };
+    } catch (err) {
+      console.warn('Error playing Finzy Live audio chunk:', err);
+    }
+  }, []);
+
+  const startLiveVoiceSession = async () => {
+    if (!isOnline) {
+      setIsVoiceLiveOpen(true);
+      setVoiceStatus('error');
+      setVoiceErrorMsg(
+        language === 'es'
+          ? 'Necesitas conexión a internet para hablar por voz con Finzy.'
+          : 'Você precisa de conexão com a internet para falar por voz com o Finzy.'
+      );
+      return;
+    }
+
+    setIsVoiceLiveOpen(true);
+    setVoiceStatus('connecting');
+    setVoiceErrorMsg(null);
+    setIsMicMuted(false);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const tokenResp = await fetch('/api/mone/live-token', {
+        method: 'POST',
+        headers,
+      });
+
+      if (!tokenResp.ok) {
+        const errJson = await tokenResp.json().catch(() => ({}));
+        throw new Error(
+          errJson.error ||
+            (language === 'es'
+              ? 'No se pudo iniciar la sesión de voz en vivo.'
+              : 'Não foi possível iniciar a sessão de voz ao vivo.')
+        );
+      }
+
+      const tokenData = await tokenResp.json();
+      const financialSummary = [
+        `Saldo atual: ${currentBalance}`,
+        `Moeda padrão: ${currency}`,
+        `Receitas cadastradas: ${incomes.length}`,
+        `Faturas cadastradas: ${bills.length}`,
+        `Despesas avulsas: ${expenses.length}`,
+        `Metas ativas: ${goals.length}`,
+        `Memória recente: ${messages
+          .slice(-12)
+          .map((m) => `${m.sender === 'user' ? 'Usuário' : 'Finzy'}: ${m.text.slice(0, 300)}`)
+          .join(' | ')}`,
+      ].join('\n');
+
+      const liveSystemInstruction =
+        'Você é Finzy, assistente oficial do SisFinz e integrante digital deste aplicativo. Você não é um assistente externo: faz parte do SisFinz. Seu nome próprio e único é Finzy. Se perguntarem seu nome, responda naturalmente: Sou o Finzy, assistente oficial do SisFinz. Se perguntarem quem você é, explique que ajuda o usuário a consultar, organizar e atualizar suas finanças e rotina com os dados reais autorizados do aplicativo e também conversa sobre assuntos gerais. Nunca diga que não tem nome próprio, nunca se apresente como Gemini, Google, Flash ou outro modelo de IA. No modo de voz Live, nunca abra ou leve o usuário para outras telas do aplicativo; apenas responda de forma clara e direta por voz. Contexto real do usuário:\n' +
+        financialSummary;
+
+      const ai = new GoogleGenAI({
+        apiKey: tokenData.token,
+        httpOptions: { apiVersion: 'v1beta' },
+      });
+
+      const session = await ai.live.connect({
+        model: tokenData.model || 'gemini-2.5-flash-native-audio-preview-09-2025',
+        config: {
+          systemInstruction: liveSystemInstruction,
+          responseModalities: ['AUDIO' as any],
+        },
+        callbacks: {
+          onopen: () => {
+            setVoiceStatus('listening');
+          },
+          onmessage: (msg: any) => {
+            const serverContent = msg?.serverContent;
+            if (serverContent?.interrupted) {
+              stopPlaybackQueue();
+              setVoiceStatus('listening');
+              return;
+            }
+            const parts = serverContent?.modelTurn?.parts || [];
+            for (const p of parts) {
+              if (p?.inlineData?.data) {
+                playPcm16Chunk(p.inlineData.data);
+              }
+            }
+          },
+          onerror: (err: any) => {
+            console.warn('Finzy Live socket error:', err);
+            setVoiceStatus('error');
+            setVoiceErrorMsg(
+              err?.message ||
+                (language === 'es'
+                  ? 'Se interrumpió la conexión de voz.'
+                  : 'A conexão de voz foi interrompida.')
+            );
+          },
+          onclose: () => {
+            setVoiceStatus((prev) => (prev === 'error' ? 'error' : 'idle'));
+          },
+        },
+      });
+
+      liveSessionRef.current = session;
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      micStreamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const micCtx = new AudioCtx({ sampleRate: 16000 });
+      micContextRef.current = micCtx;
+
+      const sourceNode = micCtx.createMediaStreamSource(stream);
+      const processor = micCtx.createScriptProcessor(4096, 1, 1);
+      micProcessorRef.current = processor;
+
+      processor.onaudioprocess = (ev) => {
+        if (isMicMutedRef.current || !liveSessionRef.current) return;
+        const inputData = ev.inputBuffer.getChannelData(0);
+        const pcm16 = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        const bytes = new Uint8Array(pcm16.buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = btoa(binary);
+        try {
+          liveSessionRef.current.sendRealtimeInput({
+            audio: {
+              data: b64,
+              mimeType: 'audio/pcm;rate=16000',
+            },
+          });
+        } catch {
+          // ignore send errors during teardown
+        }
+      };
+
+      sourceNode.connect(processor);
+      processor.connect(micCtx.destination);
+      setVoiceStatus('listening');
+    } catch (err: any) {
+      console.error('Failed to start Finzy Live voice:', err);
+      setVoiceStatus('error');
+      setVoiceErrorMsg(
+        err?.message ||
+          (language === 'es'
+            ? 'Permite el micrófono para hablar con Finzy.'
+            : 'Permita o acesso ao microfone para falar com o Finzy.')
+      );
+    }
+  };
 
   const engineContext: MoneContext = {
     currentBalance,
@@ -339,7 +646,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="glass-overlay !z-0"
+            className="glass-overlay"
             onClick={onClose}
           />
 
@@ -386,6 +693,20 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2 relative z-10">
+                {/* Live Voice Button */}
+                <button
+                  type="button"
+                  onClick={startLiveVoiceSession}
+                  className="h-10 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-emerald-600/25"
+                  title={language === 'es' ? 'Modo de Voz en Vivo' : 'Modo de Voz ao Vivo'}
+                  aria-label="Modo de Voz"
+                >
+                  <Mic className="w-4 h-4" />
+                  <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
+                    {language === 'es' ? 'Voz' : 'Voz'}
+                  </span>
+                </button>
+
                 {/* Style Selector */}
                 <div className="relative">
                   <button
@@ -455,6 +776,93 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Live Voice Overlay inside Finzy Chat */}
+            <AnimatePresence>
+              {isVoiceLiveOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 18 }}
+                  className="absolute inset-x-0 top-[82px] bottom-0 z-30 flex flex-col items-center justify-between bg-gradient-to-b from-emerald-50/98 via-white/98 to-teal-50/98 backdrop-blur-xl p-6 text-center"
+                >
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-800">
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
+                      {language === 'es' ? 'Finzy Voz en Vivo' : 'Finzy Voz ao Vivo'}
+                    </span>
+                    <p className="text-xs font-bold text-slate-500">
+                      {voiceStatus === 'connecting'
+                        ? language === 'es'
+                          ? 'Conectando con Finzy...'
+                          : 'Conectando com o Finzy...'
+                        : voiceStatus === 'speaking'
+                        ? language === 'es'
+                          ? 'Finzy está hablando...'
+                          : 'Finzy está falando...'
+                        : voiceStatus === 'error'
+                        ? voiceErrorMsg || 'Erro de voz'
+                        : isMicMuted
+                        ? language === 'es'
+                          ? 'Micrófono silenciado'
+                          : 'Microfone mutado'
+                        : language === 'es'
+                        ? 'Te escucho, habla con naturalidad'
+                        : 'Estou te ouvindo, fale naturalmente'}
+                    </p>
+                  </div>
+
+                  <div className="relative flex h-36 w-36 items-center justify-center">
+                    <motion.span
+                      animate={{
+                        scale:
+                          voiceStatus === 'speaking' || (voiceStatus === 'listening' && !isMicMuted)
+                            ? [1, 1.24, 1]
+                            : 1,
+                        opacity:
+                          voiceStatus === 'speaking' || (voiceStatus === 'listening' && !isMicMuted)
+                            ? [0.25, 0.55, 0.25]
+                            : 0.15,
+                      }}
+                      transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                      className="absolute inset-0 rounded-full bg-emerald-400"
+                    />
+                    <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full bg-white shadow-xl border-2 border-emerald-200">
+                      <FinzyMascot
+                        mood={voiceStatus === 'error' ? 'worried' : 'happy'}
+                        routineState={routineState}
+                        skinId={skinId}
+                        size={68}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsMicMuted((m) => !m)}
+                      className={`flex h-13 w-13 items-center justify-center rounded-2xl border transition-all cursor-pointer shadow-sm ${
+                        isMicMuted
+                          ? 'border-amber-300 bg-amber-100 text-amber-800'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                      aria-label={isMicMuted ? 'Ativar microfone' : 'Mutar microfone'}
+                    >
+                      {isMicMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={stopLiveVoiceSession}
+                      className="inline-flex h-13 items-center gap-2 rounded-2xl bg-rose-600 hover:bg-rose-500 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-rose-600/25 cursor-pointer"
+                    >
+                      <PhoneOff className="w-4 h-4" />
+                      {language === 'es' ? 'Finalizar Voz' : 'Encerrar Voz'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Message Stream */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
