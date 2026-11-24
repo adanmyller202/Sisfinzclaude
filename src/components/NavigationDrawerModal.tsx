@@ -26,10 +26,12 @@ import {
   Briefcase,
   CheckSquare,
   Bell,
+  StickyNote,
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LaborAgendaView } from './labor/LaborAgendaView';
 import { SmartChecklistView } from './SmartChecklistView';
+import { NotesView } from './NotesView';
 import { TransactionType } from './TransactionModal';
 
 type DrawerViewId =
@@ -48,14 +50,15 @@ type DrawerViewId =
   | 'daily_pace'
   | 'labor_agenda'
   | 'smart_checklists'
-  | 'finzy_reminders';
+  | 'finzy_reminders'
+  | 'notes';
 
 interface NavigationDrawerModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentView: Exclude<
     DrawerViewId,
-    'labor_agenda' | 'smart_checklists' | 'finzy_reminders'
+    'labor_agenda' | 'smart_checklists' | 'finzy_reminders' | 'notes'
   >;
   onChangeView: (view: any) => void;
   goalsCount: number;
@@ -83,6 +86,7 @@ interface NavItemDef {
   desc: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
+  tagLabel?: string;
 }
 
 const STORAGE_KEY_PREFIX = 'sisfinz_drawer_shortcuts_v1_';
@@ -118,6 +122,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   const [isManagingShortcuts, setIsManagingShortcuts] = useState(false);
   const [isLaborAgendaOpen, setIsLaborAgendaOpen] = useState(false);
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -248,6 +253,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
       } else if (view === 'smart_checklists') {
         onClose();
         setIsChecklistOpen(true);
+      } else if (view === 'notes') {
+        onClose();
+        setIsNotesOpen(true);
       } else if (view === 'finzy_reminders') {
         onClose();
         onOpenRemindersModal?.();
@@ -261,6 +269,16 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
 
   const coreItems: NavItemDef[] = useMemo(
     () => [
+      {
+        id: 'notes',
+        label: language === 'es' ? 'Notas' : 'Notas',
+        desc:
+          language === 'es'
+            ? 'Carpetas, editor rico, imágenes y tablas'
+            : 'Pastas, editor rico, imagens e tabelas',
+        icon: StickyNote,
+        tagLabel: language === 'es' ? 'Nuevo' : 'Novo',
+      },
       {
         id: 'labor_agenda',
         label: language === 'es' ? 'Jornada Laboral' : 'Jornada Laboral',
@@ -308,6 +326,12 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
 
   const shortcutCatalog: NavItemDef[] = useMemo(
     () => [
+      {
+        id: 'notes',
+        label: language === 'es' ? 'Notas' : 'Notas',
+        desc: language === 'es' ? 'Carpetas y editor completo' : 'Pastas e editor completo',
+        icon: StickyNote,
+      },
       {
         id: 'finzy_reminders',
         label: language === 'es' ? 'Lembretes Importantes' : 'Lembretes Importantes',
@@ -404,6 +428,8 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         ? isLaborAgendaOpen
         : item.id === 'smart_checklists'
         ? isChecklistOpen
+        : item.id === 'notes'
+        ? isNotesOpen
         : currentView === item.id;
     const isSelected = pendingView === item.id;
     const isHighlighted = pendingView ? isSelected : isActive;
@@ -483,7 +509,11 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           </div>
         </div>
 
-        {item.badge !== undefined && item.badge > 0 && (
+        {item.tagLabel ? (
+          <span className="relative z-10 px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-2xs">
+            {item.tagLabel}
+          </span>
+        ) : item.badge !== undefined && item.badge > 0 ? (
           <span
             className={`relative z-10 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
               isHighlighted
@@ -493,7 +523,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
           >
             {item.badge}
           </span>
-        )}
+        ) : null}
       </motion.button>
     );
   };
@@ -832,6 +862,12 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         </AnimatePresence>,
         document.body
       )}
+
+      <NotesView
+        isOpen={isNotesOpen}
+        onClose={() => setIsNotesOpen(false)}
+        language={language}
+      />
 
       <LaborAgendaView
         isOpen={isLaborAgendaOpen}
