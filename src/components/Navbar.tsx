@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenFinzyChat,
   hasPendingNotifications = false,
 }) => {
-  const t = getTranslations(language) as unknown as Record<string, string>;
+  const t = getTranslations(language);
   const currentMonthStr = getCurrentMonthStr();
   const [skinId, setSkinId] = useState<string>(() => getSavedFinzySkinId());
   const [isLivingModalOpen, setIsLivingModalOpen] = useState(false);
@@ -94,20 +94,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     switch (currentView) {
       case 'planejar':
         return {
-          title: t.navPlan,
-          subtitle: t.navPlan,
+          title: t.planejarTitle,
+          subtitle: t.planejarSubtitle,
           icon: Calendar,
         };
       case 'goals':
         return {
-          title: activeGoal ? activeGoal.title : t.goalsCenterTitle,
-          subtitle: activeGoal ? t.goalsCenterTitle : t.goalsCenterTitle,
+          title: activeGoal ? activeGoal.title : t.goalsTitle,
+          subtitle: activeGoal ? t.goalActiveSubtitle : t.goalsSubtitle,
           icon: Award,
         };
       case 'report':
         return {
-          title: t.fullReportTitle,
-          subtitle: t.fullReportSubtitle,
+          title: t.reportTitle,
+          subtitle: t.reportSubtitle,
           icon: TrendingUp,
         };
       case 'finance':
@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenMenu}
               className="relative p-2.5 rounded-2xl text-emerald-800 hover:bg-emerald-50/80 transition-colors cursor-pointer shrink-0"
-              aria-label={t.menu || 'Menu'}
+              aria-label={t.openMenuAria}
             >
               <Menu className="w-5 h-5" />
               {hasPendingNotifications && (
@@ -144,7 +144,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-600/20 shrink-0 overflow-hidden">
-                <Sparkles className="h-6 w-6 text-white" />
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M17 6.5C15.5 4.8 13.4 4 11.2 4 8.3 4 6.5 5.6 6.5 7.7c0 2.1 1.7 3.2 5.4 4.1 4.2 1 5.6 2.3 5.6 4.7 0 2.3-2 3.5-5.3 3.5-2.5 0-4.7-.9-6.1-2.5" />
+                </svg>
               </div>
 
               <div className="min-w-0">
@@ -185,7 +197,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'border-amber-300 bg-amber-50 text-amber-900'
                     : 'border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:bg-emerald-100/70'
                 }`}
-                title={language === 'es' ? living.franco.statusHeadlineEs : living.franco.statusHeadlinePt}
+                title={
+                  language === 'es'
+                    ? living.franco.statusHeadlineEs
+                    : living.franco.statusHeadlinePt
+                }
               >
                 <Sparkles className="h-3 w-3 text-emerald-600" />
                 <span>
@@ -234,6 +250,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
             </motion.button>
 
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              type="button"
+              onClick={onOpenProfile}
+              className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 shadow-2xs transition-all cursor-pointer"
+            >
+              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-xs shadow-2xs">
+                {t.profileInitial}
+              </div>
+              <span className="hidden md:inline text-xs font-semibold text-slate-700">
+                {t.profileLabel}
+              </span>
+            </motion.button>
           </div>
         </div>
       </header>

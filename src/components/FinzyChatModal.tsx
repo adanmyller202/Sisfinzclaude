@@ -51,17 +51,27 @@ interface FinzyChatModalProps {
   moodLabel?: string;
   routineState?: FinzyRoutineState;
   skinId?: string;
-  onAddExpense?: (expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<any> | void;
+  onAddExpense?: (
+    expenseData: Omit<ExpenseItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  ) => Promise<any> | void;
   onUpdateExpense?: (expenseId: string, partial: Partial<ExpenseItem>) => Promise<any> | void;
   onDeleteExpense?: (expenseId: string) => Promise<any> | void;
-  onAddBill?: (billData: Omit<BillItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<any> | void;
+  onAddBill?: (
+    billData: Omit<BillItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  ) => Promise<any> | void;
   onUpdateBill?: (billId: string, partial: Partial<BillItem>) => Promise<any> | void;
   onDeleteBill?: (billId: string) => Promise<any> | void;
   onToggleBillPaid?: (billId: string, month: string, isPaid: boolean) => Promise<any> | void;
-  onAddIncome?: (incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<any> | void;
+  onAddIncome?: (
+    incomeData: Omit<IncomeItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  ) => Promise<any> | void;
   onUpdateIncome?: (incomeId: string, partial: Partial<IncomeItem>) => Promise<any> | void;
   onDeleteIncome?: (incomeId: string) => Promise<any> | void;
-  onToggleIncomeReceived?: (incomeId: string, month: string, isReceived: boolean) => Promise<any> | void;
+  onToggleIncomeReceived?: (
+    incomeId: string,
+    month: string,
+    isReceived: boolean
+  ) => Promise<any> | void;
   onUpdateCurrentBalance?: (newBalance: number) => Promise<any> | void;
   onCreateGoal?: (goalData: {
     title: string;
@@ -108,8 +118,10 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
   const { isOnline } = useSyncStatus();
 
   const initialGreeting = React.useMemo(() => {
-    if (language === 'pt') return 'Oi! Sou o Finzy. Como posso ajudar com suas finanças e sua rotina hoje?';
-    if (language === 'es') return '¡Hola! Soy Finzy. ¿Cómo puedo ayudarte con tus finanzas y tu rutina hoy?';
+    if (language === 'pt')
+      return 'Oi! Sou o Finzy. Como posso ajudar com suas finanças e sua rotina hoje?';
+    if (language === 'es')
+      return '¡Hola! Soy Finzy. ¿Cómo puedo ayudarte con tus finanzas y tu rutina hoy?';
     return 'Hi! I am Finzy. How can I help with your finances and routine today?';
   }, [language]);
 
@@ -132,10 +144,34 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
 
   const STYLE_OPTIONS = React.useMemo(
     () => [
-      { id: 'direto' as const, emoji: '🎯', nameKey: 'moneStyleDireto' as const, descKey: 'moneStyleDescDireto' as const, switchKey: 'moneStyleSwitchedDireto' as const },
-      { id: 'coach' as const, emoji: '💪', nameKey: 'moneStyleCoach' as const, descKey: 'moneStyleDescCoach' as const, switchKey: 'moneStyleSwitchedCoach' as const },
-      { id: 'vovo' as const, emoji: '👵', nameKey: 'moneStyleVovo' as const, descKey: 'moneStyleDescVovo' as const, switchKey: 'moneStyleSwitchedVovo' as const },
-      { id: 'sincerao' as const, emoji: '⚡', nameKey: 'moneStyleSincerao' as const, descKey: 'moneStyleDescSincerao' as const, switchKey: 'moneStyleSwitchedSincerao' as const },
+      {
+        id: 'direto' as const,
+        emoji: '🎯',
+        nameKey: 'moneStyleDireto' as const,
+        descKey: 'moneStyleDescDireto' as const,
+        switchKey: 'moneStyleSwitchedDireto' as const,
+      },
+      {
+        id: 'coach' as const,
+        emoji: '💪',
+        nameKey: 'moneStyleCoach' as const,
+        descKey: 'moneStyleDescCoach' as const,
+        switchKey: 'moneStyleSwitchedCoach' as const,
+      },
+      {
+        id: 'vovo' as const,
+        emoji: '👵',
+        nameKey: 'moneStyleVovo' as const,
+        descKey: 'moneStyleDescVovo' as const,
+        switchKey: 'moneStyleSwitchedVovo' as const,
+      },
+      {
+        id: 'sincerao' as const,
+        emoji: '⚡',
+        nameKey: 'moneStyleSincerao' as const,
+        descKey: 'moneStyleDescSincerao' as const,
+        switchKey: 'moneStyleSwitchedSincerao' as const,
+      },
     ],
     []
   );
