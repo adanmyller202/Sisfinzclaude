@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CurrencyCode,
   LanguageCode,
@@ -400,14 +401,16 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
         `Faturas cadastradas: ${bills.length}`,
         `Despesas avulsas: ${expenses.length}`,
         `Metas ativas: ${goals.length}`,
-        `Memória recente: ${messages
-          .slice(-12)
-          .map((m) => `${m.sender === 'user' ? 'Usuário' : 'Finzy'}: ${m.text.slice(0, 300)}`)
-          .join(' | ')}`,
+        `Estilo preferido: ${moneStyle}`,
+        `Memória recente da conversa: ${messages
+          .slice(-24)
+          .map((m) => `${m.sender === 'user' ? 'Usuário' : 'Finzy'}: ${m.text.slice(0, 500)}`)
+          .join(' | ')
+          .slice(0, 12000)}`,
       ].join('\n');
 
       const liveSystemInstruction =
-        'Você é Finzy, assistente oficial do SisFinz e integrante digital deste aplicativo. Você não é um assistente externo: faz parte do SisFinz. Seu nome próprio e único é Finzy. Se perguntarem seu nome, responda naturalmente: Sou o Finzy, assistente oficial do SisFinz. Se perguntarem quem você é, explique que ajuda o usuário a consultar, organizar e atualizar suas finanças e rotina com os dados reais autorizados do aplicativo e também conversa sobre assuntos gerais. Nunca diga que não tem nome próprio, nunca se apresente como Gemini, Google, Flash ou outro modelo de IA. No modo de voz Live, nunca abra ou leve o usuário para outras telas do aplicativo; apenas responda de forma clara e direta por voz. Contexto real do usuário:\n' +
+        'Você é Finzy, assistente oficial do SisFinz e integrante digital deste aplicativo. Você não é um assistente externo: faz parte do SisFinz. Seu nome próprio e único é Finzy. Se perguntarem seu nome, responda naturalmente: Sou o Finzy, assistente oficial do SisFinz. Se perguntarem quem você é, explique que ajuda o usuário a consultar, organizar e atualizar suas finanças e rotina com os dados reais autorizados do aplicativo e também conversa sobre assuntos gerais. Nunca diga que não tem nome próprio, nunca se apresente como Gemini, Google, Flash ou outro modelo de IA. O nome do modelo é apenas tecnologia interna, não sua identidade. Fale SEMPRE em português brasileiro natural (pt-BR), mesmo que o aplicativo, o sistema ou algum trecho do histórico esteja em espanhol ou inglês. Só mude de idioma se o usuário pedir explicitamente. No modo de voz Live, nunca abra ou leve o usuário para outras telas do aplicativo; apenas responda de forma clara e direta por voz. Contexto real do usuário:\n' +
         financialSummary;
 
       const ai = new GoogleGenAI({
@@ -416,7 +419,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
       });
 
       const session = await ai.live.connect({
-        model: tokenData.model || 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: tokenData.model || 'gemini-3.8-live',
         config: {
           systemInstruction: liveSystemInstruction,
           responseModalities: ['AUDIO' as any],
@@ -638,15 +641,17 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
     'Quanto gastei este mês?',
   ];
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden overscroll-contain">
+        <div className="fixed inset-0 z-[95] flex items-center justify-center p-2 sm:p-4 overflow-hidden overscroll-contain pointer-events-auto">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="glass-overlay"
+            className="fixed inset-0 z-0 bg-slate-900/45 backdrop-blur-xs pointer-events-auto"
             onClick={onClose}
           />
 
@@ -654,15 +659,15 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="glass-modal w-full max-w-lg h-[calc(100dvh-4rem)] sm:h-[680px] rounded-[2.5rem] flex flex-col overflow-hidden relative z-10"
+            className="relative z-10 w-full max-w-lg h-[calc(100dvh-2rem)] sm:h-[680px] rounded-[2.5rem] bg-[#F4F8F6] border border-emerald-200/80 shadow-2xl flex flex-col overflow-hidden pointer-events-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b border-slate-200/60 flex items-center justify-between shrink-0 relative overflow-hidden bg-white/40">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-50" />
+            <div className="px-5 py-4 border-b border-slate-200/70 flex items-center justify-between shrink-0 relative overflow-hidden bg-white">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-50 pointer-events-none" />
 
-              <div className="flex items-center gap-3 relative z-10">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30 shadow-xs">
+              <div className="flex items-center gap-3 relative z-10 min-w-0">
+                <div className="w-11 h-11 shrink-0 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30 shadow-2xs">
                   <FinzyMascot
                     mood={mood}
                     routineState={routineState}
@@ -670,29 +675,29 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                     size="sm"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-900 tracking-tight truncate">
                       Finzy
-                      <span
-                        className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                          isOnline
-                            ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30'
-                            : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
-                        }`}
-                      >
-                        {!isOnline && <WifiOff className="w-3 h-3" />}
-                        {isOnline ? 'Online' : 'Offline'}
-                      </span>
                     </h3>
+                    <span
+                      className={`flex items-center gap-1 text-[9.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border shrink-0 ${
+                        isOnline
+                          ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30'
+                          : 'bg-amber-500/15 text-amber-700 border-amber-500/30'
+                      }`}
+                    >
+                      {!isOnline && <WifiOff className="w-3 h-3" />}
+                      {isOnline ? 'Online' : 'Offline'}
+                    </span>
                   </div>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate mt-0.5">
                     {moodLabel || (t as any).smartAssistant || 'Assistente do SisFinz'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 relative z-10">
+              <div className="flex items-center gap-1.5 sm:gap-2 relative z-10 shrink-0">
                 {/* Live Voice Button */}
                 <button
                   type="button"
@@ -712,10 +717,10 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsStyleMenuOpen(!isStyleMenuOpen)}
-                    className="h-10 px-3 rounded-2xl bg-white/70 hover:bg-white border border-slate-200/80 text-slate-700 flex items-center gap-2 transition-all cursor-pointer shadow-xs"
+                    className="h-10 px-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                   >
-                    <span className="text-lg">{currentStyleObj.emoji}</span>
-                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                    <span className="text-base">{currentStyleObj.emoji}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
                   </button>
 
                   <AnimatePresence>
@@ -724,7 +729,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute right-0 top-full mt-2 w-64 glass-dropdown p-2 rounded-3xl z-50 overflow-hidden"
+                        className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 shadow-2xl p-2 rounded-3xl z-50 overflow-hidden"
                       >
                         <div className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100 mb-1">
                           Personalidade do Finzy
@@ -765,14 +770,14 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   onClick={handleClearChat}
                   className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer"
                 >
-                  <Trash2 className="w-5 h-5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
                   className="p-2.5 rounded-2xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -784,7 +789,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   initial={{ opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 18 }}
-                  className="absolute inset-x-0 top-[82px] bottom-0 z-30 flex flex-col items-center justify-between bg-gradient-to-b from-emerald-50/98 via-white/98 to-teal-50/98 backdrop-blur-xl p-6 text-center"
+                  className="absolute inset-x-0 top-[76px] bottom-0 z-30 flex flex-col items-center justify-between bg-gradient-to-b from-emerald-50/98 via-white/98 to-teal-50/98 backdrop-blur-xl p-6 text-center"
                 >
                   <div className="space-y-1">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-800">
@@ -865,7 +870,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
             </AnimatePresence>
 
             {/* Message Stream */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
               {messages.map((msg, idx) => {
                 const isFinzy = msg.sender === 'finzy';
                 return (
@@ -879,7 +884,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                     }`}
                   >
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
                         isFinzy
                           ? 'bg-emerald-500/10 border border-emerald-500/30'
                           : 'bg-emerald-600 border border-emerald-500'
@@ -901,7 +906,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                     <div
                       className={`p-4 rounded-2xl shadow-sm relative overflow-hidden ${
                         isFinzy
-                          ? 'bg-white/80 border border-slate-200/80 text-slate-800'
+                          ? 'bg-white border border-slate-200/80 text-slate-800'
                           : 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white font-medium border border-emerald-500/30'
                       }`}
                     >
@@ -943,7 +948,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
                     <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
                   </div>
-                  <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 text-slate-500 italic text-xs shadow-xs">
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200/80 text-slate-500 italic text-xs shadow-2xs">
                     Finzy está pensando...
                   </div>
                 </div>
@@ -952,9 +957,9 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
             </div>
 
             {/* Bottom Section */}
-            <div className="p-4 bg-white/40 border-t border-slate-200/60 space-y-4">
+            <div className="p-4 bg-white/85 border-t border-slate-200/70 space-y-3">
               {/* Quick Suggestions */}
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
                 {quickSuggestions.map((sug, idx) => (
                   <motion.button
                     type="button"
@@ -962,7 +967,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleSendMessage(sug)}
-                    className="px-4 py-2 rounded-2xl bg-white/70 hover:bg-white border border-slate-200/80 text-slate-700 text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shadow-xs"
+                    className="px-3.5 py-2 rounded-2xl bg-white hover:bg-emerald-50/60 border border-slate-200/80 text-slate-700 text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shadow-2xs"
                   >
                     {sug}
                   </motion.button>
@@ -983,7 +988,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="Envie uma mensagem para o Finzy..."
-                  className="flex-1 h-14 bg-white/80 border border-slate-200/80 rounded-3xl px-6 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/60 transition-all shadow-xs"
+                  className="flex-1 h-13 bg-white border border-emerald-200/80 rounded-3xl px-5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/60 transition-all shadow-2xs"
                   disabled={isLoading}
                 />
                 <motion.button
@@ -991,7 +996,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
                   whileTap={{ scale: 0.95 }}
                   type="submit"
                   disabled={!inputValue.trim() || isLoading}
-                  className="w-14 h-14 rounded-3xl bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-600/20 disabled:opacity-40 transition-all cursor-pointer shrink-0"
+                  className="w-13 h-13 rounded-3xl bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-600/20 disabled:opacity-40 transition-all cursor-pointer shrink-0"
                 >
                   <Send className="w-5 h-5" />
                 </motion.button>
@@ -1000,6 +1005,7 @@ export const FinzyChatModal: React.FC<FinzyChatModalProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

@@ -8,7 +8,6 @@ import {
   Receipt,
   ArrowRightLeft,
   Users,
-  Mic,
   Calculator,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
@@ -20,7 +19,7 @@ interface QuickActionFABProps {
   onOpenBill: () => void;
   onOpenTransfer: () => void;
   onOpenSharedBill: () => void;
-  onOpenVoice: () => void;
+  onOpenVoice?: () => void;
   onOpenCalculator: () => void;
   onMenuToggle?: (isOpen: boolean) => void;
   bottomOffsetClass?: string;
@@ -35,7 +34,6 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   onOpenBill,
   onOpenTransfer,
   onOpenSharedBill,
-  onOpenVoice,
   onOpenCalculator,
   onMenuToggle,
   bottomOffsetClass = 'bottom-20 sm:bottom-22',
@@ -130,16 +128,6 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
       },
     },
     {
-      id: 'voice',
-      label: language === 'es' ? 'Por Voz' : 'Por Voz',
-      icon: Mic,
-      onClick: () => {
-        setIsOpen(false);
-        onMenuToggle?.(false);
-        onOpenVoice();
-      },
-    },
-    {
       id: 'calculator',
       label: language === 'es' ? 'Calculadora' : 'Calculadora',
       icon: Calculator,
@@ -165,9 +153,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
       }}
       onDragEnd={(_e, info) => {
         const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
-        const currentApproxX = isLeft
-          ? 20 + info.point.x
-          : vw - 36 + info.offset.x;
+        const currentApproxX = isLeft ? 20 + info.point.x : vw - 36 + info.offset.x;
         const nextSide: 'left' | 'right' =
           info.offset.x < -55 || currentApproxX < vw * 0.45
             ? 'left'
@@ -239,7 +225,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Even More Transparent Emerald Glass Edge-Docked FAB */}
+      {/* Transparent Emerald Glass Edge-Docked FAB */}
       <motion.button
         type="button"
         onClick={toggleMenu}

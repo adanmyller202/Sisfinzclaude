@@ -1022,7 +1022,6 @@ export default function App() {
         onDismissAlert={remindersHook.dismissAlert}
         onDelete={remindersHook.deleteReminder}
         onRequestNotifPermission={remindersHook.requestSystemNotificationPermission}
-        onTestAlert={() => remindersHook.triggerTestFinzyAlert()}
       />
 
       {/* Finzy Assistant Chat Modal */}
@@ -1121,7 +1120,6 @@ export default function App() {
           setIsGlobalTxModalOpen(true);
         }}
         onOpenQuickTransfer={() => setIsGlobalTransferModalOpen(true)}
-        onOpenQuickVoice={() => setIsVoiceTriggered(true)}
         externalChecklistOpen={isDrawerChecklistOpen}
         onExternalChecklistClose={() => setIsDrawerChecklistOpen(false)}
         language={currentLang}
@@ -1233,7 +1231,6 @@ export default function App() {
         onOpenSharedBill={() => {
           setCurrentView('shared_accounts');
         }}
-        onOpenVoice={() => setIsVoiceTriggered(true)}
         onOpenCalculator={() => setIsCalculatorOpen(true)}
       />
 
