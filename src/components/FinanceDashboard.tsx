@@ -123,6 +123,9 @@ import {
   Eye,
   EyeOff,
   Undo2,
+  History,
+  ArrowLeftRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface FinanceDashboardProps {
@@ -220,7 +223,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
   };
 
   // Accounts are the source of truth for the forecast starting balance.
-  const { accounts, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem } = useAccounts();
+  const { accounts, transfers, accountAdjustments, totalBalance: accountsTotalBalance, adjustAccountBalanceForFinancialItem } = useAccounts();
 
   const {
     selectedMonth,
@@ -298,7 +301,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
 
   // Navigation tab inside Finance: 'timeline' | 'bills' | 'upcoming' | 'incomes' | 'expenses' | 'categories' | 'savings' | 'report' | 'calendar' | 'freedom'
   const [activeTab, setActiveTab] = useState<
-    'timeline' | 'bills' | 'upcoming' | 'incomes' | 'expenses' | 'categories' | 'savings' | 'report' | 'calendar' | 'freedom'
+    'statement' | 'timeline' | 'bills' | 'upcoming' | 'incomes' | 'expenses' | 'categories' | 'savings' | 'report' | 'calendar' | 'freedom'
   >(initialTab || 'timeline');
 
   const billsRef = useRef<HTMLDivElement>(null);
@@ -339,6 +342,123 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
     reverseRecurringSavingDeposit,
     withdrawFromSaving,
   } = useSavings();
+
+  type StatementItem = {
+    id: string;
+    title: string;
+    detail: string;
+    date: string;
+    amount: number;
+    currency: CurrencyCode;
+    direction: 'in' | 'out' | 'transfer';
+    kind: 'income' | 'expense' | 'bill' | 'transfer' | 'saving' | 'adjustment';
+  };
+
+  const statementItems = useMemo<StatementItem[]>(() => {
+    const items: StatementItem[] = [];
+    const accountName = (id?: string) => accounts.find((account) => account.id === id)?.name || '';
+    const completedStatuses = statusRecords.filter((record) => record.isCompleted);
+
+    completedStatuses.forEach((status) => {
+      if (status.itemType === 'income') {
+        const income = incomes.find((item) => item.id === status.itemId);
+        if (!income) return;
+        const amount = Number(income.exceptions?.[status.month]?.amount ?? income.amount) || 0;
+        const distributions = income.accountDistributions?.map((part) => accountName(part.accountId)).filter(Boolean);
+        const linkedAccount = distributions?.length ? distributions.join(' + ') : accountName(income.accountId);
+        items.push({
+          id: `income_${status.id}`,
+          title: income.name,
+          detail: [income.category, linkedAccount].filter(Boolean).join(' · ') || (language === 'es' ? 'Ingreso recibido' : 'Entrada recebida'),
+          date: (status.completedAt || income.exceptions?.[status.month]?.expectedDate || income.expectedDate || `${status.month}-01`).slice(0, 10),
+          amount,
+          currency,
+          direction: 'in',
+          kind: 'income',
+        });
+      } else {
+        const bill = bills.find((item) => item.id === status.itemId);
+        if (!bill) return;
+        const occurrence = bill.exceptions?.[status.month];
+        if (occurrence?.investmentSavingId || bill.investmentSavingId) return;
+        const amount = Number(occurrence?.amount ?? bill.amount) || 0;
+        items.push({
+          id: `bill_${status.id}`,
+          title: bill.name,
+          detail: [bill.category, accountName(bill.accountId)].filter(Boolean).join(' · ') || (language === 'es' ? 'Factura pagada' : 'Fatura paga'),
+          date: (status.completedAt || occurrence?.dueDate || bill.dueDate || `${status.month}-01`).slice(0, 10),
+          amount,
+          currency,
+          direction: 'out',
+          kind: 'bill',
+        });
+      }
+    });
+
+    expenses.forEach((expense) => {
+      const distributionNames = expense.accountDistributions?.map((part) => accountName(part.accountId)).filter(Boolean);
+      const linkedAccount = distributionNames?.length ? distributionNames.join(' + ') : accountName(expense.accountId);
+      items.push({
+        id: `expense_${expense.id}`,
+        title: expense.name,
+        detail: [expense.category, linkedAccount].filter(Boolean).join(' · ') || (language === 'es' ? 'Gasto' : 'Despesa'),
+        date: expense.date || expense.createdAt.slice(0, 10),
+        amount: Number(expense.amount) || 0,
+        currency,
+        direction: 'out',
+        kind: 'expense',
+      });
+    });
+
+    transfers.forEach((transfer) => {
+      const fromCurrency = accounts.find((account) => account.id === transfer.fromAccountId)?.currency || currency;
+      items.push({
+        id: `transfer_${transfer.id}`,
+        title: language === 'es' ? 'Transferencia entre cuentas' : 'Transferência entre contas',
+        detail: `${transfer.fromAccountName} → ${transfer.toAccountName}${transfer.notes ? ` · ${transfer.notes}` : ''}`,
+        date: transfer.date || transfer.createdAt.slice(0, 10),
+        amount: Number(transfer.amount) || 0,
+        currency: fromCurrency,
+        direction: 'transfer',
+        kind: 'transfer',
+      });
+    });
+
+    savingTransactions.forEach((transaction) => {
+      // Aporte/resgate linked to an income or expense is already represented above.
+      if (transaction.expenseId || transaction.incomeId) return;
+      const isDeposit = transaction.type === 'deposit';
+      items.push({
+        id: `saving_${transaction.id}`,
+        title: isDeposit
+          ? (language === 'es' ? 'Aporte al cofre' : 'Aporte ao cofrinho')
+          : (language === 'es' ? 'Rescate del cofre' : 'Resgate do cofrinho'),
+        detail: [transaction.savingName, transaction.accountName, transaction.note].filter(Boolean).join(' · '),
+        date: transaction.date || transaction.createdAt.slice(0, 10),
+        amount: Number(transaction.baseAmountARS ?? transaction.amount) || 0,
+        currency: isDeposit ? currency : (transaction.currency || currency),
+        direction: isDeposit ? 'out' : 'in',
+        kind: 'saving',
+      });
+    });
+
+    accountAdjustments.forEach((adjustment) => {
+      const delta = Number(adjustment.amountDelta) || 0;
+      if (Math.abs(delta) < 0.000001) return;
+      items.push({
+        id: `adjustment_${adjustment.id}`,
+        title: language === 'es' ? 'Ajuste de saldo' : 'Ajuste de saldo',
+        detail: adjustment.accountName,
+        date: adjustment.date || adjustment.createdAt.slice(0, 10),
+        amount: Math.abs(delta),
+        currency: adjustment.currency || currency,
+        direction: delta > 0 ? 'in' : 'out',
+        kind: 'adjustment',
+      });
+    });
+
+    return items.sort((a, b) => b.date.localeCompare(a.date));
+  }, [accounts, statusRecords, incomes, bills, expenses, transfers, savingTransactions, accountAdjustments, currency, language]);
 
   const applyRecurringInvestment = async (bill: BillItem, month: string) => {
     const occurrence = bill.exceptions?.[month];
@@ -1218,6 +1338,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
       <motion.div variants={itemVariants} className="px-1">
         <div className="glass p-1.5 rounded-2xl flex items-center gap-1 overflow-x-auto no-scrollbar shadow-lg ring-1 ring-white/20">
           {[
+            { id: 'statement', icon: History, label: language === 'es' ? 'Extracto' : 'Extrato', count: statementItems.length, color: 'emerald' },
             { id: 'timeline', icon: Calendar, label: t.tabOverview, count: timelineItems.length, color: 'blue' },
             { id: 'bills', icon: Receipt, label: t.tabBills, count: monthBills.length, color: 'rose' },
             { id: 'upcoming', icon: CalendarRange, label: t.tabUpcoming, color: 'rose' },
@@ -1250,6 +1371,88 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({
         </div>
       </motion.div>
 
+
+      {activeTab === 'statement' && (
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass mx-1 space-y-4 rounded-[2.5rem] p-4 shadow-xl premium-shadow sm:p-6"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/60 pb-4 dark:border-slate-800/60">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+                <History className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white sm:text-base">
+                  {language === 'es' ? 'Extrato de movimentações' : 'Extrato de movimentações'}
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500">
+                  {language === 'es' ? 'Entradas, salidas y ajustes de tus cuentas' : 'Entradas, saídas e ajustes das suas contas'}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-xl bg-emerald-800 px-3 py-1.5 text-[10px] font-black text-white shadow-md">
+              {statementItems.length} {language === 'es' ? 'movimientos' : 'movimentações'}
+            </span>
+          </div>
+
+          {statementItems.length === 0 ? (
+            <div className="space-y-2 py-14 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-emerald-200/60 bg-emerald-50">
+                <History className="h-8 w-8 text-emerald-600/50" />
+              </div>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-300">
+                {language === 'es' ? 'Todavía no hay movimientos' : 'Ainda não há movimentações'}
+              </p>
+              <p className="mx-auto max-w-[230px] text-[11px] font-medium text-slate-500">
+                {language === 'es' ? 'Cuando registres ingresos, gastos o ajustes, aparecerán aquí.' : 'Quando você registrar entradas, despesas ou ajustes, eles aparecerão aqui.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {statementItems.map((item) => {
+                const isIn = item.direction === 'in';
+                const isTransfer = item.direction === 'transfer';
+                const Icon = isTransfer ? ArrowLeftRight : item.kind === 'adjustment' ? SlidersHorizontal : isIn ? ArrowDownLeft : ArrowUpRight;
+                const tone = isTransfer
+                  ? 'bg-sky-50 text-sky-700 border-sky-100 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-900'
+                  : isIn
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900'
+                    : 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-900';
+                const amountTone = isTransfer ? 'text-sky-700 dark:text-sky-300' : isIn ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300';
+                const formattedDate = new Date(`${item.date}T12:00:00`).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+                return (
+                  <motion.div
+                    key={item.id}
+                    layout="position"
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white/75 px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/50 sm:px-4"
+                  >
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tone}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-black text-slate-900 dark:text-white">{item.title}</p>
+                      <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-500">{item.detail || formattedDate}</p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">{formattedDate}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`font-mono-numbers text-xs font-black ${amountTone}`}>
+                        {isTransfer ? '' : isIn ? '+' : '−'}{formatCurrency(item.amount, item.currency)}
+                      </p>
+                      <p className="mt-1 text-[9px] font-bold text-slate-400">
+                        {isTransfer ? (language === 'es' ? 'Entre cuentas' : 'Entre contas') : isIn ? (language === 'es' ? 'Entrada' : 'Entrada') : (language === 'es' ? 'Salida' : 'Saída')}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </motion.section>
+      )}
 
       {/* 4. TAB CONTENT 1: VISÃO GERAL (TIMELINE) */}
       {/* 4. TAB CONTENT 1: VISÃO GERAL (TIMELINE) */}
