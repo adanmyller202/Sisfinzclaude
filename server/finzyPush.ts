@@ -79,7 +79,6 @@ async function getConfiguredWebPush(): Promise<any | null> {
     return cachedWebPushModule;
   }
   try {
-    // Dynamic import so builds never fail if web-push is absent in an environment
     const mod: any = await (new Function('specifier', 'return import(specifier)'))('web-push');
     const wp = mod?.default || mod;
     if (wp && typeof wp.sendNotification === 'function') {

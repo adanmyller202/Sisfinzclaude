@@ -48,7 +48,6 @@ export function mountFinzyPushRoutes(
     }
   });
 
-  // Triggered periodically by Cloud Scheduler or internal scheduler to deliver due reminders
   app.post('/api/reminders/dispatch-due', async (req, res) => {
     try {
       const cronSecret = (process.env.REMINDER_CRON_SECRET || '').trim();
@@ -65,7 +64,6 @@ export function mountFinzyPushRoutes(
     }
   });
 
-  // Start lightweight background tick every 45s inside the Node process
   const tickInterval = setInterval(() => {
     processDueRemindersPushDispatch().catch(() => {});
   }, 45000);
