@@ -94,20 +94,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     switch (currentView) {
       case 'planejar':
         return {
-          title: t.planejarTitle,
-          subtitle: t.planejarSubtitle,
+          title: t.navPlan,
+          subtitle: t.navPlan,
           icon: Calendar,
         };
       case 'goals':
         return {
-          title: activeGoal ? activeGoal.title : t.goalsTitle,
-          subtitle: activeGoal ? t.goalActiveSubtitle : t.goalsSubtitle,
+          title: activeGoal ? activeGoal.title : t.navGoals,
+          subtitle: activeGoal ? t.navGoals : t.navGoals,
           icon: Award,
         };
       case 'report':
         return {
-          title: t.reportTitle,
-          subtitle: t.reportSubtitle,
+          title: t.fullReportTitle,
+          subtitle: t.fullReportSubtitle,
           icon: TrendingUp,
         };
       case 'finance':
@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenMenu}
               className="relative p-2.5 rounded-2xl text-emerald-800 hover:bg-emerald-50/80 transition-colors cursor-pointer shrink-0"
-              aria-label={t.openMenuAria}
+              aria-label="Abrir menu"
             >
               <Menu className="w-5 h-5" />
               {hasPendingNotifications && (
@@ -250,20 +250,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
             </motion.button>
 
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              type="button"
-              onClick={onOpenProfile}
-              className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/80 shadow-2xs transition-all cursor-pointer"
-            >
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-bold text-xs shadow-2xs">
-                {t.profileInitial}
-              </div>
-              <span className="hidden md:inline text-xs font-semibold text-slate-700">
-                {t.profileLabel}
-              </span>
-            </motion.button>
           </div>
         </div>
       </header>
