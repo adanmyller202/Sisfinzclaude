@@ -14,7 +14,6 @@ export type NoteFolderIcon =
   | 'heart';
 
 export type NoteFolderColor = 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
-
 export type NoteAccentColor = 'none' | 'emerald' | 'teal' | 'sky' | 'amber' | 'violet' | 'rose';
 
 export interface NoteFolder {
@@ -30,7 +29,7 @@ export type NoteBlockType =
   | 'paragraph'
   | 'heading'
   | 'subheading'
-  | 'h3'
+  | 'heading3'
   | 'quote'
   | 'checklist'
   | 'bullet'
@@ -103,7 +102,7 @@ const FOLDERS_STORAGE_PREFIX = 'sisfinz_note_folders_v1_';
 const PIN_STORAGE_PREFIX = 'sisfinz_notes_pin_hash_v1_';
 
 export function createBlockId(): string {
-  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 export function htmlToPlainText(html: string): string {
@@ -129,7 +128,7 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
     .map((b) => {
       if (b.type === 'heading') return `<h1>${b.html}</h1>`;
       if (b.type === 'subheading') return `<h2>${b.html}</h2>`;
-      if (b.type === 'h3') return `<h3>${b.html}</h3>`;
+      if (b.type === 'heading3') return `<h3>${b.html}</h3>`;
       if (b.type === 'quote') return `<blockquote>${b.html}</blockquote>`;
       if (b.type === 'checklist') return `<p>${b.checked ? '[x]' : '[ ]'} ${b.html}</p>`;
       if (b.type === 'bullet') return `<p>• ${b.html}</p>`;
@@ -248,11 +247,32 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+function normalizeBlockType(rawType: unknown): NoteBlockType {
+  if (rawType === 'h3') return 'heading3';
+  const valid: NoteBlockType[] = [
+    'paragraph',
+    'heading',
+    'subheading',
+    'heading3',
+    'quote',
+    'checklist',
+    'bullet',
+    'numbered',
+  ];
+  return valid.includes(rawType as NoteBlockType) ? (rawType as NoteBlockType) : 'paragraph';
+}
+
 function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
   const legacyChecklist = Array.isArray(data.checklist) ? data.checklist : [];
-  const rawBlocks =
+  const rawBlocks: NoteBlock[] =
     Array.isArray(data.blocks) && data.blocks.length > 0
-      ? data.blocks
+      ? data.blocks.map((b: any) => ({
+          id: b?.id || createBlockId(),
+          type: normalizeBlockType(b?.type),
+          html: typeof b?.html === 'string' ? b.html : '',
+          ...(normalizeBlockType(b?.type) === 'checklist' ? { checked: Boolean(b?.checked) } : {}),
+          ...(b?.align ? { align: b.align as NoteTextAlign } : {}),
+        }))
       : deriveBlocksFromLegacyNote(data.bodyHtml || '', legacyChecklist);
 
   const plainText =
@@ -270,7 +290,7 @@ function normalizeNoteRecord(id: string, data: Partial<NoteItem>): NoteItem {
     favorite: Boolean(data.favorite),
     locked: Boolean(data.locked),
     tags: Array.isArray(data.tags) ? data.tags.map((t) => String(t).trim()).filter(Boolean) : [],
-    accentColor: data.accentColor || 'none',
+    accentColor: (data.accentColor as NoteAccentColor) || 'none',
     groupCompletedChecklist: Boolean(data.groupCompletedChecklist),
     checklist: legacyChecklist,
     images: Array.isArray(data.images) ? data.images : [],
@@ -695,7 +715,7 @@ export function useNotes() {
       saveVersionSnapshot(noteId, 0);
       const restoredBlocks =
         Array.isArray(version.blocks) && version.blocks.length > 0
-          ? version.blocks
+          ? version.blocks.map((b) => ({ ...b }))
           : deriveBlocksFromLegacyNote(version.bodyHtml || '', []);
       updateNote(
         noteId,
