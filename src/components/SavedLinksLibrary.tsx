@@ -26,7 +26,6 @@ import {
   LinkPreviewResult,
   SavedLinkCategory,
   SavedLinkItem,
-  buildClientFallbackPreview,
   useSavedLinks,
 } from '../hooks/useSavedLinks';
 
@@ -104,7 +103,35 @@ const CAT_COLORS: Record<
   },
 };
 
-const QUICK_EMOJIS = ['🍰', '👕', '🏠', '🛠️', '📚', '✨', '✈️', '🛍️', '🎬', '🎵', '💡', '🏋️', '🍳', '📱', '💼', '🌿'];
+const QUICK_EMOJIS = [
+  '🍰',
+  '👕',
+  '🏠',
+  '🛠️',
+  '📚',
+  '✨',
+  '✈️',
+  '🛍️',
+  '🎬',
+  '🎵',
+  '💡',
+  '🏋️',
+  '🍳',
+  '📱',
+  '💼',
+  '🌿',
+];
+
+function isGenericInstagramPlaceholderUrl(url: string | null | undefined): boolean {
+  if (!url) return true;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('static.cdninstagram.com/rsrc.php') ||
+    lower.includes('/static/images/ico/') ||
+    lower.includes('instagram_logo') ||
+    lower.includes('rsrc.php/')
+  );
+}
 
 interface LinkVisualCardProps {
   link: SavedLinkItem;
@@ -140,9 +167,10 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
   }, [link.image]);
 
   const palette = CAT_COLORS[category?.color || 'emerald'] || CAT_COLORS.emerald;
-  const showImage = Boolean(link.image && !imgFailed);
+  const hasRealImage = Boolean(
+    link.image && !imgFailed && !(link.isInstagram && isGenericInstagramPlaceholderUrl(link.image))
+  );
   const isCopied = copiedId === link.id;
-
   const isList = viewMode === 'list';
 
   return (
@@ -157,7 +185,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
         isList ? 'flex-row items-stretch' : 'flex-col'
       }`}
     >
-      {/* Visual Media / Elegant Fallback Cover */}
+      {/* Visual Media / Real Profile Preview / Clean Fallback Cover */}
       <a
         href={link.url}
         target="_blank"
@@ -166,21 +194,47 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
           isList ? 'w-28 sm:w-36 min-h-[112px]' : 'aspect-[16/10] w-full'
         }`}
       >
-        {showImage ? (
+        {hasRealImage ? (
           <>
             {!imgLoaded && (
-              <div className={`absolute inset-0 animate-pulse bg-gradient-to-br ${palette.gradient}`} />
+              <div
+                className={`absolute inset-0 animate-pulse bg-gradient-to-br ${palette.gradient}`}
+              />
             )}
-            <img
-              src={link.image!}
-              alt={link.title}
-              loading="lazy"
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgFailed(true)}
-              className={`h-full w-full object-cover transition-all duration-300 group-hover:scale-[1.03] ${
-                imgLoaded ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
+            {link.isInstagram ? (
+              <div className="relative h-full w-full overflow-hidden bg-slate-900/5">
+                <img
+                  src={link.image!}
+                  alt=""
+                  aria-hidden="true"
+                  referrerPolicy="no-referrer"
+                  className="absolute inset-0 h-full w-full scale-125 object-cover blur-xl opacity-45"
+                />
+                <img
+                  src={link.image!}
+                  alt={link.title}
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => setImgFailed(true)}
+                  className={`relative z-10 h-full w-full object-contain p-2 transition-all duration-300 group-hover:scale-[1.03] ${
+                    imgLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+              </div>
+            ) : (
+              <img
+                src={link.image!}
+                alt={link.title}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgFailed(true)}
+                className={`h-full w-full object-cover transition-all duration-300 group-hover:scale-[1.03] ${
+                  imgLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+            )}
           </>
         ) : (
           <div
@@ -193,6 +247,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
                 <img
                   src={link.favicon}
                   alt={link.domain}
+                  referrerPolicy="no-referrer"
                   className="h-7 w-7 rounded-lg object-contain"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -209,7 +264,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
         )}
 
         {/* Top Badges */}
-        <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
+        <div className="absolute left-2.5 top-2.5 z-20 flex items-center gap-1.5">
           {link.isInstagram && (
             <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5 text-[9.5px] font-black text-rose-600 shadow-xs">
               <Instagram className="h-2.5 w-2.5" />
@@ -228,7 +283,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
             onToggleFavorite(link.id);
           }}
           aria-label={link.favorite ? 'Remover dos favoritos' : 'Favoritar link'}
-          className={`absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-colors cursor-pointer ${
+          className={`absolute right-2.5 top-2.5 z-20 flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-colors cursor-pointer ${
             link.favorite
               ? 'bg-rose-500 text-white'
               : 'bg-white/90 text-slate-500 hover:text-rose-500'
@@ -247,6 +302,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
                 <img
                   src={link.favicon}
                   alt=""
+                  referrerPolicy="no-referrer"
                   className="h-3.5 w-3.5 rounded-xs object-contain shrink-0"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -298,7 +354,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-[10.5px] font-black text-emerald-800 hover:bg-emerald-100 transition-colors"
           >
-            <span>{isEs ? 'Abrir' : 'Abrir'}</span>
+            <span>Abrir</span>
             <ExternalLink className="h-3 w-3" />
           </a>
 
@@ -314,7 +370,7 @@ const LinkVisualCard: React.FC<LinkVisualCardProps> = ({
               title={isEs ? 'Copiar enlace' : 'Copiar link'}
             >
               {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {isCopied && <span>{isEs ? 'Copiado' : 'Copiado'}</span>}
+              {isCopied && <span>Copiado</span>}
             </button>
 
             <button
@@ -365,7 +421,6 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Add / Edit Link Modal state
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<SavedLinkItem | null>(null);
   const [urlInput, setUrlInput] = useState('');
@@ -376,7 +431,6 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSavingLink, setIsSavingLink] = useState(false);
 
-  // Category Manager Modal state
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<SavedLinkCategory | null>(null);
   const [catNameInput, setCatNameInput] = useState('');
@@ -414,7 +468,8 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
       }
       if (!q) return true;
       const catName = categoryMap[l.categoryId]?.name || '';
-      const hay = `${l.title} ${l.description} ${l.siteName} ${l.domain} ${l.notes} ${catName}`.toLowerCase();
+      const hay =
+        `${l.title} ${l.description} ${l.siteName} ${l.domain} ${l.notes} ${catName}`.toLowerCase();
       return hay.includes(q);
     });
   }, [links, selectedCategoryId, searchQuery, categoryMap]);
@@ -424,7 +479,6 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
     return filteredLinks.filter((l) => l.favorite);
   }, [filteredLinks, selectedCategoryId, searchQuery]);
 
-  // Automatic preview fetch when typing/pasting URL in modal
   useEffect(() => {
     if (!isLinkModalOpen) return;
     const raw = urlInput.trim();
@@ -662,7 +716,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
               : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300'
           }`}
         >
-          <span>{isEs ? 'Todos' : 'Todos'}</span>
+          <span>Todos</span>
           <span
             className={`font-mono text-[10px] ${
               selectedCategoryId === 'all' ? 'text-emerald-100' : 'text-slate-400'
@@ -681,8 +735,12 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
               : 'border-slate-200 bg-white text-slate-700 hover:border-rose-300'
           }`}
         >
-          <Heart className={`h-3 w-3 ${selectedCategoryId === 'favorites' ? 'fill-white' : 'text-rose-500'}`} />
-          <span>{isEs ? 'Favoritos' : 'Favoritos'}</span>
+          <Heart
+            className={`h-3 w-3 ${
+              selectedCategoryId === 'favorites' ? 'fill-white' : 'text-rose-500'
+            }`}
+          />
+          <span>Favoritos</span>
           <span
             className={`font-mono text-[10px] ${
               selectedCategoryId === 'favorites' ? 'text-rose-100' : 'text-slate-400'
@@ -743,13 +801,13 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
         </button>
       </div>
 
-      {/* Favorites Highlight Section (when viewing All without search) */}
+      {/* Favorites Highlight Section */}
       {favoriteLinksSection.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 px-1">
             <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-              {isEs ? 'Favoritos' : 'Favoritos'}
+              Favoritos
             </span>
           </div>
           <div
@@ -899,7 +957,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
         )}
       </AnimatePresence>
 
-      {/* Add / Edit Link Modal (Light, Clean Overlay — no heavy black backdrop) */}
+      {/* Add / Edit Link Modal */}
       <AnimatePresence>
         {isLinkModalOpen && (
           <div className="fixed inset-0 z-[78] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -974,15 +1032,22 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                     <div className="flex items-center gap-2.5 p-3.5 text-xs font-bold text-emerald-700">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span>
-                        {isEs ? 'Obteniendo vista previa pública...' : 'Buscando prévia pública do link...'}
+                        {isEs
+                          ? 'Obteniendo vista previa pública...'
+                          : 'Buscando prévia pública do link...'}
                       </span>
                     </div>
                   ) : previewData ? (
                     <div className="flex items-center gap-3 p-2.5">
-                      {previewData.image ? (
+                      {previewData.image &&
+                      !(
+                        previewData.isInstagram &&
+                        isGenericInstagramPlaceholderUrl(previewData.image)
+                      ) ? (
                         <img
                           src={previewData.image}
                           alt={previewData.title}
+                          referrerPolicy="no-referrer"
                           className="h-16 w-20 shrink-0 rounded-xl object-cover border border-white shadow-2xs"
                         />
                       ) : (
@@ -993,6 +1058,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
                             <img
                               src={previewData.favicon}
                               alt=""
+                              referrerPolicy="no-referrer"
                               className="h-6 w-6 rounded-md object-contain"
                             />
                           ) : (
@@ -1021,7 +1087,7 @@ export const SavedLinksLibrary: React.FC<SavedLinksLibraryProps> = ({ language =
               {/* Editable Title */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  {isEs ? 'Título' : 'Título'}
+                  Título
                 </label>
                 <input
                   type="text"
