@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from './context/AuthContext';
@@ -84,7 +79,6 @@ export default function App() {
     deleteGoal,
     switchGoal,
     updateSettings,
-    resetActiveGoal,
     resetAllData,
   } = useMoneyChallenge();
 
@@ -1005,7 +999,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Calculator Pop-Up (Simple <-> Scientific with staggered key choreography) */}
+      {/* Floating Calculator Pop-Up */}
       <FloatingCalculatorModal
         isOpen={isCalculatorOpen}
         onClose={() => setIsCalculatorOpen(false)}
@@ -1020,6 +1014,8 @@ export default function App() {
         reminders={remindersHook.reminders}
         activeAlert={remindersHook.activeAlert}
         notifPermission={remindersHook.notifPermission}
+        pushSubscribed={remindersHook.pushSubscribed}
+        pushInfoMessage={remindersHook.pushInfoMessage}
         onAddReminder={remindersHook.addReminder}
         onToggleComplete={remindersHook.toggleCompleteReminder}
         onSnooze={remindersHook.snoozeReminder}

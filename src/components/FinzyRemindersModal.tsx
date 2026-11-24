@@ -19,6 +19,7 @@ import {
   UserCheck,
   AlarmClock,
   Smartphone,
+  ShieldCheck,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
 import {
@@ -36,6 +37,8 @@ interface FinzyRemindersModalProps {
   reminders: ReminderItem[];
   activeAlert: ReminderItem | null;
   notifPermission: NotificationPermission;
+  pushSubscribed?: boolean;
+  pushInfoMessage?: string | null;
   onAddReminder: (params: {
     title: string;
     notes?: string;
@@ -75,6 +78,8 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
   reminders,
   activeAlert,
   notifPermission,
+  pushSubscribed = false,
+  pushInfoMessage = null,
   onAddReminder,
   onToggleComplete,
   onSnooze,
@@ -226,7 +231,7 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
 
               <div className="flex-1 overflow-y-auto px-3.5 py-3.5">
                 <div className="mx-auto max-w-xl space-y-3.5 pb-16">
-                  {/* System Notification Permission Banner */}
+                  {/* System Notification & Web Push Status Banner */}
                   <div className="flex items-center justify-between gap-2.5 rounded-2xl border border-emerald-200/80 bg-white px-3.5 py-2.5 shadow-2xs">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FinzyMascot
@@ -236,19 +241,28 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                         size={38}
                       />
                       <div className="min-w-0">
-                        <div className="text-xs font-black text-slate-900 truncate">
-                          {notifPermission === 'granted'
-                            ? isEs
-                              ? 'Notificaciones del sistema activadas'
-                              : 'Notificações do sistema ativadas'
-                            : isEs
-                            ? 'Activa notificaciones para cuando cierres la app'
-                            : 'Ative as notificações para avisos com o app fechado'}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-black text-slate-900 truncate">
+                            {notifPermission === 'granted'
+                              ? isEs
+                                ? 'Notificaciones del sistema activadas'
+                                : 'Notificações do sistema ativadas'
+                              : isEs
+                              ? 'Activa notificaciones para avisos del sistema'
+                              : 'Ative as notificações do sistema'}
+                          </span>
+                          {pushSubscribed && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.2 text-[9px] font-black text-emerald-800">
+                              <ShieldCheck className="h-2.5 w-2.5" />
+                              Push ativo
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] font-semibold text-slate-500 leading-snug">
-                          {isEs
-                            ? 'En web/PWA, el navegador suspende scripts al cerrar la app; activa el aviso del sistema y mantén la PWA instalada.'
-                            : 'Na web/PWA, o navegador pausa o app ao fechar; ative o aviso do sistema e mantenha a PWA instalada para alertas na barra.'}
+                          {pushInfoMessage ||
+                            (isEs
+                              ? 'Dispara en pantalla y en el sistema; si cierras la app por completo en móvil, requiere Web Push configurado en el servidor.'
+                              : 'Dispara na tela e no sistema; se fechar o app totalmente no celular, depende de Web Push configurado no servidor.')}
                         </div>
                       </div>
                     </div>
@@ -264,15 +278,16 @@ export const FinzyRemindersModal: React.FC<FinzyRemindersModalProps> = ({
                     )}
                   </div>
 
-                  {/* Honest Background Limitation Note for Web/PWA */}
-                  <div className="flex items-start gap-2 rounded-2xl border border-amber-200/90 bg-amber-50/75 px-3.5 py-2.5 text-[10.5px] font-semibold text-amber-950">
-                    <Smartphone className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
-                    <span>
-                      {isEs
-                        ? 'Aviso importante: al cerrar por completo una app web/PWA (especialmente en iPhone/Android), el sistema suspende el reloj interno hasta reabrirla. Al abrirla, Finzy dispara el aviso al instante; para que llegue con la app cerrada sin depender de abrirla, hace falta un servidor push (Web Push / FCM).'
-                        : 'Como funciona ao fechar o app: quando você fecha completamente um app web/PWA (principalmente no iPhone/Android), o sistema suspende o relógio interno até reabrir — por isso ele avisa na hora ao entrar. Para avisar sozinho mesmo com o app 100% fechado, é preciso conectar envio remoto por Web Push / FCM no servidor.'}
-                    </span>
-                  </div>
+                  {!pushSubscribed && (
+                    <div className="flex items-start gap-2 rounded-2xl border border-amber-200/90 bg-amber-50/75 px-3.5 py-2.5 text-[10.5px] font-semibold text-amber-950">
+                      <Smartphone className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
+                      <span>
+                        {isEs
+                          ? 'Al cerrar por completo una PWA sin Web Push activo en servidor, el navegador suspende el reloj interno hasta que vuelves a abrirla.'
+                          : 'Ao fechar totalmente uma PWA sem Web Push configurado no servidor, o navegador pausa o relógio interno até você reabrir — por isso ele avisa na hora ao entrar.'}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Create Reminder Form */}
                   <form

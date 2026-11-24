@@ -25,6 +25,18 @@ export interface ReminderItem {
 }
 
 const STORAGE_PREFIX = 'sisfinz_reminders_v1_';
+const PUSH_SUB_STORAGE_PREFIX = 'sisfinz_push_sub_v1_';
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 function getTodayYYYYMMDD(now = new Date()): string {
   const y = now.getFullYear();
@@ -141,6 +153,7 @@ export function useReminders(language: LanguageCode = 'pt') {
   const { user } = useAuth();
   const uid = user?.uid || auth.currentUser?.uid || null;
   const storageKey = `${STORAGE_PREFIX}${uid || 'guest'}`;
+  const pushSubStorageKey = `${PUSH_SUB_STORAGE_PREFIX}${uid || 'guest'}`;
 
   const [reminders, setReminders] = useState<ReminderItem[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -161,6 +174,15 @@ export function useReminders(language: LanguageCode = 'pt') {
     if (typeof window === 'undefined' || !('Notification' in window)) return 'default';
     return Notification.permission;
   });
+  const [pushSubscribed, setPushSubscribed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return Boolean(localStorage.getItem(pushSubStorageKey));
+    } catch {
+      return false;
+    }
+  });
+  const [pushInfoMessage, setPushInfoMessage] = useState<string | null>(null);
 
   const remindersRef = useRef<ReminderItem[]>(reminders);
   remindersRef.current = reminders;
@@ -177,6 +199,69 @@ export function useReminders(language: LanguageCode = 'pt') {
     },
     [storageKey]
   );
+
+  // Register Web Push subscription with backend if VAPID key is configured on server
+  const registerWebPushSubscription = useCallback(async () => {
+    if (
+      typeof window === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window)
+    ) {
+      return false;
+    }
+
+    try {
+      const vapidResp = await fetch('/api/reminders/vapid-public-key');
+      if (!vapidResp.ok) return false;
+      const vapidData = await vapidResp.json().catch(() => ({}));
+      const publicKey = String(vapidData?.publicKey || '').trim();
+      if (!publicKey) {
+        setPushInfoMessage(
+          language === 'es'
+            ? 'Servidor Web Push aún sin clave VAPID configurada.'
+            : 'Servidor Web Push ainda sem chave VAPID configurada.'
+        );
+        return false;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      const token = await auth.currentUser?.getIdToken().catch(() => '');
+      const saveResp = await fetch('/api/reminders/push-subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          subscription: sub.toJSON(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          language,
+        }),
+      });
+
+      if (saveResp.ok) {
+        setPushSubscribed(true);
+        setPushInfoMessage(null);
+        try {
+          localStorage.setItem(pushSubStorageKey, JSON.stringify(sub.toJSON()));
+        } catch {
+          // ignore
+        }
+        return true;
+      }
+    } catch {
+      // ignore push subscription errors in unsupported browsers
+    }
+    return false;
+  }, [language, pushSubStorageKey]);
 
   // Realtime Firestore sync
   useEffect(() => {
@@ -201,16 +286,28 @@ export function useReminders(language: LanguageCode = 'pt') {
     return () => unsub();
   }, [uid, saveLocal]);
 
+  // If permission was already granted, attempt background push registration silently
+  useEffect(() => {
+    if (!uid) return;
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      setNotifPermission('granted');
+      registerWebPushSubscription().catch(() => {});
+    }
+  }, [uid, registerWebPushSubscription]);
+
   const requestSystemNotificationPermission = useCallback(async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied' as const;
     try {
       const res = await Notification.requestPermission();
       setNotifPermission(res);
+      if (res === 'granted') {
+        await registerWebPushSubscription();
+      }
       return res;
     } catch {
       return 'denied' as const;
     }
-  }, []);
+  }, [registerWebPushSubscription]);
 
   const addReminder = useCallback(
     async (params: {
@@ -488,6 +585,8 @@ export function useReminders(language: LanguageCode = 'pt') {
     activeAlert,
     alertQueueCount: alertQueue.length,
     notifPermission,
+    pushSubscribed,
+    pushInfoMessage,
     addReminder,
     toggleCompleteReminder,
     snoozeReminder,
