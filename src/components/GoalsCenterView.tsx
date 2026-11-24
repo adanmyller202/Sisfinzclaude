@@ -41,10 +41,10 @@ interface GoalsCenterViewProps {
   onSquareClick: (squareId: number) => void;
   selectedSquareId: number | null;
   fiftyTwoChallenge: any;
-  accounts: AccountItem[];
-  onAdjustAccountBalance: (accountId: string, amountDelta: number) => Promise<void>;
-  onUpdateStorageLocation: (challengeId: string, storageLocation: string) => Promise<void>;
-  onRedeemChallenge: (challenge: any, accountId: string) => Promise<void>;
+  accounts?: AccountItem[];
+  onAdjustAccountBalance?: (accountId: string, amountDelta: number) => Promise<void>;
+  onUpdateStorageLocation?: (challengeId: string, storageLocation: string) => Promise<void>;
+  onRedeemChallenge?: (challenge: any, accountId: string) => Promise<void>;
   onAddExpense?: any;
   onDeleteExpense?: any;
 }
@@ -53,10 +53,10 @@ export const GoalsCenterView: React.FC<GoalsCenterViewProps> = ({
   currency,
   language = 'pt',
   fiftyTwoChallenge,
-  accounts,
-  onAdjustAccountBalance,
-  onUpdateStorageLocation,
-  onRedeemChallenge,
+  accounts = [],
+  onAdjustAccountBalance = async () => {},
+  onUpdateStorageLocation = async () => {},
+  onRedeemChallenge = async () => {},
   onAddExpense,
   onDeleteExpense,
 }) => {
