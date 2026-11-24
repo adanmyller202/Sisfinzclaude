@@ -92,6 +92,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   const drawerSpring = reduceMotion
     ? { duration: 0.01 }
     : { type: 'spring' as const, stiffness: 285, damping: 22, mass: 0.78 };
+  const pillMorphSpring = reduceMotion
+    ? { duration: 0.01 }
+    : { type: 'spring' as const, stiffness: 430, damping: 28, mass: 0.72 };
   const { user, signOutUser } = useAuth();
   const [pendingView, setPendingView] = useState<string | null>(null);
   const [isManagingShortcuts, setIsManagingShortcuts] = useState(false);
@@ -217,6 +220,7 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
   }, [isOpen, isManagingShortcuts, onClose]);
 
   const handleSelectView = (view: DrawerViewId) => {
+    if (pendingView) return;
     if (selectionTimer.current) clearTimeout(selectionTimer.current);
     setPendingView(view);
     selectionTimer.current = setTimeout(() => {
@@ -373,54 +377,73 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         layout
         key={item.id}
         initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
+        animate={{
+          opacity: 1,
+          x: isSelected ? 4 : 0,
+          scale: isSelected ? 1.015 : 1,
+        }}
         exit={{ opacity: 0, x: -10 }}
-        whileTap={{ scale: 0.98 }}
+        whileHover={!pendingView ? { x: 2 } : undefined}
+        whileTap={{ scale: 0.975 }}
+        transition={pillMorphSpring}
         onClick={() => handleSelectView(item.id)}
-        className={`relative w-full p-3 rounded-2xl transition-colors flex items-center justify-between group cursor-pointer overflow-hidden ${
-          isHighlighted ? 'text-white' : 'hover:bg-emerald-500/10 text-slate-700'
+        className={`relative isolate w-full p-3 rounded-2xl transition-colors flex items-center justify-between group cursor-pointer ${
+          isHighlighted
+            ? 'text-emerald-950 font-black'
+            : 'hover:bg-emerald-500/10 text-slate-700'
         }`}
       >
+        {/* Sliding Pastel Highlight Pill with Top Rim & Soft Glow (inspired by sliding menu capsule) */}
         {isHighlighted && (
           <motion.span
             layoutId="sisfinz-nav-active-fill"
-            className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-500 to-teal-400 shadow-[0_10px_30px_rgba(5,150,105,0.34)]"
             initial={false}
-            transition={{
-              layout: { type: 'spring', stiffness: 260, damping: 25, mass: 1.05 },
-              opacity: { duration: 0.28 },
-            }}
+            transition={pillMorphSpring}
+            className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-emerald-200/95 via-[#B9F2D5] to-teal-200/90 border border-emerald-300/80 shadow-[0_8px_22px_rgba(5,150,105,0.18),inset_0_1px_0_rgba(255,255,255,0.9)]"
+          />
+        )}
+
+        {/* Subtle Ripple Ring when Tapped */}
+        {isSelected && !reduceMotion && (
+          <motion.span
+            initial={{ opacity: 0.55, scale: 0.94 }}
+            animate={{ opacity: 0, scale: 1.06 }}
+            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-none absolute -inset-0.5 -z-10 rounded-2xl border-2 border-emerald-400/75"
           />
         )}
 
         <div className="relative z-10 flex items-center gap-3.5 min-w-0">
           <motion.div
             animate={{
-              scale: isSelected ? 1.08 : 1,
-              rotate: isSelected ? [0, -8, 7, 0] : 0,
-              backgroundColor: isHighlighted ? 'rgba(255,255,255,0.22)' : '#059669',
+              scale: isSelected ? [1, 1.12, 1.04] : isHighlighted ? 1.03 : 1,
+              rotate: isSelected ? [0, -7, 5, 0] : 0,
             }}
             transition={{
-              duration: reduceMotion ? 0.01 : isSelected ? 0.28 : 0.22,
+              duration: reduceMotion ? 0.01 : 0.28,
               ease: [0.22, 1, 0.36, 1],
             }}
-            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 text-white shadow-sm"
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+              isHighlighted
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
+                : 'bg-emerald-600 text-white shadow-2xs'
+            }`}
           >
             <Icon className="w-5 h-5" />
           </motion.div>
           <div className="text-left min-w-0">
             <motion.div
-              animate={{ x: isSelected ? 3 : 0 }}
-              transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
+              animate={{ x: isSelected ? 2 : 0 }}
+              transition={{ duration: reduceMotion ? 0.01 : 0.18 }}
               className={`text-sm font-black truncate ${
-                isHighlighted ? 'text-white' : 'text-slate-900'
+                isHighlighted ? 'text-emerald-950' : 'text-slate-900'
               }`}
             >
               {item.label}
             </motion.div>
             <div
-              className={`text-[10px] font-medium truncate ${
-                isHighlighted ? 'text-emerald-100' : 'text-slate-500'
+              className={`text-[10px] font-semibold truncate ${
+                isHighlighted ? 'text-emerald-800/85' : 'text-slate-500'
               }`}
             >
               {item.desc}
@@ -431,7 +454,9 @@ export const NavigationDrawerModal: React.FC<NavigationDrawerModalProps> = ({
         {item.badge !== undefined && item.badge > 0 && (
           <span
             className={`relative z-10 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-              isHighlighted ? 'bg-white text-emerald-700' : 'bg-rose-500 text-white shadow-xs'
+              isHighlighted
+                ? 'bg-emerald-700 text-white shadow-2xs'
+                : 'bg-rose-500 text-white shadow-xs'
             }`}
           >
             {item.badge}
