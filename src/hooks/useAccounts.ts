@@ -80,6 +80,15 @@ export function useAccounts() {
     }
   });
 
+  const [accountAdjustments, setAccountAdjustments] = useState<Array<{
+    id: string; accountId: string; accountName: string; currency: CurrencyCode;
+    previousBalance: number; newBalance: number; amountDelta: number; date: string; createdAt: string;
+  }>>(() => {
+    try {
+      const stored = user ? localStorage.getItem(`mc_acc_${user.uid}_adjustments`) : null;
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [loadingAccounts, setLoadingAccounts] = useState<boolean>(true);
 
   const refreshAccounts = useCallback(async () => {
@@ -161,6 +170,20 @@ export function useAccounts() {
       }
     );
 
+    const adjustmentsRef = collection(db, 'users', user.uid, 'account_adjustments');
+    const unsubAdjustments = onSnapshot(
+      query(adjustmentsRef, orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        const list = snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })) as Array<{
+          id: string; accountId: string; accountName: string; currency: CurrencyCode;
+          previousBalance: number; newBalance: number; amountDelta: number; date: string; createdAt: string;
+        }>;
+        setAccountAdjustments(list);
+        try { localStorage.setItem(`mc_acc_${user.uid}_adjustments`, JSON.stringify(list)); } catch {}
+      },
+      (err) => console.warn('Error listening to account adjustments:', err)
+    );
+
     const transfersRef = collection(db, 'users', user.uid, 'account_transfers');
     const qTransfers = query(transfersRef, orderBy('createdAt', 'desc'));
     const unsubTransfers = onSnapshot(
@@ -184,6 +207,7 @@ export function useAccounts() {
     return () => {
       unsubAccounts();
       unsubTransfers();
+      unsubAdjustments();
     };
   }, [user, getLocalKey]);
 
@@ -276,6 +300,32 @@ export function useAccounts() {
       if (params.notes !== undefined) {
         const trimmed = params.notes.trim();
         updated.notes = trimmed ? trimmed : '';
+      }
+
+      if (user && params.currentBalance !== undefined) {
+        const previousBalance = Number(acc.currentBalance ?? acc.initialBalance ?? 0) || 0;
+        const newBalance = Number(params.currentBalance) || 0;
+        const amountDelta = newBalance - previousBalance;
+        if (Math.abs(amountDelta) > 0.000001) {
+          const adjustmentId = `adj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const adjustment = {
+            id: adjustmentId,
+            userId: user.uid,
+            accountId: id,
+            accountName: acc.name,
+            currency: acc.currency,
+            previousBalance,
+            newBalance,
+            amountDelta,
+            date: new Date().toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
+          };
+          try {
+            await setDoc(doc(db, 'users', user.uid, 'account_adjustments', adjustmentId), adjustment);
+          } catch (err) {
+            console.warn('Could not save account balance adjustment to history:', err);
+          }
+        }
       }
 
       // Optimistic update
@@ -557,6 +607,7 @@ export function useAccounts() {
   return {
     accounts,
     transfers,
+    accountAdjustments,
     totalBalance,
     refreshAccounts,
     loadingAccounts,
