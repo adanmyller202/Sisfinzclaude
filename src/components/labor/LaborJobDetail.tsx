@@ -92,6 +92,7 @@ interface LaborJobDetailProps {
     amount: number;
     scope: 'single' | 'future';
   }) => Promise<boolean>;
+  onRegisterSalaryAdvanceIncome?: (params: any) => Promise<any>;
 }
 
 type AccordionSection = 'schedule' | 'history' | 'salary' | 'tips' | 'settings' | null;
