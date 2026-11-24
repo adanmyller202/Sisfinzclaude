@@ -27,6 +27,7 @@ interface QuickActionFABProps {
   onOpenTransfer: () => void;
   onOpenSharedBill: () => void;
   onMenuToggle?: (isOpen: boolean) => void;
+  onOpenVoice?: () => void;
 }
 
 export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
