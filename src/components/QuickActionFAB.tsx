@@ -10,8 +10,10 @@ import {
   Users,
   Calculator,
   Camera,
+  Clock,
 } from 'lucide-react';
 import { LanguageCode } from '../types';
+import { QuickPunchModal } from './labor/QuickPunchModal';
 
 interface QuickActionFABProps {
   language?: LanguageCode;
@@ -103,6 +105,7 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   onMenuToggle,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isQuickPunchOpen, setIsQuickPunchOpen] = useState(false);
   const initialStored = useRef<StoredFabPos>(loadStoredPos());
   const [dockSide, setDockSide] = useState<'left' | 'right'>(initialStored.current.side);
   const [openDownwards, setOpenDownwards] = useState<boolean>(
@@ -175,6 +178,21 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   }, [isOpen, onMenuToggle]);
 
   const actions = [
+    {
+      id: 'punch',
+      label:
+        language === 'es'
+          ? 'Marcar Punto'
+          : language === 'en'
+          ? 'Clock In / Out'
+          : 'Marcar Ponto',
+      icon: Clock,
+      onClick: () => {
+        setIsOpen(false);
+        onMenuToggle?.(false);
+        setIsQuickPunchOpen(true);
+      },
+    },
     ...(onOpenReceiptScan
       ? [
           {
@@ -254,154 +272,165 @@ export const QuickActionFAB: React.FC<QuickActionFABProps> = ({
   const isLeft = dockSide === 'left';
 
   return (
-    <motion.div
-      ref={containerRef}
-      drag={!isOpen}
-      dragConstraints={{
-        left: 0,
-        right: Math.max(0, viewport.vw - FAB_SIZE),
-        top: 0,
-        bottom: Math.max(0, viewport.vh - FAB_SIZE),
-      }}
-      dragElastic={0.08}
-      dragMomentum={false}
-      onDragStart={() => {
-        draggedRef.current = false;
-      }}
-      onDrag={(_e, info) => {
-        if (Math.abs(info.offset.x) > 6 || Math.abs(info.offset.y) > 6) {
-          draggedRef.current = true;
-        }
-      }}
-      onDragEnd={(_e, info) => {
-        const b = getSafeBounds();
-        const curX = x.get();
-        const curY = y.get();
-
-        // Always snap strictly to the left or right lateral edge (never stay in the middle)
-        const centerX = curX + FAB_SIZE / 2;
-        let nextSide: 'left' | 'right' = centerX < b.vw / 2 ? 'left' : 'right';
-        if (info.velocity.x < -380) nextSide = 'left';
-        else if (info.velocity.x > 380) nextSide = 'right';
-
-        const targetX = nextSide === 'left' ? b.leftX : b.rightX;
-
-        // Always clamp vertical position out of the top & bottom menu zones
-        const targetY = Math.max(b.minY, Math.min(b.maxY, curY));
-        const nextRatio =
-          b.maxY > b.minY ? Math.max(0, Math.min(1, (targetY - b.minY) / (b.maxY - b.minY))) : 1;
-
-        dockSideRef.current = nextSide;
-        yRatioRef.current = nextRatio;
-        setDockSide(nextSide);
-        setOpenDownwards(nextRatio < 0.45);
-
-        animate(x, targetX, { type: 'spring', stiffness: 460, damping: 32 });
-        animate(y, targetY, { type: 'spring', stiffness: 460, damping: 32 });
-
-        try {
-          localStorage.setItem(
-            POS_STORAGE_KEY,
-            JSON.stringify({ side: nextSide, yRatio: nextRatio })
-          );
-          localStorage.setItem(LEGACY_EDGE_KEY, nextSide);
-        } catch {
-          // ignore
-        }
-
-        window.setTimeout(() => {
-          draggedRef.current = false;
-        }, 80);
-      }}
-      style={{ x, y }}
-      className="fixed top-0 left-0 z-[64] print:hidden select-none touch-none"
-    >
-      {/* Contextual Action Menu (opens upwards when docked low, downwards when docked high) */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: openDownwards ? -10 : 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: openDownwards ? -8 : 8, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-            className={`absolute ${isLeft ? 'left-0 items-start' : 'right-0 items-end'} ${
-              openDownwards ? 'top-full mt-2.5' : 'bottom-full mb-2.5'
-            } flex flex-col gap-1.5 max-h-[58dvh] overflow-y-auto no-scrollbar`}
-          >
-            {actions.map((act, idx) => {
-              const Icon = act.icon;
-              return (
-                <motion.button
-                  key={act.id}
-                  type="button"
-                  initial={{ opacity: 0, x: isLeft ? -14 : 14, scale: 0.96 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: isLeft ? -10 : 10, scale: 0.96 }}
-                  transition={{
-                    delay: idx * 0.025,
-                    type: 'spring',
-                    stiffness: 460,
-                    damping: 26,
-                  }}
-                  whileHover={{ x: isLeft ? 3 : -3 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={act.onClick}
-                  className={`flex ${
-                    isLeft ? 'flex-row-reverse' : 'flex-row'
-                  } items-center gap-3 px-3.5 py-2 rounded-2xl text-xs font-extrabold text-emerald-950 bg-white border-2 border-emerald-400 shadow-[0_6px_18px_rgba(16,185,129,0.18)] hover:bg-emerald-50/50 transition-all cursor-pointer shrink-0 whitespace-nowrap`}
-                >
-                  <span className="tracking-tight">{act.label}</span>
-                  <div className="w-7 h-7 rounded-xl bg-emerald-500/15 border border-emerald-400 text-emerald-700 flex items-center justify-center shrink-0">
-                    <Icon className="w-3.5 h-3.5 stroke-[2.4]" />
-                  </div>
-                </motion.button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Transparent Emerald Glass Edge-Docked FAB */}
-      <motion.button
-        type="button"
-        onClick={toggleMenu}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.93 }}
-        style={{
-          background:
-            'linear-gradient(145deg, rgba(52, 211, 153, 0.24), rgba(16, 185, 129, 0.12))',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
+    <>
+      <motion.div
+        ref={containerRef}
+        drag={!isOpen}
+        dragConstraints={{
+          left: 0,
+          right: Math.max(0, viewport.vw - FAB_SIZE),
+          top: 0,
+          bottom: Math.max(0, viewport.vh - FAB_SIZE),
         }}
-        className={`w-12 h-12 rounded-full flex items-center justify-center text-emerald-950 border-2 border-emerald-400/90 shadow-[0_8px_22px_rgba(16,185,129,0.22),inset_0_1px_1px_rgba(255,255,255,0.75)] transition-all cursor-grab active:cursor-grabbing ${
-          isOpen ? 'ring-2 ring-emerald-400/60' : ''
-        }`}
-        aria-label={language === 'es' ? 'Acciones rápidas' : 'Ações rápidas'}
+        dragElastic={0.08}
+        dragMomentum={false}
+        onDragStart={() => {
+          draggedRef.current = false;
+        }}
+        onDrag={(_e, info) => {
+          if (Math.abs(info.offset.x) > 6 || Math.abs(info.offset.y) > 6) {
+            draggedRef.current = true;
+          }
+        }}
+        onDragEnd={(_e, info) => {
+          const b = getSafeBounds();
+          const curX = x.get();
+          const curY = y.get();
+
+          // Always snap strictly to the left or right lateral edge (never stay in the middle)
+          const centerX = curX + FAB_SIZE / 2;
+          let nextSide: 'left' | 'right' = centerX < b.vw / 2 ? 'left' : 'right';
+          if (info.velocity.x < -380) nextSide = 'left';
+          else if (info.velocity.x > 380) nextSide = 'right';
+
+          const targetX = nextSide === 'left' ? b.leftX : b.rightX;
+
+          // Always clamp vertical position out of the top & bottom menu zones
+          const targetY = Math.max(b.minY, Math.min(b.maxY, curY));
+          const nextRatio =
+            b.maxY > b.minY
+              ? Math.max(0, Math.min(1, (targetY - b.minY) / (b.maxY - b.minY)))
+              : 1;
+
+          dockSideRef.current = nextSide;
+          yRatioRef.current = nextRatio;
+          setDockSide(nextSide);
+          setOpenDownwards(nextRatio < 0.45);
+
+          animate(x, targetX, { type: 'spring', stiffness: 460, damping: 32 });
+          animate(y, targetY, { type: 'spring', stiffness: 460, damping: 32 });
+
+          try {
+            localStorage.setItem(
+              POS_STORAGE_KEY,
+              JSON.stringify({ side: nextSide, yRatio: nextRatio })
+            );
+            localStorage.setItem(LEGACY_EDGE_KEY, nextSide);
+          } catch {
+            // ignore
+          }
+
+          window.setTimeout(() => {
+            draggedRef.current = false;
+          }, 80);
+        }}
+        style={{ x, y }}
+        className="fixed top-0 left-0 z-[64] print:hidden select-none touch-none"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {isOpen ? (
+        {/* Contextual Action Menu (opens upwards when docked low, downwards when docked high) */}
+        <AnimatePresence>
+          {isOpen && (
             <motion.div
-              key="close"
-              initial={{ rotate: -90, opacity: 0, scale: 0.8 }}
-              animate={{ rotate: 0, opacity: 1, scale: 1 }}
-              exit={{ rotate: 90, opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.16 }}
+              initial={{ opacity: 0, y: openDownwards ? -10 : 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: openDownwards ? -8 : 8, scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+              className={`absolute ${isLeft ? 'left-0 items-start' : 'right-0 items-end'} ${
+                openDownwards ? 'top-full mt-2.5' : 'bottom-full mb-2.5'
+              } flex flex-col gap-1.5 max-h-[58dvh] overflow-y-auto no-scrollbar`}
             >
-              <X className="w-5 h-5 stroke-[2.5]" />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="add"
-              initial={{ rotate: 90, opacity: 0, scale: 0.8 }}
-              animate={{ rotate: 0, opacity: 1, scale: 1 }}
-              exit={{ rotate: -90, opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.16 }}
-            >
-              <Plus className="w-5 h-5 stroke-[2.6]" />
+              {actions.map((act, idx) => {
+                const Icon = act.icon;
+                return (
+                  <motion.button
+                    key={act.id}
+                    type="button"
+                    initial={{ opacity: 0, x: isLeft ? -14 : 14, scale: 0.96 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: isLeft ? -10 : 10, scale: 0.96 }}
+                    transition={{
+                      delay: idx * 0.025,
+                      type: 'spring',
+                      stiffness: 460,
+                      damping: 26,
+                    }}
+                    whileHover={{ x: isLeft ? 3 : -3 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={act.onClick}
+                    className={`flex ${
+                      isLeft ? 'flex-row-reverse' : 'flex-row'
+                    } items-center gap-3 px-3.5 py-2 rounded-2xl text-xs font-extrabold text-emerald-950 bg-white border-2 border-emerald-400 shadow-[0_6px_18px_rgba(16,185,129,0.18)] hover:bg-emerald-50/50 transition-all cursor-pointer shrink-0 whitespace-nowrap`}
+                  >
+                    <span className="tracking-tight">{act.label}</span>
+                    <div className="w-7 h-7 rounded-xl bg-emerald-500/15 border border-emerald-400 text-emerald-700 flex items-center justify-center shrink-0">
+                      <Icon className="w-3.5 h-3.5 stroke-[2.4]" />
+                    </div>
+                  </motion.button>
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.button>
-    </motion.div>
+
+        {/* Transparent Emerald Glass Edge-Docked FAB */}
+        <motion.button
+          type="button"
+          onClick={toggleMenu}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.93 }}
+          style={{
+            background:
+              'linear-gradient(145deg, rgba(52, 211, 153, 0.24), rgba(16, 185, 129, 0.12))',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+          }}
+          className={`w-12 h-12 rounded-full flex items-center justify-center text-emerald-950 border-2 border-emerald-400/90 shadow-[0_8px_22px_rgba(16,185,129,0.22),inset_0_1px_1px_rgba(255,255,255,0.75)] transition-all cursor-grab active:cursor-grabbing ${
+            isOpen ? 'ring-2 ring-emerald-400/60' : ''
+          }`}
+          aria-label={language === 'es' ? 'Acciones rápidas' : 'Ações rápidas'}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {isOpen ? (
+              <motion.div
+                key="close"
+                initial={{ rotate: -90, opacity: 0, scale: 0.8 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.16 }}
+              >
+                <X className="w-5 h-5 stroke-[2.5]" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="add"
+                initial={{ rotate: 90, opacity: 0, scale: 0.8 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: -90, opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.16 }}
+              >
+                <Plus className="w-5 h-5 stroke-[2.6]" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.button>
+      </motion.div>
+
+      {/* Quick Punch Modal (Marcar Ponto) from Home FAB */}
+      <QuickPunchModal
+        isOpen={isQuickPunchOpen}
+        onClose={() => setIsQuickPunchOpen(false)}
+        language={language}
+      />
+    </>
   );
 };
