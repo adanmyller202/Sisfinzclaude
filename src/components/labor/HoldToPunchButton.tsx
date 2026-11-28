@@ -10,6 +10,8 @@ import {
   Coffee,
   Plus,
   Calendar,
+  MessageSquarePlus,
+  FileText,
 } from 'lucide-react';
 import { LanguageCode } from '../../types';
 import { ActiveShiftState, DaySchedule, ShiftPartKey } from '../../types/labor';
@@ -18,6 +20,10 @@ import {
   formatLocalTimeHHMM,
   formatMinutesAsHours,
 } from '../../utils/laborCalculations';
+import {
+  attachObservationToLatestPunch,
+  peekPendingEntryNote,
+} from '../../utils/punchNoteSync';
 
 interface HoldToPunchButtonProps {
   activeShift: ActiveShiftState | null;
@@ -27,8 +33,8 @@ interface HoldToPunchButtonProps {
   hasPart2Shift?: boolean;
   nextShiftLabel?: string | null;
   language: LanguageCode;
-  onStartShift: (part?: ShiftPartKey) => Promise<void>;
-  onEndShift: () => Promise<void>;
+  onStartShift: (part?: ShiftPartKey, note?: string) => Promise<void> | void;
+  onEndShift: (note?: string) => Promise<void> | void;
   onOpenManualEntry: () => void;
 }
 
@@ -85,7 +91,9 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
     part?: ShiftPartKey;
     isFrancoExtra?: boolean;
     timeLabel: string;
+    withNote: boolean;
   } | null>(null);
+  const [observationText, setObservationText] = useState('');
 
   const isRunning = Boolean(activeShift);
   const isFrancoToday = Boolean(!todaySchedule.isUnset && todaySchedule.isOff);
@@ -97,31 +105,53 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
       todaySchedule.splitEndTime
   );
 
+  const activeEntryNote =
+    ((activeShift as (ActiveShiftState & { note?: string }) | null)?.note || '').trim() ||
+    (isRunning ? peekPendingEntryNote('default') : '');
+
   const openConfirmFor = (
     action: 'start' | 'end',
     part?: ShiftPartKey,
-    isFrancoExtra = false
+    isFrancoExtra = false,
+    withNote = false
   ) => {
     const nowTime = formatLocalTimeHHMM(new Date());
+    setObservationText('');
     setConfirmPrompt({
       action,
       part,
       isFrancoExtra,
       timeLabel: nowTime,
+      withNote,
     });
   };
 
   const handleConfirmAction = async () => {
     if (!confirmPrompt) return;
     const { action, part } = confirmPrompt;
+    const cleanNote = observationText.trim() || undefined;
+    const prevEntryNote = activeEntryNote || undefined;
+
     setConfirmPrompt(null);
+    setObservationText('');
     setShowFrancoExtraDrawer(false);
     setRippleKey((k) => k + 1);
     playPunchTone(action);
+
     if (action === 'start') {
-      await onStartShift(part);
+      await onStartShift(part, cleanNote);
+      if (cleanNote) {
+        void attachObservationToLatestPunch({ action: 'start', note: cleanNote });
+      }
     } else {
-      await onEndShift();
+      await onEndShift(cleanNote);
+      if (cleanNote || prevEntryNote) {
+        void attachObservationToLatestPunch({
+          action: 'end',
+          note: cleanNote,
+          previousEntryNote: prevEntryNote,
+        });
+      }
     }
   };
 
@@ -163,6 +193,15 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
   const part1Mins = calculateShiftPartMinutes(todaySchedule, 1);
   const part2Mins = calculateShiftPartMinutes(todaySchedule, 2);
 
+  const defaultSplitPartForNote: ShiftPartKey = hasPart1Shift && !hasPart2Shift ? 2 : 1;
+
+  const obsButtonLabel =
+    language === 'es'
+      ? 'Marcar con observación?'
+      : language === 'en'
+      ? 'Clock with note?'
+      : 'Marcar com observação?';
+
   return (
     <div
       className={`relative flex flex-col items-center justify-center rounded-[2rem] border px-5 py-6 shadow-sm overflow-hidden select-none transition-colors duration-300 ${
@@ -174,7 +213,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
     >
       {/* Top Status Pill */}
       <div
-        className={`relative z-10 mb-4 flex items-center gap-2 rounded-full border px-3.5 py-1.5 shadow-2xs transition-colors ${
+        className={`relative z-10 mb-3 flex items-center gap-2 rounded-full border px-3.5 py-1.5 shadow-2xs transition-colors ${
           isFrancoToday && !isRunning
             ? 'border-purple-200/90 bg-purple-50/90'
             : 'border-slate-200/80 bg-white/90'
@@ -204,6 +243,14 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         </span>
       </div>
 
+      {/* Active Shift Entry Observation Preview Pill */}
+      {isRunning && activeEntryNote && (
+        <div className="relative z-10 mb-3 inline-flex max-w-full items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-1 text-[10.5px] font-bold text-amber-900">
+          <FileText className="h-3 w-3 shrink-0 text-amber-600" />
+          <span className="truncate">Obs. entrada: {activeEntryNote}</span>
+        </div>
+      )}
+
       {/* Circular Button(s) / Franco Interactive Medallion */}
       {isRunning ? (
         <div className="relative flex h-[164px] w-[164px] items-center justify-center">
@@ -224,7 +271,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             type="button"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.94 }}
-            onClick={() => openConfirmFor('end', activeShift?.shiftPart, isFrancoToday)}
+            onClick={() => openConfirmFor('end', activeShift?.shiftPart, isFrancoToday, false)}
             className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-rose-600 to-red-600 text-white shadow-xl shadow-rose-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-rose-300 px-2 text-center"
           >
             <LogOut className="mb-1 h-6 w-6" />
@@ -250,7 +297,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         /* Interactive Animated Franco (Day Off) Sanctuary */
         <div className="relative z-10 flex w-full flex-col items-center">
           <div className="relative flex h-[168px] w-[168px] items-center justify-center">
-            {/* Soft Expanding Pulse Wave on Medallion Tap */}
             <AnimatePresence>
               {francoBounceKey > 0 && !reduceMotion && (
                 <motion.span
@@ -264,7 +310,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               )}
             </AnimatePresence>
 
-            {/* Serene Breathing Lavender Halo */}
             {!reduceMotion && (
               <motion.span
                 animate={{ scale: [1, 1.07, 1], opacity: [0.3, 0.55, 0.3] }}
@@ -273,7 +318,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               />
             )}
 
-            {/* Floating Ambient Sparkles */}
             {!reduceMotion && (
               <>
                 <motion.span
@@ -293,7 +337,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               </>
             )}
 
-            {/* Tactile Franco Rest Medallion */}
             <motion.button
               key={`franco-medallion-${francoBounceKey}`}
               type="button"
@@ -344,7 +387,6 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             </span>
           )}
 
-          {/* Interactive Expandable Drawer when tapping the Franco Medallion */}
           <AnimatePresence initial={false}>
             {showFrancoExtraDrawer && (
               <motion.div
@@ -364,7 +406,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() => openConfirmFor('start', undefined, true)}
+                    onClick={() => openConfirmFor('start', undefined, true, false)}
                     className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 py-2.5 px-3 text-[11px] font-black uppercase tracking-wider text-white shadow-sm hover:opacity-95 cursor-pointer"
                   >
                     <LogIn className="h-3.5 w-3.5" />
@@ -386,7 +428,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             type="button"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.94 }}
-            onClick={() => openConfirmFor('start', 1)}
+            onClick={() => openConfirmFor('start', 1, false, false)}
             className={`relative flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-lg cursor-pointer outline-none px-2 text-center ${
               hasPart1Shift
                 ? 'bg-gradient-to-br from-emerald-700 to-teal-700 opacity-85'
@@ -411,7 +453,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             type="button"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.94 }}
-            onClick={() => openConfirmFor('start', 2)}
+            onClick={() => openConfirmFor('start', 2, false, false)}
             className={`relative flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full text-white shadow-lg cursor-pointer outline-none px-2 text-center ${
               hasPart2Shift
                 ? 'bg-gradient-to-br from-indigo-700 to-blue-800 opacity-85'
@@ -450,7 +492,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
             type="button"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.94 }}
-            onClick={() => openConfirmFor('start')}
+            onClick={() => openConfirmFor('start', undefined, false, false)}
             className="relative z-10 flex h-[136px] w-[136px] flex-col items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-xl shadow-emerald-600/30 cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-emerald-300"
           >
             <LogIn className="mb-1 h-6 w-6" />
@@ -464,12 +506,38 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         </div>
       )}
 
+      {/* "Marcar com observação?" Action Pill below Entrada & Saída */}
+      {(isRunning || !isFrancoToday) && (
+        <div className="relative z-10 mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() =>
+              isRunning
+                ? openConfirmFor('end', activeShift?.shiftPart, isFrancoToday, true)
+                : isSplitToday
+                ? openConfirmFor('start', defaultSplitPartForNote, false, true)
+                : openConfirmFor('start', undefined, false, true)
+            }
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-black shadow-2xs transition-colors cursor-pointer ${
+              isRunning
+                ? 'border-rose-200 bg-rose-50/85 text-rose-800 hover:bg-rose-100'
+                : 'border-amber-200 bg-amber-50/90 text-amber-900 hover:bg-amber-100'
+            }`}
+          >
+            <MessageSquarePlus
+              className={`h-3.5 w-3.5 ${isRunning ? 'text-rose-600' : 'text-amber-600'}`}
+            />
+            <span>{obsButtonLabel}</span>
+          </button>
+        </div>
+      )}
+
       {/* Bottom Helper Row */}
-      <div className="relative z-10 mt-4 flex flex-wrap items-center justify-center gap-2">
+      <div className="relative z-10 mt-3 flex flex-wrap items-center justify-center gap-2">
         {isFrancoToday && !isRunning && (
           <button
             type="button"
-            onClick={() => openConfirmFor('start', undefined, true)}
+            onClick={() => openConfirmFor('start', undefined, true, false)}
             className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100/80 px-3.5 py-1.5 text-[11px] font-black text-purple-900 shadow-2xs hover:bg-purple-200/80 transition-colors cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 text-purple-700" />
@@ -491,7 +559,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
         </button>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal (with optional or pre-opened Observation textarea) */}
       <AnimatePresence>
         {confirmPrompt && (
           <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
@@ -507,7 +575,7 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 12 }}
               transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-              className="relative z-10 w-full max-w-xs rounded-[2rem] border border-slate-200 bg-white p-5 text-center shadow-2xl space-y-4"
+              className="relative z-10 w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white p-5 text-center shadow-2xl space-y-4"
             >
               <div
                 className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-md ${
@@ -518,7 +586,11 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                     : 'bg-gradient-to-br from-rose-500 to-red-600'
                 }`}
               >
-                <Clock className="h-6 w-6" />
+                {confirmPrompt.withNote ? (
+                  <MessageSquarePlus className="h-6 w-6" />
+                ) : (
+                  <Clock className="h-6 w-6" />
+                )}
               </div>
 
               <div>
@@ -531,9 +603,9 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                         ? `Work on your day off today (${confirmPrompt.timeLabel})?`
                         : `Trabalhar no seu franco hoje (${confirmPrompt.timeLabel})?`
                       : confirmPrompt.part === 1
-                      ? `Certeza que quer ingressar no 1º turno agora (${confirmPrompt.timeLabel})?`
+                      ? `Marcar entrada do 1º turno agora (${confirmPrompt.timeLabel})?`
                       : confirmPrompt.part === 2
-                      ? `Certeza que quer ingressar no 2º turno agora (${confirmPrompt.timeLabel})?`
+                      ? `Marcar entrada do 2º turno agora (${confirmPrompt.timeLabel})?`
                       : language === 'es'
                       ? `¿Seguro que quieres ingresar ahora (${confirmPrompt.timeLabel})?`
                       : `Certeza que quer ingressar agora (${confirmPrompt.timeLabel})?`
@@ -542,7 +614,11 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                     : `Certeza que quer sair agora (${confirmPrompt.timeLabel})?`}
                 </h3>
                 <p className="mt-1 text-xs font-medium text-slate-500">
-                  {confirmPrompt.action === 'start'
+                  {confirmPrompt.withNote
+                    ? language === 'es'
+                      ? 'Se registrará en este horario manteniendo tu observación guardada para RR. HH.'
+                      : 'O ponto será marcado neste horário com sua observação salva para conferência de RH.'
+                    : confirmPrompt.action === 'start'
                     ? confirmPrompt.isFrancoExtra
                       ? language === 'es'
                         ? 'Como hoy es tu franco, este turno se registrará como Turno Extra sin afectar tu puntualidad.'
@@ -561,6 +637,74 @@ export const HoldToPunchButton: React.FC<HoldToPunchButtonProps> = ({
                     : 'O turno ativo será encerrado e salvo no histórico.'}
                 </p>
               </div>
+
+              {/* Split shift selector when opening via "Marcar com observação?" */}
+              {confirmPrompt.action === 'start' && isSplitToday && confirmPrompt.withNote && (
+                <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPrompt((p) => (p ? { ...p, part: 1 } : p))}
+                    className={`rounded-lg py-1.5 text-[11px] font-black transition-all cursor-pointer ${
+                      confirmPrompt.part === 1
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    1º Turno ({todaySchedule.startTime})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPrompt((p) => (p ? { ...p, part: 2 } : p))}
+                    className={`rounded-lg py-1.5 text-[11px] font-black transition-all cursor-pointer ${
+                      confirmPrompt.part === 2
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    2º Turno ({todaySchedule.splitStartTime})
+                  </button>
+                </div>
+              )}
+
+              {/* Observation Input Box */}
+              {confirmPrompt.withNote ? (
+                <div className="text-left space-y-1.5">
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-amber-800">
+                    {language === 'es'
+                      ? 'Observación del fichaje'
+                      : 'Observação do ponto'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    autoFocus
+                    value={observationText}
+                    onChange={(e) => setObservationText(e.target.value)}
+                    placeholder={
+                      confirmPrompt.action === 'start'
+                        ? language === 'es'
+                          ? 'Ej: El jefe de cocina llegó 11:35 para abrir el restaurante...'
+                          : 'Ex: Chefe de cozinha chegou 11h35 para abrir o restaurante...'
+                        : language === 'es'
+                        ? 'Ej: Salí más tarde ayudando a cerrar la cocina...'
+                        : 'Ex: Saí mais tarde ajudando a fechar a cozinha...'
+                    }
+                    className="w-full rounded-2xl border border-amber-300 bg-amber-50/40 px-3.5 py-2.5 text-base sm:text-xs font-semibold text-slate-900 outline-none focus:border-emerald-500 focus:bg-white resize-none"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfirmPrompt((prev) => (prev ? { ...prev, withNote: true } : prev))
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50/70 px-3 py-1 text-[10.5px] font-black text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer"
+                >
+                  <MessageSquarePlus className="h-3.5 w-3.5 text-amber-600" />
+                  {language === 'es'
+                    ? '+ Agregar observación'
+                    : '+ Adicionar observação'}
+                </button>
+              )}
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button

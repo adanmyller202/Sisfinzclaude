@@ -6,10 +6,12 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { registerSW } from 'virtual:pwa-register';
 import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
 import { initColorTheme } from './utils/colorTheme.ts';
+import { initSalaryIncomeSyncPrompt } from './utils/salaryIncomeSyncPrompt.ts';
 import './index.css';
 
 initColorTheme();
 initTabBarAutoScroll();
+initSalaryIncomeSyncPrompt();
 
 // Register PWA service worker with automatic update detection
 const updateSW = registerSW({

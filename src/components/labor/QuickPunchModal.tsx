@@ -8,9 +8,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Coffee,
+  FileText,
 } from 'lucide-react';
 import { LanguageCode } from '../../types';
-import { LaborShiftEntry, ShiftPartKey, ShiftTag } from '../../types/labor';
+import { ActiveShiftState, LaborShiftEntry, ShiftPartKey, ShiftTag } from '../../types/labor';
 import { useLaborAgenda } from '../../hooks/useLaborAgenda';
 import {
   WEEKDAY_LABELS,
@@ -27,6 +28,11 @@ import {
   shiftDateByDays,
 } from '../../utils/laborCalculations';
 import { HoldToPunchButton, ShiftCompletedBanner } from './HoldToPunchButton';
+import {
+  combinePunchNotes,
+  consumePendingEntryNote,
+  savePendingEntryNote,
+} from '../../utils/punchNoteSync';
 
 interface QuickPunchModalProps {
   isOpen: boolean;
@@ -140,7 +146,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
     [selectedJob, todayStr, todaySchedule]
   );
 
-  const handleStartShift = async (part?: ShiftPartKey) => {
+  const handleStartShift = async (part?: ShiftPartKey, note?: string) => {
     if (!selectedJob || !todaySchedule) return;
     setNoticeMsg(null);
 
@@ -168,19 +174,25 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
       ? calculateShiftPartMinutes(todaySchedule, part)
       : calculateDayScheduleMinutes(todaySchedule);
 
+    const cleanNote = (note || '').trim() || undefined;
+    savePendingEntryNote(selectedJob.id, cleanNote);
+
+    const nextActiveShift: ActiveShiftState & { note?: string } = {
+      startedAtIso: now.toISOString(),
+      startDate,
+      startTime,
+      scheduledMinutes,
+      shiftPart: part,
+      ...(cleanNote ? { note: cleanNote } : {}),
+    };
+
     await saveJob({
       ...selectedJob,
-      activeShift: {
-        startedAtIso: now.toISOString(),
-        startDate,
-        startTime,
-        scheduledMinutes,
-        shiftPart: part,
-      },
+      activeShift: nextActiveShift,
     });
   };
 
-  const handleEndShift = async () => {
+  const handleEndShift = async (exitNote?: string) => {
     if (!selectedJob || !selectedJob.activeShift) return;
     setNoticeMsg(null);
 
@@ -204,6 +216,17 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
       baseTags.push('overtime');
     }
 
+    const activeEntryNote =
+      ((selectedJob.activeShift as ActiveShiftState & { note?: string }).note || '').trim() ||
+      consumePendingEntryNote(selectedJob.id);
+
+    const baseNote = part ? `${part}º turno` : isFrancoToday ? 'Turno extra (Franco)' : undefined;
+    const mergedNote = combinePunchNotes({
+      baseNote,
+      entryNote: activeEntryNote || undefined,
+      exitNote: (exitNote || '').trim() || undefined,
+    });
+
     const newShift: LaborShiftEntry = {
       id: `shift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       date: selectedJob.activeShift.startDate,
@@ -213,7 +236,7 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
       scheduledMinutes: selectedJob.activeShift.scheduledMinutes,
       shiftPart: part,
       tags: baseTags,
-      note: part ? `${part}º turno` : isFrancoToday ? 'Turno extra (Franco)' : undefined,
+      note: mergedNote,
       createdAt: now.toISOString(),
     };
 
@@ -497,10 +520,21 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                             const isIssue = att.hasIssue;
                             const isExtra = att.status === 'extra_day';
                             const partLabel = att.shiftPart ? ` (${att.shiftPart}º turno)` : '';
+                            const matchedShift = att.isActive
+                              ? null
+                              : (selectedJob.shifts || []).find((s) => s.id === att.id);
+                            const entryNote = att.isActive
+                              ? (
+                                  (selectedJob.activeShift as
+                                    | (ActiveShiftState & { note?: string })
+                                    | null)?.note || ''
+                                ).trim()
+                              : (matchedShift?.note || '').trim();
+
                             return (
                               <div
                                 key={att.id}
-                                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-[10.5px] font-black ${
+                                className={`flex flex-col gap-1.5 rounded-xl px-3 py-2 text-[10.5px] font-black ${
                                   isIssue
                                     ? 'bg-rose-100/90 text-rose-900 border border-rose-200'
                                     : isExtra
@@ -508,38 +542,46 @@ export const QuickPunchModal: React.FC<QuickPunchModalProps> = ({
                                     : 'bg-emerald-100/85 text-emerald-950 border border-emerald-200'
                                 }`}
                               >
-                                <span className="inline-flex items-center gap-1.5">
-                                  {isIssue ? (
-                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
-                                  ) : (
-                                    <CheckCircle2
-                                      className={`h-3.5 w-3.5 ${
-                                        isExtra ? 'text-purple-600' : 'text-emerald-600'
-                                      }`}
-                                    />
-                                  )}
-                                  <span>
-                                    {att.status === 'late'
-                                      ? `Chegou atrasado (${formatDurationCompact(att.diffMinutes)})${partLabel}`
-                                      : att.status === 'out_of_hours'
-                                      ? `Entrada fora do horário${partLabel}`
-                                      : isExtra
-                                      ? language === 'es'
-                                        ? 'Turno extra en día de franco'
-                                        : 'Turno extra em dia de franco'
-                                      : `Chegou no horário${partLabel}`}
-                                    {att.exitStatus === 'on_time'
-                                      ? ' • Saiu no horário'
-                                      : att.exitStatus === 'early_exit'
-                                      ? ' • Saiu antes'
-                                      : ''}
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {isIssue ? (
+                                      <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+                                    ) : (
+                                      <CheckCircle2
+                                        className={`h-3.5 w-3.5 ${
+                                          isExtra ? 'text-purple-600' : 'text-emerald-600'
+                                        }`}
+                                      />
+                                    )}
+                                    <span>
+                                      {att.status === 'late'
+                                        ? `Chegou atrasado (${formatDurationCompact(att.diffMinutes)})${partLabel}`
+                                        : att.status === 'out_of_hours'
+                                        ? `Entrada fora do horário${partLabel}`
+                                        : isExtra
+                                        ? language === 'es'
+                                          ? 'Turno extra en día de franco'
+                                          : 'Turno extra em dia de franco'
+                                        : `Chegou no horário${partLabel}`}
+                                      {att.exitStatus === 'on_time'
+                                        ? ' • Saiu no horário'
+                                        : att.exitStatus === 'early_exit'
+                                        ? ' • Saiu antes'
+                                        : ''}
+                                    </span>
                                   </span>
-                                </span>
-                                <span className="font-mono text-[10px]">
-                                  {att.endTime
-                                    ? `${att.startTime} → ${att.endTime}`
-                                    : `Entrada ${att.startTime}`}
-                                </span>
+                                  <span className="font-mono text-[10px]">
+                                    {att.endTime
+                                      ? `${att.startTime} → ${att.endTime}`
+                                      : `Entrada ${att.startTime}`}
+                                  </span>
+                                </div>
+                                {entryNote && (
+                                  <div className="flex items-start gap-1.5 rounded-lg bg-white/75 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                    <FileText className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+                                    <span>{entryNote}</span>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
