@@ -7,11 +7,13 @@ import { registerSW } from 'virtual:pwa-register';
 import { initTabBarAutoScroll } from './utils/tabBarAutoScroll.ts';
 import { initColorTheme } from './utils/colorTheme.ts';
 import { initSalaryIncomeSyncPrompt } from './utils/salaryIncomeSyncPrompt.ts';
+import { initPunchObservationPill } from './utils/punchObservationPill.tsx';
 import './index.css';
 
 initColorTheme();
 initTabBarAutoScroll();
 initSalaryIncomeSyncPrompt();
+initPunchObservationPill();
 
 // Register PWA service worker with automatic update detection
 const updateSW = registerSW({
